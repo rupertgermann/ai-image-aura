@@ -6,17 +6,18 @@ interface ImageCardProps {
     image: ArchiveImage;
     onDelete: (id: string) => void;
     onEdit: (image: ArchiveImage) => void;
+    onClick: () => void;
 }
 
-const ImageCard: React.FC<ImageCardProps> = ({ image, onDelete, onEdit }) => {
+const ImageCard: React.FC<ImageCardProps> = ({ image, onDelete, onEdit, onClick }) => {
     const dateStr = new Date(image.timestamp).toLocaleDateString();
 
     return (
-        <div className="image-card glass-panel">
+        <div className="image-card glass-panel" onClick={onClick}>
             <div className="card-image-wrapper">
                 <img src={image.url} alt={image.prompt} className="card-image" loading="lazy" />
                 <div className="card-overlay">
-                    <div className="card-actions">
+                    <div className="card-actions" onClick={(e) => e.stopPropagation()}>
                         <button className="card-action-btn" onClick={() => onEdit(image)} title="Edit">
                             <Edit2 size={16} />
                         </button>

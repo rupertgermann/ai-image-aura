@@ -1,5 +1,5 @@
-import React from 'react';
-import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AppView } from '../types';
 
 interface SidebarProps {
@@ -8,6 +8,8 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
+    const [isCollapsed, setIsCollapsed] = useState(false);
+
     const navItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
         { id: 'generate', label: 'Generate', icon: <PlusSquare size={20} /> },
         { id: 'archive', label: 'Archive', icon: <ImageIcon size={20} /> },
@@ -16,10 +18,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
     ];
 
     return (
-        <aside className="sidebar glass-panel">
+        <aside className={`sidebar glass-panel ${isCollapsed ? 'collapsed' : ''}`}>
+            <button
+                className="sidebar-collapse-btn"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            >
+                {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            </button>
+
             <div className="sidebar-logo">
                 <Sparkles className="logo-icon" size={28} />
-                <span className="gradient-text">AURA AI</span>
+                {!isCollapsed && <span className="gradient-text">AURA AI</span>}
             </div>
 
             <nav className="sidebar-nav">
@@ -38,7 +48,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
             <div className="sidebar-footer">
                 <div className="status-indicator">
                     <div className="status-dot"></div>
-                    <span>API Connected</span>
+                    {!isCollapsed && <span>API Connected</span>}
                 </div>
             </div>
         </aside>

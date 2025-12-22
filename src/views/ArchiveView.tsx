@@ -8,9 +8,10 @@ interface ArchiveViewProps {
     images: ArchiveImage[];
     onDeleteImage: (id: string) => void;
     onEditImage: (image: ArchiveImage) => void;
+    onSelectImage: (image: ArchiveImage) => void;
 }
 
-const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEditImage }) => {
+const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEditImage, onSelectImage }) => {
     const [search, setSearch] = useLocalStorage('archive_search', '');
 
     const filteredImages = images.filter(img =>
@@ -53,6 +54,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                             image={img}
                             onDelete={onDeleteImage}
                             onEdit={onEditImage}
+                            onClick={() => onSelectImage(img)}
                         />
                     ))}
                 </div>

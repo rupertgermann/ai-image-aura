@@ -1,0 +1,142 @@
+import React, { useState } from 'react';
+import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2 } from 'lucide-react';
+import type { ArchiveImage } from '../db/types';
+
+interface ImageDetailModalProps {
+    image: ArchiveImage;
+    onClose: () => void;
+    onEdit: (image: ArchiveImage) => void;
+    onDelete: (id: string) => void;
+    onCreateSimilar: (prompt: string) => void;
+    onNext: () => void;
+    onPrevious: () => void;
+}
+
+const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
+    image, onClose, onEdit, onDelete, onCreateSimilar, onNext, onPrevious
+}) => {
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [copied, setCopied] = useState(false);
+
+    const dateStr = new Date(image.timestamp).toLocaleString();
+
+    const copyPrompt = () => {
+        navigator.clipboard.writeText(image.prompt);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const downloadImage = () => {
+        const link = document.createElement('a');
+        link.href = image.url;
+        link.download = `aura-${image.id}.png`;
+        link.click();
+    };
+
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowRight') onNext();
+            if (e.key === 'ArrowLeft') onPrevious();
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onNext, onPrevious, onClose]);
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className={`modal-content glass-panel ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
+                <button className="modal-close" onClick={onClose}>
+                    <X size={20} />
+                </button>
+
+                <div className="modal-main">
+                    <div className="modal-image-viewport">
+                        <img src={image.url} alt={image.prompt} className="modal-image" />
+
+                        <div className="floating-actions">
+                            <button className="glass-btn primary" onClick={downloadImage}>
+                                <Download size={18} /> Download
+                            </button>
+                            <button className="glass-btn" onClick={() => onEdit(image)}>
+                                <Edit2 size={18} /> Edit
+                            </button>
+                        </div>
+
+                        <button className="nav-arrow prev" onClick={onPrevious} title="Previous (Left Arrow)">
+                            <ChevronLeft size={32} />
+                        </button>
+                        <button className="nav-arrow next" onClick={onNext} title="Next (Right Arrow)">
+                            <ChevronRight size={32} />
+                        </button>
+                    </div>
+
+                    <button
+                        className="sidebar-toggle"
+                        onClick={() => setSidebarOpen(!sidebarOpen)}
+                        title={sidebarOpen ? "Hide Studio Info" : "Show Studio Info"}
+                    >
+                        {sidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+                    </button>
+                </div>
+
+                <aside className="modal-sidebar">
+                    <div className="sidebar-inner">
+                        <header className="sidebar-header">
+                            <h2 className="gradient-text">Studio Info</h2>
+                        </header>
+
+                        <div className="sidebar-section">
+                            <label className="section-label">PROMPT</label>
+                            <div className="prompt-container glass-inset">
+                                <p>{image.prompt}</p>
+                                <button className="copy-btn" onClick={copyPrompt}>
+                                    {copied ? <Check size={14} className="success-icon" /> : <Copy size={14} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="sidebar-grid">
+                            <div className="info-cell">
+                                <label><Calendar size={12} /> CREATED</label>
+                                <span>{dateStr}</span>
+                            </div>
+                            <div className="info-cell">
+                                <label><Sparkles size={12} /> MODEL</label>
+                                <span>{image.model || 'gpt-image-1.5'}</span>
+                            </div>
+                            <div className="info-cell">
+                                <label><Layers size={12} /> QUALITY</label>
+                                <span className="status-badge">{image.quality}</span>
+                            </div>
+                            <div className="info-cell">
+                                <label><Layout size={12} /> SIZE</label>
+                                <span>{image.aspectRatio}</span>
+                            </div>
+                        </div>
+
+                        <div className="sidebar-actions">
+                            <button className="action-button primary" onClick={() => onCreateSimilar(image.prompt)}>
+                                <Wand2 size={18} /> Create Similar
+                            </button>
+                            <button className="action-button secondary" onClick={copyPrompt}>
+                                <Copy size={18} /> Copy Prompt
+                            </button>
+                            <div className="divider" />
+                            <button className="action-button danger-text" onClick={() => {
+                                if (confirm('Delete this masterpiece?')) {
+                                    onDelete(image.id);
+                                    onClose();
+                                }
+                            }}>
+                                <Trash2 size={18} /> Delete Permanently
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </div>
+    );
+};
+
+export default ImageDetailModal;

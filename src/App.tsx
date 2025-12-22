@@ -4,6 +4,7 @@ import SettingsView from './views/SettingsView'
 import GenerateView from './views/GenerateView'
 import ArchiveView from './views/ArchiveView'
 import EditorView from './views/EditorView'
+import ImageDetailModal from './components/ImageDetailModal'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { useImageArchive } from './hooks/useImageArchive'
 import type { ArchiveImage } from './db/types'
@@ -14,6 +15,7 @@ function App() {
     const { images, addImage, deleteImage } = useImageArchive()
     const [apiKey, setApiKey] = useLocalStorage<string>('aura_openapi_key', '')
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null)
+    const [selectedImage, setSelectedImage] = useState<ArchiveImage | null>(null)
 
     // Migration for legacy API keys
     useEffect(() => {
@@ -59,12 +61,39 @@ function App() {
         setEditingImage(null)
     }
 
+    const handleCreateSimilar = (prompt: string) => {
+        localStorage.setItem('aura_generate_prompt', prompt) // Set prompt in persistent storage
+        setSelectedImage(null)
+        setCurrentView('generate')
+    }
+
+    const handleNextImage = () => {
+        if (!selectedImage) return
+        const currentIndex = images.findIndex(img => img.id === selectedImage.id)
+        if (currentIndex < images.length - 1) {
+            setSelectedImage(images[currentIndex + 1])
+        }
+    }
+
+    const handlePreviousImage = () => {
+        if (!selectedImage) return
+        const currentIndex = images.findIndex(img => img.id === selectedImage.id)
+        if (currentIndex > 0) {
+            setSelectedImage(images[currentIndex - 1])
+        }
+    }
+
     const renderView = () => {
         switch (currentView) {
             case 'generate':
                 return <GenerateView apiKey={apiKey} onSaveImage={handleSaveImage} />;
             case 'archive':
-                return <ArchiveView images={images} onDeleteImage={handleDeleteImage} onEditImage={handleEditImage} />;
+                return <ArchiveView
+                    images={images}
+                    onDeleteImage={handleDeleteImage}
+                    onEditImage={handleEditImage}
+                    onSelectImage={setSelectedImage}
+                />;
             case 'editor':
                 return <EditorView image={editingImage} onSave={handleSaveEditedImage} />;
             case 'settings':
@@ -82,6 +111,18 @@ function App() {
                     {renderView()}
                 </div>
             </main>
+
+            {selectedImage && (
+                <ImageDetailModal
+                    image={selectedImage}
+                    onClose={() => setSelectedImage(null)}
+                    onEdit={handleEditImage}
+                    onDelete={handleDeleteImage}
+                    onCreateSimilar={handleCreateSimilar}
+                    onNext={handleNextImage}
+                    onPrevious={handlePreviousImage}
+                />
+            )}
         </div>
     )
 }
