@@ -7,9 +7,13 @@ interface ImageCardProps {
     onDelete: (id: string) => void;
     onEdit: (image: ArchiveImage) => void;
     onClick: () => void;
+    selected?: boolean;
+    onSelect?: (selected: boolean) => void;
 }
 
-const ImageCard: React.FC<ImageCardProps> = ({ image, onDelete, onEdit, onClick }) => {
+const ImageCard: React.FC<ImageCardProps> = ({
+    image, onDelete, onEdit, onClick, selected = false, onSelect
+}) => {
     const dateStr = new Date(image.timestamp).toLocaleDateString();
 
     const handleDownload = (e: React.MouseEvent) => {
@@ -21,8 +25,21 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, onDelete, onEdit, onClick 
     };
 
     return (
-        <div className="image-card glass-panel" onClick={onClick}>
+        <div className={`image-card glass-panel ${selected ? 'selected' : ''}`} onClick={onClick}>
             <div className="card-image-wrapper">
+                {onSelect && (
+                    <div
+                        className={`card-selector ${selected ? 'active' : ''}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect(!selected);
+                        }}
+                    >
+                        <div className="selector-inner">
+                            {selected && <div className="selector-check" />}
+                        </div>
+                    </div>
+                )}
                 <img src={image.url} alt={image.prompt} className="card-image" loading="lazy" />
                 <div className="card-overlay">
                     <div className="card-actions" onClick={(e) => e.stopPropagation()}>
