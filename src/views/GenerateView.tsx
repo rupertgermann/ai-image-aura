@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Loader2, Download, Archive, Trash2 } from 'lucide-react';
+import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import { generateImageWithGPTImage15 } from '../utils/openai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { storage } from '../services/StorageService';
@@ -21,12 +21,18 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useLocalStorage('aura_generate_is_saved', false);
+    const [referenceImages, setReferenceImages] = useState<File[]>([]);
+    const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
 
-    // Initial load from storage
     useEffect(() => {
         storage.load('generate_current_result').then(val => {
             if (val) setCurrentResult(val);
         });
+
+        return () => {
+            // Cleanup previews
+            referencePreviews.forEach((url: string) => URL.revokeObjectURL(url));
+        };
     }, []);
 
     // Sanitize persistent state for GPT-Image-1.5 compatibility
@@ -54,6 +60,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                 quality,
                 size: safeSize,
                 background,
+                referenceImages
             });
 
             if (result.b64_json) {
@@ -165,6 +172,43 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                     onClick={() => setBackground('transparent')}
                                 >Transparent</button>
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="reference-section">
+                        <label>REFERENCE IMAGES (OPTIONAL)</label>
+                        <div className="reference-grid">
+                            {referencePreviews.map((url: string, idx: number) => (
+                                <div key={url} className="reference-preview glass-panel">
+                                    <img src={url} alt="Reference" />
+                                    <button
+                                        className="remove-ref"
+                                        onClick={() => {
+                                            setReferenceImages((prev: File[]) => prev.filter((_, i) => i !== idx));
+                                            setReferencePreviews((prev: string[]) => prev.filter((_, i) => i !== idx));
+                                            URL.revokeObjectURL(url);
+                                        }}
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                            <label className="upload-ref glass-panel">
+                                <input
+                                    type="file"
+                                    multiple
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                        const files = Array.from(e.target.files || []);
+                                        setReferenceImages((prev: File[]) => [...prev, ...files]);
+                                        const newPreviews = files.map(file => URL.createObjectURL(file));
+                                        setReferencePreviews((prev: string[]) => [...prev, ...newPreviews]);
+                                    }}
+                                    style={{ display: 'none' }}
+                                />
+                                <Upload size={20} />
+                                <span>Add Reference</span>
+                            </label>
                         </div>
                     </div>
 
