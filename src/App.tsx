@@ -78,11 +78,23 @@ function App() {
         setCurrentView('editor')
     }
 
-    const handleSaveEditedImage = async (updatedUrl: string) => {
+    const handleSaveEditedImage = async (updatedUrl: string, isCopy: boolean = false) => {
         if (!editingImage) return
 
-        const updatedImage = { ...editingImage, url: updatedUrl }
-        await addImage(updatedImage) // SQLiteAdapter's saveImage uses INSERT OR REPLACE
+        if (isCopy) {
+            const newImage = {
+                ...editingImage,
+                id: crypto.randomUUID(),
+                url: updatedUrl,
+                timestamp: new Date().toISOString()
+            }
+            await addImage(newImage)
+            addToast('Design saved as new copy', 'success')
+        } else {
+            const updatedImage = { ...editingImage, url: updatedUrl }
+            await addImage(updatedImage) // SQLiteAdapter's saveImage uses INSERT OR REPLACE
+            addToast('Masterpiece updated', 'success')
+        }
 
         setCurrentView('archive')
         setEditingImage(null)
@@ -130,7 +142,7 @@ function App() {
                     onSelectImage={setSelectedImage}
                 />;
             case 'editor':
-                return <EditorView image={editingImage} onSave={handleSaveEditedImage} />;
+                return <EditorView image={editingImage} apiKey={apiKey} onSave={handleSaveEditedImage} />;
             case 'settings':
                 return <SettingsView apiKey={apiKey} onApiKeyChange={handleApiKeyChange} />;
             default:
