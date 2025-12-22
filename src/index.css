@@ -1241,3 +1241,155 @@ textarea {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
 }
+
+/* --- Toast & Confirm Enhancements --- */
+.toast-container {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    z-index: 5000;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    min-width: 300px;
+    animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    background: rgba(15, 15, 18, 0.8) !important;
+}
+
+.toast.success { border-left: 4px solid #10b981; }
+.toast.error { border-left: 4px solid #ef4444; }
+.toast.info { border-left: 4px solid var(--accent-primary); }
+
+.toast-close {
+    margin-left: auto;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.toast-close:hover { opacity: 1; }
+
+@keyframes toast-in {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.modal-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-icon.danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.modal-icon.info {
+    background: rgba(168, 85, 247, 0.1);
+    color: var(--accent-primary);
+}
+
+.danger-bg {
+    background: #ef4444 !important;
+    color: white !important;
+}
+
+.success-icon { color: #10b981; }
+.error-icon { color: #ef4444; }
+.info-icon { color: var(--accent-primary); }
+
+.action-btn.success {
+    background: #10b981 !important;
+    color: white;
+}
+
+/* --- Confirm Dialog Specifics --- */
+.modal-content.confirm-dialog {
+    width: 90vw !important;
+    max-width: 480px !important;
+    height: auto !important;
+    padding: 2.5rem !important;
+    flex-direction: column;
+    border-radius: 24px;
+}
+
+.modal-content.confirm-dialog .modal-icon {
+    margin-bottom: 1.5rem;
+}
+
+.modal-content.confirm-dialog h3 {
+    margin-bottom: 1rem;
+}
+
+/* --- Refined Confirm Dialog --- */
+.dialog-overlay {
+    z-index: 4000;
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.modal-content.confirm-dialog {
+    display: flex;
+    flex-direction: row; /* Icon on the left, content on the right */
+    gap: 1.5rem;
+    align-items: flex-start;
+    animation: dialog-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.confirm-body {
+    flex: 1;
+}
+
+.confirm-body h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+}
+
+.confirm-body p {
+    color: var(--text-muted);
+    line-height: 1.6;
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+}
+
+.confirm-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+.confirm-actions .action-button {
+    width: auto;
+    padding: 10px 24px;
+}
+
+@keyframes dialog-pop {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-icon-container {
+    display: flex;
+    justify-content: center;
+    padding-top: 0.25rem;
+}
+
+/* Ensure glassmorphism is consistent on dialogs */
+.modal-content.confirm-dialog.glass-panel {
+    background: rgba(15, 15, 18, 0.9) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}

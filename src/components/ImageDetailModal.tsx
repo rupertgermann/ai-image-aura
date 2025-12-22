@@ -7,7 +7,7 @@ interface ImageDetailModalProps {
     onClose: () => void;
     onEdit: (image: ArchiveImage) => void;
     onDelete: (id: string) => void;
-    onCreateSimilar: (prompt: string) => void;
+    onCreateSimilar: () => void;
     onNext: () => void;
     onPrevious: () => void;
 }
@@ -116,19 +116,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         </div>
 
                         <div className="sidebar-actions">
-                            <button className="action-button primary" onClick={() => onCreateSimilar(image.prompt)}>
+                            <button className="action-button primary" onClick={onCreateSimilar}>
                                 <Wand2 size={18} /> Create Similar
                             </button>
                             <button className="action-button secondary" onClick={copyPrompt}>
                                 <Copy size={18} /> Copy Prompt
                             </button>
                             <div className="divider" />
-                            <button className="action-button danger-text" onClick={() => {
-                                if (confirm('Delete this masterpiece?')) {
-                                    onDelete(image.id);
-                                    onClose();
-                                }
-                            }}>
+                            <button className="action-button danger-text" onClick={() => onDelete(image.id)}>
                                 <Trash2 size={18} /> Delete Permanently
                             </button>
                         </div>

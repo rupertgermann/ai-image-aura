@@ -5,6 +5,10 @@ import GenerateView from './views/GenerateView'
 import ArchiveView from './views/ArchiveView'
 import EditorView from './views/EditorView'
 import ImageDetailModal from './components/ImageDetailModal'
+import Toast from './components/Toast'
+import type { ToastType } from './components/Toast'
+import ConfirmModal from './components/ConfirmModal'
+import { storage } from './services/StorageService'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { useImageArchive } from './hooks/useImageArchive'
 import type { ArchiveImage } from './db/types'
@@ -16,6 +20,19 @@ function App() {
     const [apiKey, setApiKey] = useLocalStorage<string>('aura_openapi_key', '')
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null)
     const [selectedImage, setSelectedImage] = useState<ArchiveImage | null>(null)
+    const [toasts, setToasts] = useState<{ id: string; message: string; type: ToastType }[]>([])
+    const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; type?: 'danger' | 'info' }>({
+        isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'info'
+    })
+
+    const addToast = (message: string, type: ToastType = 'info') => {
+        const id = crypto.randomUUID()
+        setToasts(prev => [...prev, { id, message, type }])
+    }
+
+    const removeToast = (id: string) => {
+        setToasts(prev => prev.filter(t => t.id !== id))
+    }
 
     // Migration for legacy API keys
     useEffect(() => {
@@ -38,12 +55,22 @@ function App() {
 
     const handleSaveImage = async (image: ArchiveImage) => {
         await addImage(image)
+        addToast('Image saved to archive', 'success')
     }
 
     const handleDeleteImage = async (id: string) => {
-        if (confirm('Are you sure you want to delete this image?')) {
-            await deleteImage(id)
-        }
+        setConfirmConfig({
+            isOpen: true,
+            title: 'Delete Masterpiece?',
+            message: 'This will permanently remove the image and its binary data from your local storage. This action cannot be undone.',
+            type: 'danger',
+            onConfirm: async () => {
+                await deleteImage(id)
+                setConfirmConfig(prev => ({ ...prev, isOpen: false }))
+                addToast('Image deleted permanently', 'info')
+                if (selectedImage?.id === id) setSelectedImage(null)
+            }
+        })
     }
 
     const handleEditImage = (image: ArchiveImage) => {
@@ -61,10 +88,18 @@ function App() {
         setEditingImage(null)
     }
 
-    const handleCreateSimilar = (prompt: string) => {
-        localStorage.setItem('aura_generate_prompt', prompt) // Set prompt in persistent storage
+    const handleCreateSimilar = async (image: ArchiveImage) => {
+        localStorage.setItem('aura_generate_prompt', JSON.stringify(image.prompt))
+        localStorage.setItem('aura_generate_quality', JSON.stringify(image.quality))
+        localStorage.setItem('aura_generate_aspect_ratio', JSON.stringify(image.aspectRatio))
+        localStorage.setItem('aura_generate_background', JSON.stringify(image.background || 'auto'))
+        localStorage.setItem('aura_generate_is_saved', JSON.stringify(false))
+
+        await storage.remove('generate_current_result')
+
         setSelectedImage(null)
         setCurrentView('generate')
+        addToast('Settings transferred to generator', 'info')
     }
 
     const handleNextImage = () => {
@@ -118,11 +153,22 @@ function App() {
                     onClose={() => setSelectedImage(null)}
                     onEdit={handleEditImage}
                     onDelete={handleDeleteImage}
-                    onCreateSimilar={handleCreateSimilar}
+                    onCreateSimilar={() => handleCreateSimilar(selectedImage)}
                     onNext={handleNextImage}
                     onPrevious={handlePreviousImage}
                 />
             )}
+
+            <ConfirmModal
+                {...confirmConfig}
+                onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+            />
+
+            <div className="toast-container">
+                {toasts.map(toast => (
+                    <Toast key={toast.id} {...toast} onClose={() => removeToast(toast.id)} />
+                ))}
+            </div>
         </div>
     )
 }

@@ -13,13 +13,14 @@ interface GenerateViewProps {
 const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
-    const [prompt, setPrompt] = useLocalStorage('generate_prompt', '');
-    const [quality, setQuality] = useLocalStorage<'low' | 'medium' | 'high'>('generate_quality', 'medium');
-    const [aspectRatio, setAspectRatio] = useLocalStorage('generate_aspect_ratio', '1024x1024');
-    const [background, setBackground] = useLocalStorage<'opaque' | 'transparent' | 'auto'>('generate_background', 'auto');
+    const [prompt, setPrompt] = useLocalStorage('aura_generate_prompt', '');
+    const [quality, setQuality] = useLocalStorage<'low' | 'medium' | 'high'>('aura_generate_quality', 'medium');
+    const [aspectRatio, setAspectRatio] = useLocalStorage('aura_generate_aspect_ratio', '1024x1024');
+    const [background, setBackground] = useLocalStorage<'opaque' | 'transparent' | 'auto'>('aura_generate_background', 'auto');
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isSaved, setIsSaved] = useLocalStorage('aura_generate_is_saved', false);
 
     // Initial load from storage
     useEffect(() => {
@@ -58,6 +59,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             if (result.b64_json) {
                 const imageUrl = `data:image/png;base64,${result.b64_json}`;
                 setCurrentResult(imageUrl);
+                setIsSaved(false); // New image generated
                 await storage.save('generate_current_result', imageUrl);
             }
         } catch (err: any) {
@@ -67,8 +69,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         }
     };
 
-    const handleSave = () => {
+    const handleDownload = () => {
         if (!currentResult) return;
+        const link = document.createElement('a');
+        link.href = currentResult;
+        link.download = `aura-generation-${Date.now()}.png`;
+        link.click();
+    };
+
+    const handleSave = () => {
+        if (!currentResult || isSaved) return;
 
         const newImage: ArchiveImage = {
             id: crypto.randomUUID(),
@@ -84,6 +94,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         };
 
         onSaveImage(newImage);
+        setIsSaved(true);
     };
 
     return (
@@ -177,10 +188,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="result-container">
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             <div className="result-actions">
-                                <button onClick={handleSave} className="action-btn purple">
-                                    <Archive size={18} /> Save to Archive
+                                <button
+                                    onClick={handleSave}
+                                    className={`action-btn ${isSaved ? 'success' : 'purple'}`}
+                                    disabled={isSaved}
+                                >
+                                    <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
-                                <button className="action-btn">
+                                <button className="action-btn" onClick={handleDownload}>
                                     <Download size={18} /> Download
                                 </button>
                                 <button onClick={async () => {

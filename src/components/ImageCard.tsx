@@ -12,6 +12,14 @@ interface ImageCardProps {
 const ImageCard: React.FC<ImageCardProps> = ({ image, onDelete, onEdit, onClick }) => {
     const dateStr = new Date(image.timestamp).toLocaleDateString();
 
+    const handleDownload = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        const link = document.createElement('a');
+        link.href = image.url;
+        link.download = `aura-${image.id}.png`;
+        link.click();
+    };
+
     return (
         <div className="image-card glass-panel" onClick={onClick}>
             <div className="card-image-wrapper">
@@ -21,7 +29,7 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, onDelete, onEdit, onClick 
                         <button className="card-action-btn" onClick={() => onEdit(image)} title="Edit">
                             <Edit2 size={16} />
                         </button>
-                        <button className="card-action-btn" title="Download">
+                        <button className="card-action-btn" onClick={handleDownload} title="Download">
                             <Download size={16} />
                         </button>
                         <button className="card-action-btn danger" onClick={() => onDelete(image.id)} title="Delete">
