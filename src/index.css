@@ -1595,6 +1595,7 @@ textarea {
     gap: 1rem;
     align-items: center;
 }
+
 /* --- Reference Image Styles --- */
 .reference-section {
     margin-top: 1.5rem;
@@ -1697,43 +1698,59 @@ textarea {
     background: rgba(0, 0, 0, 0.3);
 }
 
-.ai-edit-btn {
-    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-    color: white;
-    border: none;
-    border-radius: 10px;
-    padding: 0.75rem;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
+/* --- Unified Editor Buttons --- */
+.editor-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    margin-top: auto;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.editor-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
+    padding: 0.85rem;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
     transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid transparent;
+}
+
+.editor-btn.primary {
+    background: var(--accent-gradient);
+    color: white;
     box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
 }
 
-.ai-edit-btn:hover:not(:disabled) {
+.editor-btn.primary:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
     filter: brightness(1.1);
 }
 
-.ai-edit-btn:disabled {
+.editor-btn.glass {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-main);
+}
+
+.editor-btn.glass:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+}
+
+.editor-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     filter: grayscale(1);
     box-shadow: none;
-}
-
-.error-message.mini {
-    font-size: 0.75rem;
-    padding: 0.4rem 0.75rem;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.2);
-    border-radius: 6px;
-    color: #ef4444;
 }
 
 /* --- Mini Reference Styles for Editor --- */

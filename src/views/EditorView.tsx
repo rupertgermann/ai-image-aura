@@ -219,7 +219,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                                 disabled={aiLoading || !apiKey}
                             />
                             <button
-                                className="ai-edit-btn"
+                                className="editor-btn primary"
                                 onClick={handleAiEdit}
                                 disabled={aiLoading || !aiPrompt.trim() || !apiKey}
                             >
@@ -270,13 +270,13 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                     </div>
 
                     <div className="editor-actions">
-                        <button className="generate-btn" onClick={() => handleExport(false)}>
+                        <button className="editor-btn primary" onClick={() => handleExport(false)}>
                             <Save size={18} /> Save Changes
                         </button>
-                        <button className="action-btn purple" onClick={() => handleExport(true)}>
+                        <button className="editor-btn glass" onClick={() => handleExport(true)}>
                             <Copy size={18} /> Save as Copy
                         </button>
-                        <button className="action-btn" onClick={() => {
+                        <button className="editor-btn glass" onClick={() => {
                             setBrightness(100);
                             setContrast(100);
                             setSaturation(100);
