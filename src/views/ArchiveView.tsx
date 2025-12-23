@@ -1,7 +1,8 @@
 import React from 'react';
 import ImageCard from '../components/ImageCard';
 import type { ArchiveImage } from '../db/types';
-import { Image as ImageIcon, Search, Download, Trash2, X } from 'lucide-react';
+import { Image as ImageIcon, Search, Download, Trash2, X, Loader2 } from 'lucide-react';
+import JSZip from 'jszip';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import ConfirmModal from '../components/ConfirmModal';
 
@@ -16,6 +17,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
     const [search, setSearch] = useLocalStorage('archive_search', '');
     const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
     const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
+    const [isZipping, setIsZipping] = React.useState(false);
 
     const toggleSelect = (id: string) => {
         setSelectedIds(prev => {
@@ -34,16 +36,41 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
         }
     };
 
-    const handleBulkDownload = () => {
-        const selectedImages = images.filter(img => selectedIds.has(img.id));
-        selectedImages.forEach((img, index) => {
-            setTimeout(() => {
-                const link = document.createElement('a');
-                link.href = img.url;
-                link.download = `aura-${img.id}.png`;
-                link.click();
-            }, index * 200); // Stagger downloads to prevent browser blocking
-        });
+    const handleBulkDownload = async () => {
+        if (selectedIds.size === 0) return;
+
+        setIsZipping(true);
+        try {
+            const zip = new JSZip();
+            const selectedImages = images.filter(img => selectedIds.has(img.id));
+
+            for (const img of selectedImages) {
+                // Fetch the image data
+                const response = await fetch(img.url);
+                const blob = await response.blob();
+
+                // Add to zip with a descriptive name
+                const filename = `aura-${img.id}.png`;
+                zip.file(filename, blob);
+            }
+
+            // Generate and download
+            const content = await zip.generateAsync({ type: 'blob' });
+            const zipUrl = URL.createObjectURL(content);
+
+            const link = document.createElement('a');
+            link.href = zipUrl;
+            link.download = `aura-collection-${new Date().getTime()}.zip`;
+            link.click();
+
+            // Cleanup
+            setTimeout(() => URL.revokeObjectURL(zipUrl), 10000);
+        } catch (error) {
+            console.error('Failed to create ZIP:', error);
+            // Could add a toast here if available in this view
+        } finally {
+            setIsZipping(false);
+        }
     };
 
     const handleBulkDelete = () => {
@@ -121,8 +148,13 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                         <button className="aura-btn aura-btn--glass" onClick={() => setSelectedIds(new Set())}>
                             <X size={18} /> Cancel
                         </button>
-                        <button className="aura-btn aura-btn--primary" onClick={handleBulkDownload}>
-                            <Download size={18} /> Download All
+                        <button
+                            className="aura-btn aura-btn--primary"
+                            onClick={handleBulkDownload}
+                            disabled={isZipping}
+                        >
+                            {isZipping ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
+                            {isZipping ? 'Generating ZIP...' : 'Download as ZIP'}
                         </button>
                         <button className="aura-btn aura-btn--danger" onClick={() => setIsConfirmOpen(true)}>
                             <Trash2 size={18} /> Delete All

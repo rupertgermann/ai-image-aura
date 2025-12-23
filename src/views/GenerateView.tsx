@@ -4,6 +4,7 @@ import { generateImageWithGPTImage15 } from '../utils/openai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { storage } from '../services/StorageService';
 import type { ArchiveImage } from '../db/types';
+import { fileToDataURL, dataURLtoFile } from '../utils/file';
 
 interface GenerateViewProps {
     apiKey: string | null;
@@ -23,15 +24,36 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [isSaved, setIsSaved] = useLocalStorage('aura_generate_is_saved', false);
     const [referenceImages, setReferenceImages] = useState<File[]>([]);
     const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
+    const [isDragging, setIsDragging] = useState(false);
 
     useEffect(() => {
         storage.load('generate_current_result').then(val => {
             if (val) setCurrentResult(val);
         });
 
+        storage.load('generate_transferred_references').then(val => {
+            if (val) {
+                try {
+                    const refs = JSON.parse(val) as string[];
+                    const files = refs.map((dataUrl, i) => dataURLtoFile(dataUrl, `ref-${i}.png`));
+                    setReferenceImages(files);
+                    setReferencePreviews(refs);
+                    // Clear it so it doesn't persist forever
+                    storage.remove('generate_transferred_references');
+                } catch (e) {
+                    console.error('Failed to load transferred references', e);
+                }
+            }
+        });
+
         return () => {
-            // Cleanup previews
-            referencePreviews.forEach((url: string) => URL.revokeObjectURL(url));
+            // Cleanup previews - only revoke if they are object URLs, not data URLs
+            // Actually, in this component we always use object URLs for new uploads, 
+            // but transferred refs might be data URLs.
+            // dataURL previews don't need revocation.
+            referencePreviews.forEach((url: string) => {
+                if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+            });
         };
     }, []);
 
@@ -87,21 +109,50 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const handleSave = () => {
         if (!currentResult || isSaved) return;
 
-        const newImage: ArchiveImage = {
-            id: crypto.randomUUID(),
-            url: currentResult,
-            prompt,
-            model: 'gpt-image-1.5',
-            timestamp: new Date().toISOString(),
-            width: 1024,
-            height: 1024,
-            quality,
-            aspectRatio: aspectRatio,
-            background
+        const saveRefImages = async () => {
+            const refDataUrls = await Promise.all(referenceImages.map(file => fileToDataURL(file)));
+
+            const newImage: ArchiveImage = {
+                id: crypto.randomUUID(),
+                url: currentResult,
+                prompt,
+                model: 'gpt-image-1.5',
+                timestamp: new Date().toISOString(),
+                width: 1024,
+                height: 1024,
+                quality,
+                aspectRatio: aspectRatio,
+                background,
+                references: refDataUrls
+            };
+
+            onSaveImage(newImage);
+            setIsSaved(true);
         };
 
-        onSaveImage(newImage);
-        setIsSaved(true);
+        saveRefImages();
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+        if (files.length > 0) {
+            setReferenceImages(prev => [...prev, ...files]);
+            const newPreviews = files.map(file => URL.createObjectURL(file));
+            setReferencePreviews(prev => [...prev, ...newPreviews]);
+        }
     };
 
     return (
@@ -175,8 +226,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         </div>
                     </div>
 
-                    <div className="reference-section">
-                        <label>REFERENCE IMAGES (OPTIONAL)</label>
+                    <div
+                        className={`reference-section ${isDragging ? 'dragging' : ''}`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        <label>REFERENCE IMAGES (OPTIONAL) {isDragging && '- DROP TO UPLOAD'}</label>
                         <div className="reference-grid">
                             {referencePreviews.map((url: string, idx: number) => (
                                 <div key={url} className="reference-preview glass-panel">
@@ -207,7 +263,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                     style={{ display: 'none' }}
                                 />
                                 <Upload size={20} />
-                                <span>Add Reference</span>
+                                <span>Add / Drop</span>
                             </label>
                         </div>
                     </div>

@@ -24,9 +24,18 @@ export class SQLiteAdapter implements DatabaseAdapter {
                 timestamp TEXT,
                 model TEXT,
                 width INTEGER,
-                height INTEGER
+                height INTEGER,
+                ref_ids TEXT
             );
         `;
+
+        // Migration: Ensure ref_ids column exists
+        try {
+            await this.sql.sql`ALTER TABLE images ADD COLUMN ref_ids TEXT`;
+            console.log('Migrated: Added ref_ids column');
+        } catch (e) {
+            // Column likely already exists, ignore
+        }
 
         this.initialized = true;
         console.log('SQLite Database initialized');
@@ -40,8 +49,18 @@ export class SQLiteAdapter implements DatabaseAdapter {
             await storage.save(`img_${image.id}`, image.url);
         }
 
+        // Handle Reference Images
+        let refIds: number[] = [];
+        if (image.references && image.references.length > 0) {
+            // Save each reference blob to storage
+            for (let i = 0; i < image.references.length; i++) {
+                await storage.save(`ref_${image.id}_${i}`, image.references[i]);
+                refIds.push(i);
+            }
+        }
+
         await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height) 
+            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids) 
             VALUES (
                 ${image.id}, 
                 ${image.id}, -- Store ID as internal reference in url column
@@ -52,7 +71,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
                 ${image.timestamp},
                 ${image.model || 'gpt-image-1.5'},
                 ${image.width || 1024},
-                ${image.height || 1024}
+                ${image.height || 1024},
+                ${JSON.stringify(refIds)}
             )
         `;
     }
@@ -66,6 +86,24 @@ export class SQLiteAdapter implements DatabaseAdapter {
         for (const img of images) {
             const data = await storage.load(`img_${img.id}`);
             if (data) img.url = data;
+
+            // Load references if present
+            // @ts-ignore - ref_ids comes back as string from DB
+            if (img.ref_ids) {
+                try {
+                    // @ts-ignore
+                    const refIds = JSON.parse(img.ref_ids) as number[];
+                    const loadedRefs: string[] = [];
+                    for (const idx of refIds) {
+                        const refData = await storage.load(`ref_${img.id}_${idx}`);
+                        if (refData) loadedRefs.push(refData);
+                    }
+                    img.references = loadedRefs;
+                } catch (e) {
+                    console.error('Failed to parse references for image', img.id, e);
+                    img.references = [];
+                }
+            }
         }
 
         return images;
@@ -74,6 +112,21 @@ export class SQLiteAdapter implements DatabaseAdapter {
     async deleteImage(id: string): Promise<void> {
         await this.init();
         await storage.remove(`img_${id}`);
+
+        // We need to fetch the image first to know how many references to delete
+        // Or we can just brute force delete a reasonable number, but fetching is safer
+        const result = await this.sql.sql`SELECT ref_ids FROM images WHERE id = ${id}`;
+        // @ts-ignore
+        if (result && result.length > 0 && result[0].ref_ids) {
+            try {
+                // @ts-ignore
+                const refIds = JSON.parse(result[0].ref_ids) as number[];
+                for (const idx of refIds) {
+                    await storage.remove(`ref_${id}_${idx}`);
+                }
+            } catch (e) { /* ignore parse error */ }
+        }
+
         await this.sql.sql`DELETE FROM images WHERE id = ${id}`;
     }
 

@@ -83,7 +83,7 @@ function App() {
         setCurrentView('editor')
     }
 
-    const handleSaveEditedImage = async (updatedUrl: string, isCopy: boolean = false) => {
+    const handleSaveEditedImage = async (updatedUrl: string, isCopy: boolean = false, references?: string[]) => {
         if (!editingImage) return
 
         if (isCopy) {
@@ -91,12 +91,17 @@ function App() {
                 ...editingImage,
                 id: crypto.randomUUID(),
                 url: updatedUrl,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                references: references || editingImage.references
             }
             await addImage(newImage)
             addToast('Design saved as new copy', 'success')
         } else {
-            const updatedImage = { ...editingImage, url: updatedUrl }
+            const updatedImage = {
+                ...editingImage,
+                url: updatedUrl,
+                references: references || editingImage.references
+            }
             await addImage(updatedImage) // SQLiteAdapter's saveImage uses INSERT OR REPLACE
             addToast('Masterpiece updated', 'success')
         }
@@ -112,11 +117,15 @@ function App() {
         localStorage.setItem('aura_generate_background', JSON.stringify(image.background || 'auto'))
         localStorage.setItem('aura_generate_is_saved', JSON.stringify(false))
 
-        await storage.remove('generate_current_result')
+        if (image.references && image.references.length > 0) {
+            await storage.save('generate_transferred_references', JSON.stringify(image.references));
+        } else {
+            await storage.remove('generate_transferred_references');
+        }
 
         setSelectedImage(null)
         setCurrentView('generate')
-        addToast('Settings transferred to generator', 'info')
+        addToast('Settings & references transferred', 'info')
     }
 
     const handleNextImage = () => {

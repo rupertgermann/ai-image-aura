@@ -9,6 +9,7 @@ export interface ArchiveImage {
     model?: string;
     width?: number;
     height?: number;
+    references?: string[];
 }
 
 export interface DatabaseAdapter {

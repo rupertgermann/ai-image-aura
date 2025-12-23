@@ -115,6 +115,19 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             </div>
                         </div>
 
+                        {image.references && image.references.length > 0 && (
+                            <div className="sidebar-section">
+                                <label className="section-label">REFERENCES</label>
+                                <div className="reference-grid mini">
+                                    {image.references.map((dataUrl, idx) => (
+                                        <div key={idx} className="reference-preview mini glass-panel">
+                                            <img src={dataUrl} alt={`Reference ${idx + 1}`} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="sidebar-actions">
                             <button className="aura-btn aura-btn--primary" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>
                                 <Wand2 size={18} /> Create Similar

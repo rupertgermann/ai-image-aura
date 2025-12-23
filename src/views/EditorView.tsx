@@ -3,11 +3,12 @@ import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Up
 import { generateImageWithGPTImage15 } from '../utils/openai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { ArchiveImage } from '../db/types';
+import { fileToDataURL, dataURLtoFile } from '../utils/file';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
     apiKey: string | null;
-    onSave: (updatedUrl: string, isCopy?: boolean) => void;
+    onSave: (updatedUrl: string, isCopy?: boolean, references?: string[]) => void;
 }
 
 const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
@@ -25,15 +26,24 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
     const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
     const [refImages, setRefImages] = useState<File[]>([]);
     const [refPreviews, setRefPreviews] = useState<string[]>([]);
+    const [isDragging, setIsDragging] = useState(false);
 
     useEffect(() => {
         if (image) {
             setCurrentImageUrl(image.url);
+
+            if (image.references && image.references.length > 0) {
+                const files = image.references.map((dataUrl, i) => dataURLtoFile(dataUrl, `ref-${i}.png`));
+                setRefImages(files);
+                setRefPreviews(image.references);
+            }
         }
 
         return () => {
-            // Cleanup previews
-            refPreviews.forEach((url: string) => URL.revokeObjectURL(url));
+            // Cleanup previews - only revoke if they are object URLs
+            refPreviews.forEach((url: string) => {
+                if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+            });
         };
     }, [image]);
 
@@ -70,11 +80,15 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         };
     };
 
-    const handleExport = (isCopy: boolean = false) => {
+    const handleExport = async (isCopy: boolean = false) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const dataUrl = canvas.toDataURL('image/png');
-        onSave(dataUrl, isCopy);
+
+        // Convert current refImages to data URLs to persist them
+        const refDataUrls = await Promise.all(refImages.map(file => fileToDataURL(file)));
+
+        onSave(dataUrl, isCopy, refDataUrls);
     };
 
     const handleAiEdit = async () => {
@@ -109,6 +123,28 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
             setAiError(err.message || 'AI Edit failed');
         } finally {
             setAiLoading(false);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragging(false);
+
+        const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
+        if (files.length > 0) {
+            setRefImages(prev => [...prev, ...files]);
+            const newPreviews = files.map(file => URL.createObjectURL(file));
+            setRefPreviews(prev => [...prev, ...newPreviews]);
         }
     };
 
@@ -229,8 +265,13 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                                 {aiLoading ? 'AI is thinking...' : 'Transform with AI'}
                             </button>
 
-                            <div className="reference-section mini">
-                                <label>ADD VISUAL CONTEXT (OPTIONAL)</label>
+                            <div
+                                className={`reference-section mini ${isDragging ? 'dragging' : ''}`}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                            >
+                                <label>ADD VISUAL CONTEXT (OPTIONAL) {isDragging && '- DROP TO UPLOAD'}</label>
                                 <div className="reference-grid mini">
                                     {refPreviews.map((url: string, idx: number) => (
                                         <div key={url} className="reference-preview mini glass-panel">
