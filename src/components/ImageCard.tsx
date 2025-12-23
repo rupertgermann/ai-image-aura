@@ -43,13 +43,13 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <img src={image.url} alt={image.prompt} className="card-image" loading="lazy" />
                 <div className="card-overlay">
                     <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="card-action-btn" onClick={() => onEdit(image)} title="Edit">
+                        <button className="aura-btn aura-btn--icon aura-btn--glass" onClick={() => onEdit(image)} title="Edit">
                             <Edit2 size={16} />
                         </button>
-                        <button className="card-action-btn" onClick={handleDownload} title="Download">
+                        <button className="aura-btn aura-btn--icon aura-btn--glass" onClick={handleDownload} title="Download">
                             <Download size={16} />
                         </button>
-                        <button className="card-action-btn danger" onClick={() => onDelete(image.id)} title="Delete">
+                        <button className="aura-btn aura-btn--icon aura-btn--danger" onClick={() => onDelete(image.id)} title="Delete">
                             <Trash2 size={16} />
                         </button>
                     </div>

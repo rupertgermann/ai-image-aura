@@ -66,19 +66,21 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                     </div>
                     <div className="header-actions">
                         <button
-                            className={`glass-btn select-all-btn ${selectedIds.size === filteredImages.length && filteredImages.length > 0 ? 'active' : ''}`}
+                            className={`aura-btn aura-btn--glass ${selectedIds.size === filteredImages.length && filteredImages.length > 0 ? 'aura-btn--primary' : ''}`}
                             onClick={selectAll}
                             disabled={filteredImages.length === 0}
                         >
                             {selectedIds.size === filteredImages.length && filteredImages.length > 0 ? 'Deselect All' : 'Select All'}
                         </button>
-                        <div className="search-box glass-panel">
-                            <Search size={18} className="search-icon" />
+                        <div className="search-box glass-panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
+                            <Search size={18} className="search-icon" style={{ position: 'absolute', left: '1rem', pointerEvents: 'none' }} />
                             <input
                                 type="text"
                                 placeholder="Search prompts..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
+                                className="aura-input"
+                                style={{ paddingLeft: '3rem' }}
                             />
                         </div>
                     </div>
@@ -116,13 +118,13 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                         <span>Images Selected</span>
                     </div>
                     <div className="bulk-actions">
-                        <button className="glass-btn" onClick={() => setSelectedIds(new Set())}>
+                        <button className="aura-btn aura-btn--glass" onClick={() => setSelectedIds(new Set())}>
                             <X size={18} /> Cancel
                         </button>
-                        <button className="glass-btn info" onClick={handleBulkDownload}>
+                        <button className="aura-btn aura-btn--primary" onClick={handleBulkDownload}>
                             <Download size={18} /> Download All
                         </button>
-                        <button className="glass-btn danger" onClick={() => setIsConfirmOpen(true)}>
+                        <button className="aura-btn aura-btn--danger" onClick={() => setIsConfirmOpen(true)}>
                             <Trash2 size={18} /> Delete All
                         </button>
                     </div>

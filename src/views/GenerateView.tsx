@@ -213,9 +213,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                     </div>
 
                     <button
-                        className="generate-btn"
+                        className="aura-btn aura-btn--primary"
                         onClick={handleGenerate}
                         disabled={loading || !prompt.trim() || !apiKey}
+                        style={{ width: '100%' }}
                     >
                         {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
                         {loading ? 'Generating...' : 'Generate Image'}
@@ -234,18 +235,18 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="result-actions">
                                 <button
                                     onClick={handleSave}
-                                    className={`action-btn ${isSaved ? 'success' : 'purple'}`}
+                                    className={`aura-btn ${isSaved ? 'aura-btn--success' : 'aura-btn--primary'}`}
                                     disabled={isSaved}
                                 >
                                     <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
-                                <button className="action-btn" onClick={handleDownload}>
+                                <button className="aura-btn aura-btn--glass" onClick={handleDownload}>
                                     <Download size={18} /> Download
                                 </button>
                                 <button onClick={async () => {
                                     setCurrentResult(null);
                                     await storage.remove('generate_current_result');
-                                }} className="action-btn danger">
+                                }} className="aura-btn aura-btn--danger">
                                     <Trash2 size={18} />
                                 </button>
                             </div>

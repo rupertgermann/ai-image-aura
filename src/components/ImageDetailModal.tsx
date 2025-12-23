@@ -55,10 +55,10 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         <img src={image.url} alt={image.prompt} className="modal-image" />
 
                         <div className="floating-actions">
-                            <button className="glass-btn primary" onClick={downloadImage}>
+                            <button className="aura-btn aura-btn--primary" onClick={downloadImage}>
                                 <Download size={18} /> Download
                             </button>
-                            <button className="glass-btn" onClick={() => onEdit(image)}>
+                            <button className="aura-btn aura-btn--glass" onClick={() => onEdit(image)}>
                                 <Edit2 size={18} /> Edit
                             </button>
                         </div>
@@ -116,14 +116,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         </div>
 
                         <div className="sidebar-actions">
-                            <button className="action-button primary" onClick={onCreateSimilar}>
+                            <button className="aura-btn aura-btn--primary" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>
                                 <Wand2 size={18} /> Create Similar
                             </button>
-                            <button className="action-button secondary" onClick={copyPrompt}>
+                            <button className="aura-btn aura-btn--glass" onClick={copyPrompt} style={{ width: '100%', padding: '1rem' }}>
                                 <Copy size={18} /> Copy Prompt
                             </button>
-                            <div className="divider" />
-                            <button className="action-button danger-text" onClick={() => onDelete(image.id)}>
+                            <div className="divider" style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
+                            <button className="aura-btn aura-btn--danger" onClick={() => onDelete(image.id)} style={{ width: '100%', padding: '1rem' }}>
                                 <Trash2 size={18} /> Delete Permanently
                             </button>
                         </div>

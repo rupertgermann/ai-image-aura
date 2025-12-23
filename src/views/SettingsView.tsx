@@ -54,10 +54,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) =
                         placeholder="sk-..."
                         value={tempKey}
                         onChange={(e) => setTempKey(e.target.value)}
-                        className="api-input"
+                        className="aura-input"
                     />
                     <button
-                        className={`save-btn ${status === 'saved' ? 'success' : ''}`}
+                        className={`aura-btn ${status === 'saved' ? 'aura-btn--success' : 'aura-btn--primary'}`}
                         onClick={handleSave}
                         disabled={!tempKey.trim()}
                     >

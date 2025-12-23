@@ -24,6 +24,11 @@ function App() {
     const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; type?: 'danger' | 'info' }>({
         isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'info'
     })
+    const [theme, setTheme] = useLocalStorage<'dark' | 'light'>('aura_theme', 'dark')
+
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', theme)
+    }, [theme])
 
     const addToast = (message: string, type: ToastType = 'info') => {
         const id = crypto.randomUUID()
@@ -152,7 +157,12 @@ function App() {
 
     return (
         <div className="app-container">
-            <Sidebar currentView={currentView} onViewChange={handleViewChange} />
+            <Sidebar
+                currentView={currentView}
+                onViewChange={handleViewChange}
+                theme={theme}
+                onThemeToggle={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+            />
             <main className="main-content">
                 <div className="view-wrapper">
                     {renderView()}

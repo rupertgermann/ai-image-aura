@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
 import type { AppView } from '../types';
 
 interface SidebarProps {
     currentView: AppView;
     onViewChange: (view: AppView) => void;
+    theme: 'dark' | 'light';
+    onThemeToggle: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, theme, onThemeToggle }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     const navItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
@@ -46,6 +48,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
             </nav>
 
             <div className="sidebar-footer">
+                <button
+                    className="theme-toggle"
+                    onClick={onThemeToggle}
+                    title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                >
+                    {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+                    {!isCollapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+                </button>
                 <div className="status-indicator">
                     <div className="status-dot"></div>
                     {!isCollapsed && <span>API Connected</span>}

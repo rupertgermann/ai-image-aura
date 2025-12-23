@@ -215,13 +215,15 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                                 placeholder="Describe your transformation... (e.g. 'Make it a sunset', 'Add a dragon in the sky')"
                                 value={aiPrompt}
                                 onChange={(e) => setAiPrompt(e.target.value)}
-                                className="ai-prompt-input"
+                                className="aura-input"
+                                style={{ minHeight: '100px', resize: 'vertical' }}
                                 disabled={aiLoading || !apiKey}
                             />
                             <button
-                                className="editor-btn primary"
+                                className="aura-btn aura-btn--primary"
                                 onClick={handleAiEdit}
                                 disabled={aiLoading || !aiPrompt.trim() || !apiKey}
+                                style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
                                 {aiLoading ? 'AI is thinking...' : 'Transform with AI'}
@@ -270,13 +272,13 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                     </div>
 
                     <div className="editor-actions">
-                        <button className="editor-btn primary" onClick={() => handleExport(false)}>
+                        <button className="aura-btn aura-btn--primary" onClick={() => handleExport(false)}>
                             <Save size={18} /> Save Changes
                         </button>
-                        <button className="editor-btn glass" onClick={() => handleExport(true)}>
+                        <button className="aura-btn aura-btn--glass" onClick={() => handleExport(true)}>
                             <Copy size={18} /> Save as Copy
                         </button>
-                        <button className="editor-btn glass" onClick={() => {
+                        <button className="aura-btn aura-btn--glass" onClick={() => {
                             setBrightness(100);
                             setContrast(100);
                             setSaturation(100);
