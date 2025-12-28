@@ -13,11 +13,21 @@ interface GenerateViewProps {
 
 const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 
+const STYLE_PROMPTS: Record<string, string> = {
+    photorealistic: 'photorealistic, high quality, detailed',
+    artistic: 'artistic style, painterly, creative interpretation',
+    anime: 'anime style, manga art, Japanese animation style',
+    cyberpunk: 'cyberpunk style, neon lights, futuristic, sci-fi aesthetic',
+    abstract: 'abstract art style, non-representational, artistic',
+    vintage: 'vintage style, retro aesthetic, aged look',
+};
+
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [prompt, setPrompt] = useLocalStorage('aura_generate_prompt', '');
     const [quality, setQuality] = useLocalStorage<'low' | 'medium' | 'high'>('aura_generate_quality', 'medium');
     const [aspectRatio, setAspectRatio] = useLocalStorage('aura_generate_aspect_ratio', '1024x1024');
     const [background, setBackground] = useLocalStorage<'opaque' | 'transparent' | 'auto'>('aura_generate_background', 'auto');
+    const [style, setStyle] = useLocalStorage('aura_generate_style', 'none');
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -78,7 +88,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             // Final validation before call
             const safeSize = VALID_SIZES.includes(aspectRatio) ? aspectRatio : '1024x1024';
 
-            const result = await generateImageWithGPTImage15(apiKey, prompt, {
+            // Append style prompt if selected
+            let finalPrompt = prompt;
+            if (style !== 'none' && STYLE_PROMPTS[style]) {
+                finalPrompt = `${prompt}, ${STYLE_PROMPTS[style]}`;
+            }
+
+            const result = await generateImageWithGPTImage15(apiKey, finalPrompt, {
                 quality,
                 size: safeSize,
                 background,
@@ -123,6 +139,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                 quality,
                 aspectRatio: aspectRatio,
                 background,
+                style,
                 references: refDataUrls
             };
 
@@ -223,6 +240,23 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                     onClick={() => setBackground('transparent')}
                                 >Transparent</button>
                             </div>
+                        </div>
+
+                        <div className="option-group">
+                            <label>ART STYLE</label>
+                            <select
+                                value={style}
+                                onChange={(e) => setStyle(e.target.value)}
+                                className="select-input"
+                            >
+                                <option value="none">None</option>
+                                <option value="photorealistic">Photorealistic</option>
+                                <option value="artistic">Artistic</option>
+                                <option value="anime">Anime</option>
+                                <option value="cyberpunk">Cyberpunk</option>
+                                <option value="abstract">Abstract</option>
+                                <option value="vintage">Vintage</option>
+                            </select>
                         </div>
                     </div>
 

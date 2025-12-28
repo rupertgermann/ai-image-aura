@@ -10,6 +10,7 @@ export interface ArchiveImage {
     width?: number;
     height?: number;
     references?: string[];
+    style?: string;
 }
 
 export interface DatabaseAdapter {

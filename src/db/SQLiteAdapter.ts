@@ -25,7 +25,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
                 model TEXT,
                 width INTEGER,
                 height INTEGER,
-                ref_ids TEXT
+                ref_ids TEXT,
+                style TEXT
             );
         `;
 
@@ -33,6 +34,13 @@ export class SQLiteAdapter implements DatabaseAdapter {
         try {
             await this.sql.sql`ALTER TABLE images ADD COLUMN ref_ids TEXT`;
             console.log('Migrated: Added ref_ids column');
+        } catch (e) {
+        }
+
+        // Migration: Ensure style column exists
+        try {
+            await this.sql.sql`ALTER TABLE images ADD COLUMN style TEXT`;
+            console.log('Migrated: Added style column');
         } catch (e) {
             // Column likely already exists, ignore
         }
@@ -60,7 +68,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
         }
 
         await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids) 
+            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style) 
             VALUES (
                 ${image.id}, 
                 ${image.id}, -- Store ID as internal reference in url column
@@ -72,7 +80,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
                 ${image.model || 'gpt-image-1.5'},
                 ${image.width || 1024},
                 ${image.height || 1024},
-                ${JSON.stringify(refIds)}
+                ${JSON.stringify(refIds)},
+                ${image.style || null}
             )
         `;
     }

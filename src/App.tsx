@@ -115,6 +115,7 @@ function App() {
         localStorage.setItem('aura_generate_quality', JSON.stringify(image.quality))
         localStorage.setItem('aura_generate_aspect_ratio', JSON.stringify(image.aspectRatio))
         localStorage.setItem('aura_generate_background', JSON.stringify(image.background || 'auto'))
+        localStorage.setItem('aura_generate_style', JSON.stringify(image.style || 'none'))
         localStorage.setItem('aura_generate_is_saved', JSON.stringify(false))
 
         if (image.references && image.references.length > 0) {

@@ -113,6 +113,12 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 <label><Layout size={12} /> SIZE</label>
                                 <span>{image.aspectRatio}</span>
                             </div>
+                            {image.style && image.style !== 'none' && (
+                                <div className="info-cell">
+                                    <label><Wand2 size={12} /> STYLE</label>
+                                    <span className="status-badge">{image.style}</span>
+                                </div>
+                            )}
                         </div>
 
                         {image.references && image.references.length > 0 && (
