@@ -5,6 +5,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { storage } from '../services/StorageService';
 import type { ArchiveImage } from '../db/types';
 import { fileToDataURL, dataURLtoFile } from '../utils/file';
+import ReferenceImageModal from '../components/ReferenceImageModal';
 
 interface GenerateViewProps {
     apiKey: string | null;
@@ -35,6 +36,21 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [referenceImages, setReferenceImages] = useState<File[]>([]);
     const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
     const [isDragging, setIsDragging] = useState(false);
+    const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
+
+    const handleNextReference = () => {
+        if (viewingReferenceIndex === null) return;
+        setViewingReferenceIndex((prev) =>
+            prev !== null && prev < referencePreviews.length - 1 ? prev + 1 : prev
+        );
+    };
+
+    const handlePreviousReference = () => {
+        if (viewingReferenceIndex === null) return;
+        setViewingReferenceIndex((prev) =>
+            prev !== null && prev > 0 ? prev - 1 : prev
+        );
+    };
 
     useEffect(() => {
         storage.load('generate_current_result').then(val => {
@@ -172,6 +188,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         }
     };
 
+
+
     return (
         <div className="generate-container">
             <header className="view-header">
@@ -270,13 +288,20 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="reference-grid">
                             {referencePreviews.map((url: string, idx: number) => (
                                 <div key={url} className="reference-preview glass-panel">
-                                    <img src={url} alt="Reference" />
+                                    <img
+                                        src={url}
+                                        alt="Reference"
+                                        onClick={() => setViewingReferenceIndex(idx)}
+                                        style={{ cursor: 'pointer' }}
+                                    />
                                     <button
                                         className="remove-ref"
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                            e.stopPropagation();
                                             setReferenceImages((prev: File[]) => prev.filter((_, i) => i !== idx));
                                             setReferencePreviews((prev: string[]) => prev.filter((_, i) => i !== idx));
                                             URL.revokeObjectURL(url);
+                                            if (viewingReferenceIndex === idx) setViewingReferenceIndex(null);
                                         }}
                                     >
                                         <X size={14} />
@@ -349,6 +374,17 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                     )}
                 </section>
             </div>
+
+            {viewingReferenceIndex !== null && (
+                <ReferenceImageModal
+                    imageUrl={referencePreviews[viewingReferenceIndex]}
+                    onClose={() => setViewingReferenceIndex(null)}
+                    onNext={handleNextReference}
+                    onPrevious={handlePreviousReference}
+                    hasNext={viewingReferenceIndex < referencePreviews.length - 1}
+                    hasPrevious={viewingReferenceIndex > 0}
+                />
+            )}
         </div>
     );
 };
