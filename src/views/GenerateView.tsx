@@ -14,14 +14,47 @@ interface GenerateViewProps {
 
 const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 
-const STYLE_PROMPTS: Record<string, string> = {
-    photorealistic: 'photorealistic, high quality, detailed',
-    artistic: 'artistic style, painterly, creative interpretation',
-    anime: 'anime style, manga art, Japanese animation style',
-    cyberpunk: 'cyberpunk style, neon lights, futuristic, sci-fi aesthetic',
-    abstract: 'abstract art style, non-representational, artistic',
-    vintage: 'vintage style, retro aesthetic, aged look',
-};
+const EXAMPLE_PROMPTS = [
+    "a lobster piloting a vintage scooter",
+    "a raccoon librarian in a tiny art-deco library",
+    "a glass whale floating above a desert",
+    "a moss-covered robot tending a bonsai garden",
+    "a candlelit map room with impossible staircases",
+    "a retro-futurist diner on the moon at dusk",
+    "a hummingbird made of stained glass",
+    "a porcelain teapot city in the clouds",
+    "a midnight train station built inside a giant clock",
+    "a tiny submarine exploring a glowing kelp forest",
+    "a baroque observatory with brass telescopes and fog",
+    "a koi pond shaped like a circuit board",
+];
+
+const STYLES = [
+    "ultra-detailed studio photo",
+    "35mm film still",
+    "risograph poster",
+    "oil painting on linen",
+    "watercolor with ink linework",
+    "isometric diorama",
+    "mid-century editorial illustration",
+    "high-end product shot",
+];
+
+const LIGHTING_OPTIONS = [
+    "softbox lighting",
+    "golden hour",
+    "neon rim light",
+    "overcast diffuse light",
+    "candlelight with deep shadows",
+    "dramatic chiaroscuro",
+];
+
+const PALETTES = [
+    "copper + teal + cream",
+    "cobalt + vermilion + bone",
+    "sage + sand + charcoal",
+    "magenta + midnight blue + silver",
+];
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [prompt, setPrompt] = useLocalStorage('aura_generate_prompt', '');
@@ -29,6 +62,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [aspectRatio, setAspectRatio] = useLocalStorage('aura_generate_aspect_ratio', '1024x1024');
     const [background, setBackground] = useLocalStorage<'opaque' | 'transparent' | 'auto'>('aura_generate_background', 'auto');
     const [style, setStyle] = useLocalStorage('aura_generate_style', 'none');
+    const [lighting, setLighting] = useLocalStorage('aura_generate_lighting', 'none');
+    const [palette, setPalette] = useLocalStorage('aura_generate_palette', 'none');
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -104,10 +139,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             // Final validation before call
             const safeSize = VALID_SIZES.includes(aspectRatio) ? aspectRatio : '1024x1024';
 
-            // Append style prompt if selected
+            // Build final prompt with style modifiers
+            const modifiers: string[] = [];
+            if (style !== 'none') modifiers.push(style);
+            if (lighting !== 'none') modifiers.push(lighting);
+            if (palette !== 'none') modifiers.push(`color palette: ${palette}`);
+
             let finalPrompt = prompt;
-            if (style !== 'none' && STYLE_PROMPTS[style]) {
-                finalPrompt = `${prompt}, ${STYLE_PROMPTS[style]}`;
+            if (modifiers.length > 0) {
+                finalPrompt = `${prompt}, ${modifiers.join(', ')}`;
             }
 
             const result = await generateImageWithGPTImage15(apiKey, finalPrompt, {
@@ -156,6 +196,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                 aspectRatio: aspectRatio,
                 background,
                 style,
+                lighting,
+                palette,
                 references: refDataUrls
             };
 
@@ -200,7 +242,21 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             <div className="generate-grid">
                 <section className="controls-panel glass-panel">
                     <div className="input-section">
-                        <label>PROMPT</label>
+                        <div className="prompt-header">
+                            <label>PROMPT</label>
+                            <select
+                                value=""
+                                onChange={(e) => {
+                                    if (e.target.value) setPrompt(e.target.value);
+                                }}
+                                className="example-prompt-select"
+                            >
+                                <option value="">Example prompts...</option>
+                                {EXAMPLE_PROMPTS.map((example) => (
+                                    <option key={example} value={example}>{example}</option>
+                                ))}
+                            </select>
+                        </div>
                         <textarea
                             placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
                             value={prompt}
@@ -261,19 +317,44 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         </div>
 
                         <div className="option-group">
-                            <label>ART STYLE</label>
+                            <label>STYLE</label>
                             <select
                                 value={style}
                                 onChange={(e) => setStyle(e.target.value)}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
-                                <option value="photorealistic">Photorealistic</option>
-                                <option value="artistic">Artistic</option>
-                                <option value="anime">Anime</option>
-                                <option value="cyberpunk">Cyberpunk</option>
-                                <option value="abstract">Abstract</option>
-                                <option value="vintage">Vintage</option>
+                                {STYLES.map((s) => (
+                                    <option key={s} value={s}>{s}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="option-group">
+                            <label>LIGHTING</label>
+                            <select
+                                value={lighting}
+                                onChange={(e) => setLighting(e.target.value)}
+                                className="select-input"
+                            >
+                                <option value="none">None</option>
+                                {LIGHTING_OPTIONS.map((l) => (
+                                    <option key={l} value={l}>{l}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="option-group">
+                            <label>PALETTE</label>
+                            <select
+                                value={palette}
+                                onChange={(e) => setPalette(e.target.value)}
+                                className="select-input"
+                            >
+                                <option value="none">None</option>
+                                {PALETTES.map((p) => (
+                                    <option key={p} value={p}>{p}</option>
+                                ))}
                             </select>
                         </div>
                     </div>

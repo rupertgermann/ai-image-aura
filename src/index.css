@@ -503,6 +503,40 @@ textarea {
     margin-bottom: 0.75rem;
 }
 
+.prompt-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.prompt-header label {
+    margin-bottom: 0;
+}
+
+.example-prompt-select {
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-glass);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    max-width: 200px;
+    text-overflow: ellipsis;
+    transition: var(--transition-smooth);
+}
+
+.example-prompt-select:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-main);
+}
+
+.example-prompt-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
 .prompt-input {
     width: 100%;
     height: 150px;

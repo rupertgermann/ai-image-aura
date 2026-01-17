@@ -11,6 +11,8 @@ export interface ArchiveImage {
     height?: number;
     references?: string[];
     style?: string;
+    lighting?: string;
+    palette?: string;
 }
 
 export interface DatabaseAdapter {

@@ -45,6 +45,22 @@ export class SQLiteAdapter implements DatabaseAdapter {
             // Column likely already exists, ignore
         }
 
+        // Migration: Ensure lighting column exists
+        try {
+            await this.sql.sql`ALTER TABLE images ADD COLUMN lighting TEXT`;
+            console.log('Migrated: Added lighting column');
+        } catch (e) {
+            // Column likely already exists, ignore
+        }
+
+        // Migration: Ensure palette column exists
+        try {
+            await this.sql.sql`ALTER TABLE images ADD COLUMN palette TEXT`;
+            console.log('Migrated: Added palette column');
+        } catch (e) {
+            // Column likely already exists, ignore
+        }
+
         this.initialized = true;
         console.log('SQLite Database initialized');
     }
@@ -68,20 +84,22 @@ export class SQLiteAdapter implements DatabaseAdapter {
         }
 
         await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style) 
+            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style, lighting, palette)
             VALUES (
-                ${image.id}, 
+                ${image.id},
                 ${image.id}, -- Store ID as internal reference in url column
-                ${image.prompt}, 
-                ${image.quality}, 
-                ${image.aspectRatio}, 
-                ${image.background}, 
+                ${image.prompt},
+                ${image.quality},
+                ${image.aspectRatio},
+                ${image.background},
                 ${image.timestamp},
                 ${image.model || 'gpt-image-1.5'},
                 ${image.width || 1024},
                 ${image.height || 1024},
                 ${JSON.stringify(refIds)},
-                ${image.style || null}
+                ${image.style || null},
+                ${image.lighting || null},
+                ${image.palette || null}
             )
         `;
     }
