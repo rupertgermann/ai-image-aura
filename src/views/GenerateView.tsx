@@ -38,6 +38,10 @@ const STYLES = [
     "isometric diorama",
     "mid-century editorial illustration",
     "high-end product shot",
+    "artistic style, painterly, creative interpretation",
+    "anime style, manga art, Japanese animation style",
+    "cyberpunk style, neon lights, futuristic, sci-fi aesthetic",
+    "vintage style, retro aesthetic, aged look",
 ];
 
 const LIGHTING_OPTIONS = [
