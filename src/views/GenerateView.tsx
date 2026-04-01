@@ -111,6 +111,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             }
         });
 
+    }, []);
+
+    useEffect(() => {
         return () => {
             // Cleanup previews - only revoke if they are object URLs, not data URLs
             // Actually, in this component we always use object URLs for new uploads, 
@@ -120,7 +123,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                 if (url.startsWith('blob:')) URL.revokeObjectURL(url);
             });
         };
-    }, []);
+    }, [referencePreviews]);
 
     // Sanitize persistent state for GPT-Image-1.5 compatibility
     useEffect(() => {
@@ -167,8 +170,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                 setIsSaved(false); // New image generated
                 await storage.save('generate_current_result', imageUrl);
             }
-        } catch (err: any) {
-            setError(err.message || 'Failed to generate image');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to generate image');
         } finally {
             setLoading(false);
         }

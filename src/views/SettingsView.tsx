@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -7,13 +7,8 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) => {
-    const [tempKey, setTempKey] = useState('');
+    const [tempKey, setTempKey] = useState(() => apiKey ?? '');
     const [status, setStatus] = useState<'idle' | 'saved'>('idle');
-
-    // Initialize tempKey from apiKey prop
-    useEffect(() => {
-        if (apiKey) setTempKey(apiKey);
-    }, [apiKey]);
 
     const handleSave = () => {
         if (!tempKey.trim()) return;

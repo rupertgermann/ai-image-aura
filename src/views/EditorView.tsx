@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
 import { generateImageWithGPTImage15 } from '../utils/openai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -28,6 +28,22 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
     const [refPreviews, setRefPreviews] = useState<string[]>([]);
     const [isDragging, setIsDragging] = useState(false);
 
+    const applyFilters = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas || !image) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = currentImageUrl || '';
+        img.onload = () => {
+            ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none' ? filter : ''}`;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+        };
+    }, [brightness, contrast, currentImageUrl, filter, image, saturation]);
+
     useEffect(() => {
         if (image) {
             setCurrentImageUrl(image.url);
@@ -39,13 +55,20 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
             }
         }
 
+        if (!image) {
+            setRefImages([]);
+            setRefPreviews([]);
+        }
+    }, [image]);
+
+    useEffect(() => {
         return () => {
             // Cleanup previews - only revoke if they are object URLs
             refPreviews.forEach((url: string) => {
                 if (url.startsWith('blob:')) URL.revokeObjectURL(url);
             });
         };
-    }, [image]);
+    }, [refPreviews]);
 
     useEffect(() => {
         if (!image) return;
@@ -62,23 +85,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
             canvas.height = img.height;
             applyFilters();
         };
-    }, [image, currentImageUrl, brightness, contrast, saturation, filter]);
-
-    const applyFilters = () => {
-        const canvas = canvasRef.current;
-        if (!canvas || !image) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = currentImageUrl || '';
-        img.onload = () => {
-            ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none' ? filter : ''}`;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-        };
-    };
+    }, [applyFilters, currentImageUrl, image]);
 
     const handleExport = async (isCopy: boolean = false) => {
         const canvas = canvasRef.current;
@@ -119,8 +126,8 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                 setCurrentImageUrl(newUrl);
                 setAiPrompt(''); // Clear prompt on success
             }
-        } catch (err: any) {
-            setAiError(err.message || 'AI Edit failed');
+        } catch (err: unknown) {
+            setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {
             setAiLoading(false);
         }

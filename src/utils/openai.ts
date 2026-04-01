@@ -7,14 +7,14 @@ export const generateImageWithGPTImage15 = async (
         background?: 'transparent' | 'opaque' | 'auto';
         referenceImages?: File[];
     }
-) => {
+) : Promise<{ b64_json?: string }> => {
     const isEdit = params.referenceImages && params.referenceImages.length > 0;
     const endpoint = isEdit
         ? 'https://api.openai.com/v1/images/edits'
         : 'https://api.openai.com/v1/images/generations';
 
-    let body: any;
-    let headers: Record<string, string> = {
+    let body: BodyInit;
+    const headers: Record<string, string> = {
         'Authorization': `Bearer ${apiKey}`,
     };
 
@@ -38,7 +38,14 @@ export const generateImageWithGPTImage15 = async (
     } else {
         // JSON for standard generations
         headers['Content-Type'] = 'application/json';
-        const jsonBody: any = {
+        const jsonBody: {
+            model: string;
+            prompt: string;
+            n: number;
+            size?: string;
+            quality?: 'low' | 'medium' | 'high';
+            background?: 'transparent' | 'opaque';
+        } = {
             model: "gpt-image-1.5",
             prompt,
             n: 1,
@@ -50,8 +57,6 @@ export const generateImageWithGPTImage15 = async (
         body = JSON.stringify(jsonBody);
     }
 
-    console.log(`OpenAI API Request (${isEdit ? 'EDITS' : 'GENERATIONS'}):`, isEdit ? 'FormData' : body);
-
     const response = await fetch(endpoint, {
         method: 'POST',
         headers,
@@ -59,12 +64,11 @@ export const generateImageWithGPTImage15 = async (
     });
 
     if (!response.ok) {
-        const errorData = await response.json();
-        console.error('OpenAI Error Response:', errorData);
+        const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
         throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data: { data?: Array<{ b64_json?: string }> } = await response.json();
 
     if (!data.data || data.data.length === 0) {
         throw new Error('No image data returned from OpenAI');

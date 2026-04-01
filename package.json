@@ -2,11 +2,16 @@
   "name": "ai-image-manager",
   "private": true,
   "version": "0.0.0",
+  "description": "Local-first AI image generation and editing studio built with React, Vite, SQLocal, and the OpenAI Images API.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "typecheck": "tsc -b",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "audit": "npm audit",
+    "audit:fix": "npm audit fix --package-lock-only",
     "preview": "vite preview"
   },
   "dependencies": {

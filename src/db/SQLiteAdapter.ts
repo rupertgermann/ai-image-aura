@@ -2,6 +2,8 @@ import { SQLocal } from 'sqlocal';
 import { storage } from '../services/StorageService';
 import type { DatabaseAdapter, ArchiveImage } from './types';
 
+type ArchiveImageRow = ArchiveImage & { ref_ids?: string };
+
 export class SQLiteAdapter implements DatabaseAdapter {
     private sql: SQLocal;
     private initialized: boolean = false;
@@ -31,38 +33,18 @@ export class SQLiteAdapter implements DatabaseAdapter {
         `;
 
         // Migration: Ensure ref_ids column exists
-        try {
-            await this.sql.sql`ALTER TABLE images ADD COLUMN ref_ids TEXT`;
-            console.log('Migrated: Added ref_ids column');
-        } catch (e) {
-        }
+        await this.sql.sql`ALTER TABLE images ADD COLUMN ref_ids TEXT`.catch(() => null);
 
         // Migration: Ensure style column exists
-        try {
-            await this.sql.sql`ALTER TABLE images ADD COLUMN style TEXT`;
-            console.log('Migrated: Added style column');
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
+        await this.sql.sql`ALTER TABLE images ADD COLUMN style TEXT`.catch(() => null);
 
         // Migration: Ensure lighting column exists
-        try {
-            await this.sql.sql`ALTER TABLE images ADD COLUMN lighting TEXT`;
-            console.log('Migrated: Added lighting column');
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
+        await this.sql.sql`ALTER TABLE images ADD COLUMN lighting TEXT`.catch(() => null);
 
         // Migration: Ensure palette column exists
-        try {
-            await this.sql.sql`ALTER TABLE images ADD COLUMN palette TEXT`;
-            console.log('Migrated: Added palette column');
-        } catch (e) {
-            // Column likely already exists, ignore
-        }
+        await this.sql.sql`ALTER TABLE images ADD COLUMN palette TEXT`.catch(() => null);
 
         this.initialized = true;
-        console.log('SQLite Database initialized');
     }
 
     async saveImage(image: ArchiveImage): Promise<void> {
@@ -74,7 +56,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
         }
 
         // Handle Reference Images
-        let refIds: number[] = [];
+        const refIds: number[] = [];
         if (image.references && image.references.length > 0) {
             // Save each reference blob to storage
             for (let i = 0; i < image.references.length; i++) {
@@ -107,7 +89,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     async getImages(): Promise<ArchiveImage[]> {
         await this.init();
         const result = await this.sql.sql`SELECT * FROM images ORDER BY timestamp DESC`;
-        const images = result as ArchiveImage[];
+        const images = result as ArchiveImageRow[];
 
         // Resolve images with their binary data
         for (const img of images) {
@@ -115,10 +97,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
             if (data) img.url = data;
 
             // Load references if present
-            // @ts-ignore - ref_ids comes back as string from DB
             if (img.ref_ids) {
                 try {
-                    // @ts-ignore
                     const refIds = JSON.parse(img.ref_ids) as number[];
                     const loadedRefs: string[] = [];
                     for (const idx of refIds) {
@@ -126,8 +106,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
                         if (refData) loadedRefs.push(refData);
                     }
                     img.references = loadedRefs;
-                } catch (e) {
-                    console.error('Failed to parse references for image', img.id, e);
+                } catch {
                     img.references = [];
                 }
             }
@@ -142,16 +121,18 @@ export class SQLiteAdapter implements DatabaseAdapter {
 
         // We need to fetch the image first to know how many references to delete
         // Or we can just brute force delete a reasonable number, but fetching is safer
-        const result = await this.sql.sql`SELECT ref_ids FROM images WHERE id = ${id}`;
-        // @ts-ignore
+        const result = await this.sql.sql`SELECT ref_ids FROM images WHERE id = ${id}` as { ref_ids?: string }[];
         if (result && result.length > 0 && result[0].ref_ids) {
+            let refIds: number[] = [];
             try {
-                // @ts-ignore
-                const refIds = JSON.parse(result[0].ref_ids) as number[];
-                for (const idx of refIds) {
-                    await storage.remove(`ref_${id}_${idx}`);
-                }
-            } catch (e) { /* ignore parse error */ }
+                refIds = JSON.parse(result[0].ref_ids) as number[];
+            } catch {
+                refIds = [];
+            }
+
+            for (const idx of refIds) {
+                await storage.remove(`ref_${id}_${idx}`);
+            }
         }
 
         await this.sql.sql`DELETE FROM images WHERE id = ${id}`;
