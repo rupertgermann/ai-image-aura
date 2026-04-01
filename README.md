@@ -4,6 +4,20 @@ AURA AI is a local-first browser studio for generating, organizing, and editing 
 
 The app runs entirely in the browser. API keys, generated images, reference images, and archive metadata stay on the local device instead of passing through an application backend.
 
+## Screens
+
+### Generate
+
+![Generate view](docs/screens/Generate.png)
+
+### Archive
+
+![Archive view](docs/screens/Archive.png)
+
+### Editor
+
+![Editor view](docs/screens/Editor.png)
+
 ## Highlights
 
 - Prompt-based image generation with `gpt-image-1.5`
