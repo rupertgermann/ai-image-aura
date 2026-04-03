@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
@@ -18,16 +18,21 @@ export function useEditorSession(image: ArchiveImage | null) {
         return image?.references ? imageWorkflow.hydrateReferences(image.references) : [];
     });
     const [referencePreviews, setReferencePreviews] = useState<string[]>(() => image?.references ?? []);
+    const referencePreviewsRef = useRef(referencePreviews);
+
+    useEffect(() => {
+        referencePreviewsRef.current = referencePreviews;
+    }, [referencePreviews]);
 
     useEffect(() => {
         return () => {
-            referencePreviews.forEach((url) => {
+            referencePreviewsRef.current.forEach((url) => {
                 if (url.startsWith('blob:')) {
                     URL.revokeObjectURL(url);
                 }
             });
         };
-    }, [referencePreviews]);
+    }, []);
 
     const canvasFilter = useMemo(() => {
         return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none' ? filter : ''}`;
