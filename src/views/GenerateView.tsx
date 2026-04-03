@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
+import { downloadGeneratedImage } from '../download/download';
 import { generateSessionStore, useGenerateDraft } from '../generate-session/GenerateSession';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
@@ -146,10 +147,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
     const handleDownload = () => {
         if (!currentResult) return;
-        const link = document.createElement('a');
-        link.href = currentResult;
-        link.download = `aura-generation-${Date.now()}.png`;
-        link.click();
+        downloadGeneratedImage(currentResult);
     };
 
     const handleSave = () => {

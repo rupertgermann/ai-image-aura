@@ -1,6 +1,7 @@
 import React from 'react';
 import ImageCard from '../components/ImageCard';
 import type { ArchiveImage } from '../db/types';
+import { downloadBlob } from '../download/download';
 import { Image as ImageIcon, Search, Download, Trash2, X, Loader2 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -51,15 +52,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
 
             // Generate and download
             const content = await zip.generateAsync({ type: 'blob' });
-            const zipUrl = URL.createObjectURL(content);
-
-            const link = document.createElement('a');
-            link.href = zipUrl;
-            link.download = `aura-collection-${new Date().getTime()}.zip`;
-            link.click();
-
-            // Cleanup
-            setTimeout(() => URL.revokeObjectURL(zipUrl), 10000);
+            downloadBlob(content, `aura-collection-${new Date().getTime()}.zip`);
         } catch (error) {
             console.error('Failed to create ZIP:', error);
             // Could add a toast here if available in this view
