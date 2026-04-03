@@ -14,11 +14,3 @@ export interface ArchiveImage {
     lighting?: string;
     palette?: string;
 }
-
-export interface DatabaseAdapter {
-    init(): Promise<void>;
-    saveImage(image: ArchiveImage): Promise<void>;
-    getImages(): Promise<ArchiveImage[]>;
-    deleteImage(id: string): Promise<void>;
-    clearAll(): Promise<void>;
-}

@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../db/SQLiteAdapter';
+import { archiveStore, type ArchiveStore } from '../archive/ArchiveStore';
 import type { ArchiveImage } from '../db/types';
 
-export function useImageArchive() {
+const sortImagesByTimestamp = (images: ArchiveImage[]) => {
+    return [...images].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+};
+
+export function useImageArchive(store: ArchiveStore = archiveStore) {
     const [images, setImages] = useState<ArchiveImage[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<Error | null>(null);
@@ -10,19 +14,22 @@ export function useImageArchive() {
     const loadImages = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await db.getImages();
+            const data = await store.list();
             setImages(data);
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to load images'));
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [store]);
 
     const addImage = async (image: ArchiveImage) => {
         try {
-            await db.saveImage(image);
-            await loadImages();
+            const savedImage = await store.save(image);
+            setImages((current) => sortImagesByTimestamp([
+                savedImage,
+                ...current.filter((entry) => entry.id !== savedImage.id),
+            ]));
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to save image'));
             throw err;
@@ -31,8 +38,8 @@ export function useImageArchive() {
 
     const deleteImage = async (id: string) => {
         try {
-            await db.deleteImage(id);
-            await loadImages();
+            await store.remove(id);
+            setImages((current) => current.filter((entry) => entry.id !== id));
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to delete image'));
             throw err;
