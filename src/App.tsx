@@ -8,7 +8,7 @@ import ImageDetailModal from './components/ImageDetailModal'
 import Toast from './components/Toast'
 import type { ToastType } from './components/Toast'
 import ConfirmModal from './components/ConfirmModal'
-import { storage } from './services/StorageService'
+import { generateSessionStore } from './generate-session/GenerateSession'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { useImageArchive } from './hooks/useImageArchive'
 import type { ArchiveImage } from './db/types'
@@ -111,20 +111,7 @@ function App() {
     }
 
     const handleCreateSimilar = async (image: ArchiveImage) => {
-        localStorage.setItem('aura_generate_prompt', JSON.stringify(image.prompt))
-        localStorage.setItem('aura_generate_quality', JSON.stringify(image.quality))
-        localStorage.setItem('aura_generate_aspect_ratio', JSON.stringify(image.aspectRatio))
-        localStorage.setItem('aura_generate_background', JSON.stringify(image.background || 'auto'))
-        localStorage.setItem('aura_generate_style', JSON.stringify(image.style || 'none'))
-        localStorage.setItem('aura_generate_lighting', JSON.stringify(image.lighting || 'none'))
-        localStorage.setItem('aura_generate_palette', JSON.stringify(image.palette || 'none'))
-        localStorage.setItem('aura_generate_is_saved', JSON.stringify(false))
-
-        if (image.references && image.references.length > 0) {
-            await storage.save('generate_transferred_references', JSON.stringify(image.references));
-        } else {
-            await storage.remove('generate_transferred_references');
-        }
+        await generateSessionStore.transferFromArchive(image)
 
         setSelectedImage(null)
         setCurrentView('generate')

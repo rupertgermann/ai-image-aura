@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { storage } from '../services/StorageService';
 import type { ArchiveImage } from '../db/types';
+import { generateSessionStore, useGenerateDraft } from '../generate-session/GenerateSession';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 
@@ -60,21 +59,19 @@ const PALETTES = [
 ];
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
-    const [prompt, setPrompt] = useLocalStorage('aura_generate_prompt', '');
-    const [quality, setQuality] = useLocalStorage<'low' | 'medium' | 'high'>('aura_generate_quality', 'medium');
-    const [aspectRatio, setAspectRatio] = useLocalStorage('aura_generate_aspect_ratio', '1024x1024');
-    const [background, setBackground] = useLocalStorage<'opaque' | 'transparent' | 'auto'>('aura_generate_background', 'auto');
-    const [style, setStyle] = useLocalStorage('aura_generate_style', 'none');
-    const [lighting, setLighting] = useLocalStorage('aura_generate_lighting', 'none');
-    const [palette, setPalette] = useLocalStorage('aura_generate_palette', 'none');
+    const [draft, setDraft] = useGenerateDraft();
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isSaved, setIsSaved] = useLocalStorage('aura_generate_is_saved', false);
     const [referenceImages, setReferenceImages] = useState<File[]>([]);
     const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
+    const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
+
+    const updateDraft = (patch: Partial<typeof draft>) => {
+        setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
+    };
 
     const handleNextReference = () => {
         if (viewingReferenceIndex === null) return;
@@ -91,22 +88,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     };
 
     useEffect(() => {
-        storage.load('generate_current_result').then(val => {
+        generateSessionStore.loadCurrentResult().then(val => {
             if (val) setCurrentResult(val);
         });
 
-        storage.load('generate_transferred_references').then(val => {
-            if (val) {
-                try {
-                    const refs = JSON.parse(val) as string[];
-                    const files = imageWorkflow.hydrateReferences(refs);
-                    setReferenceImages(files);
-                    setReferencePreviews(refs);
-                    // Clear it so it doesn't persist forever
-                    storage.remove('generate_transferred_references');
-                } catch (e) {
-                    console.error('Failed to load transferred references', e);
-                }
+        generateSessionStore.consumeTransferredReferences().then((refs) => {
+            if (refs.length > 0) {
+                const files = imageWorkflow.hydrateReferences(refs);
+                setReferenceImages(files);
+                setReferencePreviews(refs);
             }
         });
 
@@ -124,13 +114,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         };
     }, [referencePreviews]);
 
-    // Sanitize persistent state for GPT-Image-1.5 compatibility
     useEffect(() => {
         if (!VALID_SIZES.includes(aspectRatio)) {
-            console.warn(`Sanitizing invalid aspectRatio: ${aspectRatio}`);
-            setAspectRatio('1024x1024');
+            setDraft((currentDraft) => ({ ...currentDraft, aspectRatio: '1024x1024' }));
         }
-    }, [aspectRatio, setAspectRatio]);
+    }, [aspectRatio, setDraft]);
 
     const handleGenerate = async () => {
         if (!apiKey) {
@@ -155,8 +143,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             });
 
             setCurrentResult(imageUrl);
-            setIsSaved(false);
-            await storage.save('generate_current_result', imageUrl);
+            updateDraft({ isSaved: false });
+            await generateSessionStore.saveCurrentResult(imageUrl);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to generate image');
         } finally {
@@ -196,7 +184,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             };
 
             onSaveImage(newImage);
-            setIsSaved(true);
+            updateDraft({ isSaved: true });
         };
 
         saveRefImages();
@@ -241,7 +229,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <select
                                 value=""
                                 onChange={(e) => {
-                                    if (e.target.value) setPrompt(e.target.value);
+                                    if (e.target.value) updateDraft({ prompt: e.target.value });
                                 }}
                                 className="example-prompt-select"
                             >
@@ -254,7 +242,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <textarea
                             placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
                             value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
+                            onChange={(e) => updateDraft({ prompt: e.target.value })}
                             className="prompt-input"
                         />
                     </div>
@@ -265,15 +253,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="toggle-group">
                                 <button
                                     className={quality === 'low' ? 'active' : ''}
-                                    onClick={() => setQuality('low')}
+                                    onClick={() => updateDraft({ quality: 'low' })}
                                 >Low</button>
                                 <button
                                     className={quality === 'medium' ? 'active' : ''}
-                                    onClick={() => setQuality('medium')}
+                                    onClick={() => updateDraft({ quality: 'medium' })}
                                 >Medium</button>
                                 <button
                                     className={quality === 'high' ? 'active' : ''}
-                                    onClick={() => setQuality('high')}
+                                    onClick={() => updateDraft({ quality: 'high' })}
                                 >High</button>
                             </div>
                         </div>
@@ -282,7 +270,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>ASPECT RATIO</label>
                             <select
                                 value={VALID_SIZES.includes(aspectRatio) ? aspectRatio : '1024x1024'}
-                                onChange={(e) => setAspectRatio(e.target.value)}
+                                onChange={(e) => updateDraft({ aspectRatio: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="auto">Auto</option>
@@ -297,15 +285,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="toggle-group">
                                 <button
                                     className={background === 'auto' ? 'active' : ''}
-                                    onClick={() => setBackground('auto')}
+                                    onClick={() => updateDraft({ background: 'auto' })}
                                 >Auto</button>
                                 <button
                                     className={background === 'opaque' ? 'active' : ''}
-                                    onClick={() => setBackground('opaque')}
+                                    onClick={() => updateDraft({ background: 'opaque' })}
                                 >Opaque</button>
                                 <button
                                     className={background === 'transparent' ? 'active' : ''}
-                                    onClick={() => setBackground('transparent')}
+                                    onClick={() => updateDraft({ background: 'transparent' })}
                                 >Transparent</button>
                             </div>
                         </div>
@@ -314,7 +302,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>STYLE</label>
                             <select
                                 value={style}
-                                onChange={(e) => setStyle(e.target.value)}
+                                onChange={(e) => updateDraft({ style: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
@@ -328,7 +316,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>LIGHTING</label>
                             <select
                                 value={lighting}
-                                onChange={(e) => setLighting(e.target.value)}
+                                onChange={(e) => updateDraft({ lighting: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
@@ -342,7 +330,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>PALETTE</label>
                             <select
                                 value={palette}
-                                onChange={(e) => setPalette(e.target.value)}
+                                onChange={(e) => updateDraft({ palette: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
@@ -435,7 +423,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 </button>
                                 <button onClick={async () => {
                                     setCurrentResult(null);
-                                    await storage.remove('generate_current_result');
+                                    await generateSessionStore.clearCurrentResult();
                                 }} className="aura-btn aura-btn--danger">
                                     <Trash2 size={18} />
                                 </button>
