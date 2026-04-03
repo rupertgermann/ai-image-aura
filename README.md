@@ -69,6 +69,9 @@ npm run preview
 - `npm run dev`
   Starts the Vite development server.
 
+- `npm run dev -- --port 5175`
+  Starts the Vite development server on port 5175.
+
 - `npm run typecheck`
   Runs the TypeScript project build in type-check mode.
 
