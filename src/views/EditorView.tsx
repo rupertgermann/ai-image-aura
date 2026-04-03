@@ -1,9 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
-import { generateImageWithGPTImage15 } from '../utils/openai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { ArchiveImage } from '../db/types';
-import { fileToDataURL, dataURLtoFile } from '../utils/file';
+import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
@@ -49,7 +48,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
             setCurrentImageUrl(image.url);
 
             if (image.references && image.references.length > 0) {
-                const files = image.references.map((dataUrl, i) => dataURLtoFile(dataUrl, `ref-${i}.png`));
+                const files = imageWorkflow.hydrateReferences(image.references);
                 setRefImages(files);
                 setRefPreviews(image.references);
             }
@@ -92,8 +91,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         if (!canvas) return;
         const dataUrl = canvas.toDataURL('image/png');
 
-        // Convert current refImages to data URLs to persist them
-        const refDataUrls = await Promise.all(refImages.map(file => fileToDataURL(file)));
+        const refDataUrls = await imageWorkflow.serializeReferences(refImages);
 
         onSave(dataUrl, isCopy, refDataUrls);
     };
@@ -105,27 +103,21 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         setAiError(null);
 
         try {
-            // 1. Get current canvas as blob
             const canvas = canvasRef.current;
             const blob = await new Promise<Blob>((resolve, reject) => {
                 canvas.toBlob((b: Blob | null) => b ? resolve(b) : reject(new Error('Canvas conversion failed')), 'image/png');
             });
 
-            // 2. Wrap in File object
-            const file = new File([blob], 'edit-input.png', { type: 'image/png' });
-
-            // 3. Call OpenAI
-            const result = await generateImageWithGPTImage15(apiKey, aiPrompt, {
-                referenceImages: [file, ...refImages],
-                // Preserve current view settings if possible, though edit might override
+            const newUrl = await imageWorkflow.edit({
+                apiKey,
+                prompt: aiPrompt,
+                sourceImage: blob,
+                referenceImages: refImages,
                 quality: 'medium',
             });
 
-            if (result.b64_json) {
-                const newUrl = `data:image/png;base64,${result.b64_json}`;
-                setCurrentImageUrl(newUrl);
-                setAiPrompt(''); // Clear prompt on success
-            }
+            setCurrentImageUrl(newUrl);
+            setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {

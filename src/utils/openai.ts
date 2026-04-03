@@ -1,78 +1,89 @@
-export const generateImageWithGPTImage15 = async (
-    apiKey: string,
-    prompt: string,
-    params: {
-        quality?: 'low' | 'medium' | 'high';
-        size?: string;
-        background?: 'transparent' | 'opaque' | 'auto';
-        referenceImages?: File[];
-    }
-) : Promise<{ b64_json?: string }> => {
-    const isEdit = params.referenceImages && params.referenceImages.length > 0;
-    const endpoint = isEdit
-        ? 'https://api.openai.com/v1/images/edits'
-        : 'https://api.openai.com/v1/images/generations';
+export type ImageQuality = 'low' | 'medium' | 'high';
 
-    let body: BodyInit;
-    const headers: Record<string, string> = {
-        'Authorization': `Bearer ${apiKey}`,
-    };
+export type ImageBackground = 'transparent' | 'opaque' | 'auto';
 
-    if (isEdit) {
-        // multipart/form-data for edits/references
-        const formData = new FormData();
-        formData.append('model', 'gpt-image-1.5');
-        formData.append('prompt', prompt);
-        formData.append('n', '1');
+export interface OpenAiImageRequest {
+    apiKey: string;
+    prompt: string;
+    quality?: ImageQuality;
+    size?: string;
+    background?: ImageBackground;
+    referenceImages?: File[];
+}
 
-        params.referenceImages?.forEach(file => {
-            formData.append('image[]', file);
+export interface OpenAiImageResponse {
+    b64_json?: string;
+}
+
+export interface OpenAiImageClient {
+    createImage(request: OpenAiImageRequest): Promise<OpenAiImageResponse>;
+}
+
+export const openAiImageClient: OpenAiImageClient = {
+    async createImage(request) {
+        const isEdit = request.referenceImages && request.referenceImages.length > 0;
+        const endpoint = isEdit
+            ? 'https://api.openai.com/v1/images/edits'
+            : 'https://api.openai.com/v1/images/generations';
+
+        let body: BodyInit;
+        const headers: Record<string, string> = {
+            'Authorization': `Bearer ${request.apiKey}`,
+        };
+
+        if (isEdit) {
+            const formData = new FormData();
+            formData.append('model', 'gpt-image-1.5');
+            formData.append('prompt', request.prompt);
+            formData.append('n', '1');
+
+            request.referenceImages?.forEach((file) => {
+                formData.append('image[]', file);
+            });
+
+            if (request.size && request.size !== 'auto') formData.append('size', request.size);
+            if (request.quality) formData.append('quality', request.quality);
+            if (request.background && request.background !== 'auto') formData.append('background', request.background);
+
+            body = formData;
+        } else {
+            headers['Content-Type'] = 'application/json';
+            const jsonBody: {
+                model: string;
+                prompt: string;
+                n: number;
+                size?: string;
+                quality?: ImageQuality;
+                background?: 'transparent' | 'opaque';
+            } = {
+                model: 'gpt-image-1.5',
+                prompt: request.prompt,
+                n: 1,
+            };
+            if (request.size && request.size !== 'auto') jsonBody.size = request.size;
+            if (request.quality) jsonBody.quality = request.quality;
+            if (request.background && request.background !== 'auto') jsonBody.background = request.background;
+
+            body = JSON.stringify(jsonBody);
+        }
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body,
         });
 
-        if (params.size && params.size !== 'auto') formData.append('size', params.size);
-        if (params.quality) formData.append('quality', params.quality);
-        if (params.background && params.background !== 'auto') formData.append('background', params.background);
+        if (!response.ok) {
+            const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
+            throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
+        }
 
-        body = formData;
-        // Do NOT set Content-Type header when using FormData; fetch sets it automatically with the boundary
-    } else {
-        // JSON for standard generations
-        headers['Content-Type'] = 'application/json';
-        const jsonBody: {
-            model: string;
-            prompt: string;
-            n: number;
-            size?: string;
-            quality?: 'low' | 'medium' | 'high';
-            background?: 'transparent' | 'opaque';
-        } = {
-            model: "gpt-image-1.5",
-            prompt,
-            n: 1,
-        };
-        if (params.size && params.size !== 'auto') jsonBody.size = params.size;
-        if (params.quality) jsonBody.quality = params.quality;
-        if (params.background && params.background !== 'auto') jsonBody.background = params.background;
+        const data: { data?: OpenAiImageResponse[] } = await response.json();
 
-        body = JSON.stringify(jsonBody);
-    }
+        if (!data.data || data.data.length === 0) {
+            throw new Error('No image data returned from OpenAI');
+        }
 
-    const response = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body
-    });
-
-    if (!response.ok) {
-        const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
-        throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
-    }
-
-    const data: { data?: Array<{ b64_json?: string }> } = await response.json();
-
-    if (!data.data || data.data.length === 0) {
-        throw new Error('No image data returned from OpenAI');
-    }
-
-    return data.data[0];
+        return data.data[0];
+    },
 };

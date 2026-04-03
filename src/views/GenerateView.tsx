@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
-import { generateImageWithGPTImage15 } from '../utils/openai';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { storage } from '../services/StorageService';
 import type { ArchiveImage } from '../db/types';
-import { fileToDataURL, dataURLtoFile } from '../utils/file';
+import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 
 interface GenerateViewProps {
@@ -100,7 +99,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
             if (val) {
                 try {
                     const refs = JSON.parse(val) as string[];
-                    const files = refs.map((dataUrl, i) => dataURLtoFile(dataUrl, `ref-${i}.png`));
+                    const files = imageWorkflow.hydrateReferences(refs);
                     setReferenceImages(files);
                     setReferencePreviews(refs);
                     // Clear it so it doesn't persist forever
@@ -143,33 +142,21 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         setLoading(true);
         setError(null);
         try {
-            // Final validation before call
-            const safeSize = VALID_SIZES.includes(aspectRatio) ? aspectRatio : '1024x1024';
-
-            // Build final prompt with style modifiers
-            const modifiers: string[] = [];
-            if (style !== 'none') modifiers.push(style);
-            if (lighting !== 'none') modifiers.push(lighting);
-            if (palette !== 'none') modifiers.push(`color palette: ${palette}`);
-
-            let finalPrompt = prompt;
-            if (modifiers.length > 0) {
-                finalPrompt = `${prompt}, ${modifiers.join(', ')}`;
-            }
-
-            const result = await generateImageWithGPTImage15(apiKey, finalPrompt, {
+            const imageUrl = await imageWorkflow.generate({
+                apiKey,
+                prompt,
                 quality,
-                size: safeSize,
+                aspectRatio,
                 background,
-                referenceImages
+                style,
+                lighting,
+                palette,
+                referenceImages,
             });
 
-            if (result.b64_json) {
-                const imageUrl = `data:image/png;base64,${result.b64_json}`;
-                setCurrentResult(imageUrl);
-                setIsSaved(false); // New image generated
-                await storage.save('generate_current_result', imageUrl);
-            }
+            setCurrentResult(imageUrl);
+            setIsSaved(false);
+            await storage.save('generate_current_result', imageUrl);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to generate image');
         } finally {
@@ -189,7 +176,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         if (!currentResult || isSaved) return;
 
         const saveRefImages = async () => {
-            const refDataUrls = await Promise.all(referenceImages.map(file => fileToDataURL(file)));
+            const refDataUrls = await imageWorkflow.serializeReferences(referenceImages);
 
             const newImage: ArchiveImage = {
                 id: crypto.randomUUID(),
