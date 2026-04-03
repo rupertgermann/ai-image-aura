@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, Trash2, Edit2, Clock } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
+import { downloadArchiveImage } from '../download/download';
 
 interface ImageCardProps {
     image: ArchiveImage;
@@ -18,10 +19,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
 
     const handleDownload = (e: React.MouseEvent) => {
         e.stopPropagation();
-        const link = document.createElement('a');
-        link.href = image.url;
-        link.download = `aura-${image.id}.png`;
-        link.click();
+        downloadArchiveImage(image);
     };
 
     return (
