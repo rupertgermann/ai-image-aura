@@ -1,10 +1,14 @@
 import { SQLocal } from 'sqlocal';
-import { storage } from '../services/StorageService';
-import type { DatabaseAdapter, ArchiveImage } from './types';
+import type { ArchiveImage } from './types';
 
 type ArchiveImageRow = ArchiveImage & { ref_ids?: string };
 
-export class SQLiteAdapter implements DatabaseAdapter {
+type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
+    storedUrl: string;
+    referenceIds: number[];
+};
+
+export class SQLiteArchiveMetadataPort {
     private sql: SQLocal;
     private initialized: boolean = false;
 
@@ -47,101 +51,94 @@ export class SQLiteAdapter implements DatabaseAdapter {
         this.initialized = true;
     }
 
-    async saveImage(image: ArchiveImage): Promise<void> {
+    async save(record: ArchiveMetadataRecord): Promise<void> {
         await this.init();
-
-        // Move binary to storage if it's a data URL
-        if (image.url.startsWith('data:')) {
-            await storage.save(`img_${image.id}`, image.url);
-        }
-
-        // Handle Reference Images
-        const refIds: number[] = [];
-        if (image.references && image.references.length > 0) {
-            // Save each reference blob to storage
-            for (let i = 0; i < image.references.length; i++) {
-                await storage.save(`ref_${image.id}_${i}`, image.references[i]);
-                refIds.push(i);
-            }
-        }
 
         await this.sql.sql`
             INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style, lighting, palette)
             VALUES (
-                ${image.id},
-                ${image.id}, -- Store ID as internal reference in url column
-                ${image.prompt},
-                ${image.quality},
-                ${image.aspectRatio},
-                ${image.background},
-                ${image.timestamp},
-                ${image.model || 'gpt-image-1.5'},
-                ${image.width || 1024},
-                ${image.height || 1024},
-                ${JSON.stringify(refIds)},
-                ${image.style || null},
-                ${image.lighting || null},
-                ${image.palette || null}
+                ${record.id},
+                ${record.storedUrl},
+                ${record.prompt},
+                ${record.quality},
+                ${record.aspectRatio},
+                ${record.background},
+                ${record.timestamp},
+                ${record.model || 'gpt-image-1.5'},
+                ${record.width || 1024},
+                ${record.height || 1024},
+                ${JSON.stringify(record.referenceIds)},
+                ${record.style || null},
+                ${record.lighting || null},
+                ${record.palette || null}
             )
         `;
     }
 
-    async getImages(): Promise<ArchiveImage[]> {
+    async list(): Promise<ArchiveMetadataRecord[]> {
         await this.init();
         const result = await this.sql.sql`SELECT * FROM images ORDER BY timestamp DESC`;
         const images = result as ArchiveImageRow[];
 
-        // Resolve images with their binary data
-        for (const img of images) {
-            const data = await storage.load(`img_${img.id}`);
-            if (data) img.url = data;
-
-            // Load references if present
-            if (img.ref_ids) {
-                try {
-                    const refIds = JSON.parse(img.ref_ids) as number[];
-                    const loadedRefs: string[] = [];
-                    for (const idx of refIds) {
-                        const refData = await storage.load(`ref_${img.id}_${idx}`);
-                        if (refData) loadedRefs.push(refData);
-                    }
-                    img.references = loadedRefs;
-                } catch {
-                    img.references = [];
-                }
-            }
-        }
-
-        return images;
+        return images.map((image) => ({
+            id: image.id,
+            storedUrl: image.url,
+            prompt: image.prompt,
+            quality: image.quality,
+            aspectRatio: image.aspectRatio,
+            background: image.background,
+            timestamp: image.timestamp,
+            model: image.model,
+            width: image.width,
+            height: image.height,
+            style: image.style,
+            lighting: image.lighting,
+            palette: image.palette,
+            referenceIds: parseReferenceIds(image.ref_ids),
+        }));
     }
 
-    async deleteImage(id: string): Promise<void> {
+    async get(id: string): Promise<ArchiveMetadataRecord | null> {
         await this.init();
-        await storage.remove(`img_${id}`);
+        const result = await this.sql.sql`SELECT * FROM images WHERE id = ${id}`;
+        const row = (result as ArchiveImageRow[])[0];
 
-        // We need to fetch the image first to know how many references to delete
-        // Or we can just brute force delete a reasonable number, but fetching is safer
-        const result = await this.sql.sql`SELECT ref_ids FROM images WHERE id = ${id}` as { ref_ids?: string }[];
-        if (result && result.length > 0 && result[0].ref_ids) {
-            let refIds: number[] = [];
-            try {
-                refIds = JSON.parse(result[0].ref_ids) as number[];
-            } catch {
-                refIds = [];
-            }
-
-            for (const idx of refIds) {
-                await storage.remove(`ref_${id}_${idx}`);
-            }
+        if (!row) {
+            return null;
         }
 
+        return {
+            id: row.id,
+            storedUrl: row.url,
+            prompt: row.prompt,
+            quality: row.quality,
+            aspectRatio: row.aspectRatio,
+            background: row.background,
+            timestamp: row.timestamp,
+            model: row.model,
+            width: row.width,
+            height: row.height,
+            style: row.style,
+            lighting: row.lighting,
+            palette: row.palette,
+            referenceIds: parseReferenceIds(row.ref_ids),
+        };
+    }
+
+    async remove(id: string): Promise<void> {
+        await this.init();
         await this.sql.sql`DELETE FROM images WHERE id = ${id}`;
-    }
-
-    async clearAll(): Promise<void> {
-        await this.init();
-        await this.sql.sql`DELETE FROM images`;
     }
 }
 
-export const db = new SQLiteAdapter();
+const parseReferenceIds = (value?: string): number[] => {
+    if (!value) {
+        return [];
+    }
+
+    try {
+        return JSON.parse(value) as number[];
+    } catch {
+        return [];
+    }
+};

@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '../db/SQLiteAdapter';
+import { archiveStore } from '../archive/ArchiveStore';
 import type { ArchiveImage } from '../db/types';
+
+const sortImagesByTimestamp = (images: ArchiveImage[]) => {
+    return [...images].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
+};
 
 export function useImageArchive() {
     const [images, setImages] = useState<ArchiveImage[]>([]);
@@ -10,7 +14,7 @@ export function useImageArchive() {
     const loadImages = useCallback(async () => {
         try {
             setLoading(true);
-            const data = await db.getImages();
+            const data = await archiveStore.list();
             setImages(data);
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to load images'));
@@ -21,8 +25,11 @@ export function useImageArchive() {
 
     const addImage = async (image: ArchiveImage) => {
         try {
-            await db.saveImage(image);
-            await loadImages();
+            const savedImage = await archiveStore.save(image);
+            setImages((current) => sortImagesByTimestamp([
+                savedImage,
+                ...current.filter((entry) => entry.id !== savedImage.id),
+            ]));
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to save image'));
             throw err;
@@ -31,8 +38,8 @@ export function useImageArchive() {
 
     const deleteImage = async (id: string) => {
         try {
-            await db.deleteImage(id);
-            await loadImages();
+            await archiveStore.remove(id);
+            setImages((current) => current.filter((entry) => entry.id !== id));
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to delete image'));
             throw err;
