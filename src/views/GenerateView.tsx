@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore, useGenerateDraft } from '../generate-session/GenerateSession';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 
 interface GenerateViewProps {
@@ -63,16 +64,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [referenceImages, setReferenceImages] = useState<File[]>([]);
-    const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
-    const referencePreviewsRef = useRef(referencePreviews);
     const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
-
-    useEffect(() => {
-        referencePreviewsRef.current = referencePreviews;
-    }, [referencePreviews]);
+    const referenceCollection = useReferenceImageCollection();
+    const referenceImages = referenceCollection.files;
+    const referencePreviews = referenceCollection.previews;
+    const addReferenceFiles = referenceCollection.addFiles;
+    const removeReferenceAt = referenceCollection.removeAt;
+    const replaceReferences = referenceCollection.replaceWithDataUrls;
+    const serializeReferences = referenceCollection.serialize;
 
     const updateDraft = (patch: Partial<typeof draft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
@@ -99,21 +100,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
         generateSessionStore.consumeTransferredReferences().then((refs) => {
             if (refs.length > 0) {
-                const files = imageWorkflow.hydrateReferences(refs);
-                setReferenceImages(files);
-                setReferencePreviews(refs);
+                replaceReferences(refs);
             }
         });
 
-    }, []);
-
-    useEffect(() => {
-        return () => {
-            referencePreviewsRef.current.forEach((url: string) => {
-                if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-            });
-        };
-    }, []);
+    }, [replaceReferences]);
 
     useEffect(() => {
         if (!VALID_SIZES.includes(aspectRatio)) {
@@ -165,7 +156,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         if (!currentResult || isSaved) return;
 
         const saveRefImages = async () => {
-            const refDataUrls = await imageWorkflow.serializeReferences(referenceImages);
+            const refDataUrls = await serializeReferences();
 
             const newImage: ArchiveImage = {
                 id: crypto.randomUUID(),
@@ -207,9 +198,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
         const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
         if (files.length > 0) {
-            setReferenceImages(prev => [...prev, ...files]);
-            const newPreviews = files.map(file => URL.createObjectURL(file));
-            setReferencePreviews(prev => [...prev, ...newPreviews]);
+            addReferenceFiles(files);
         }
     };
 
@@ -362,9 +351,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                         className="remove-ref"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setReferenceImages((prev: File[]) => prev.filter((_, i) => i !== idx));
-                                            setReferencePreviews((prev: string[]) => prev.filter((_, i) => i !== idx));
-                                            URL.revokeObjectURL(url);
+                                            removeReferenceAt(idx);
                                             if (viewingReferenceIndex === idx) setViewingReferenceIndex(null);
                                         }}
                                     >
@@ -378,10 +365,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                     multiple
                                     accept="image/*"
                                     onChange={(e) => {
-                                        const files = Array.from(e.target.files || []);
-                                        setReferenceImages((prev: File[]) => [...prev, ...files]);
-                                        const newPreviews = files.map(file => URL.createObjectURL(file));
-                                        setReferencePreviews((prev: string[]) => [...prev, ...newPreviews]);
+                                        addReferenceFiles(Array.from(e.target.files || []));
                                     }}
                                     style={{ display: 'none' }}
                                 />
