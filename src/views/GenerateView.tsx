@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore, useGenerateDraft } from '../generate-session/GenerateSession';
@@ -67,7 +67,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
+    const referencePreviewsRef = useRef(referencePreviews);
     const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
+
+    useEffect(() => {
+        referencePreviewsRef.current = referencePreviews;
+    }, [referencePreviews]);
 
     const updateDraft = (patch: Partial<typeof draft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
@@ -104,15 +109,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
     useEffect(() => {
         return () => {
-            // Cleanup previews - only revoke if they are object URLs, not data URLs
-            // Actually, in this component we always use object URLs for new uploads, 
-            // but transferred refs might be data URLs.
-            // dataURL previews don't need revocation.
-            referencePreviews.forEach((url: string) => {
+            referencePreviewsRef.current.forEach((url: string) => {
                 if (url.startsWith('blob:')) URL.revokeObjectURL(url);
             });
         };
-    }, [referencePreviews]);
+    }, []);
 
     useEffect(() => {
         if (!VALID_SIZES.includes(aspectRatio)) {

@@ -1,8 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { ArchiveImage } from '../db/types';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { useEditorSession } from '../editor/useEditorSession';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
@@ -13,61 +13,45 @@ interface EditorViewProps {
 const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
-    // Persist editor settings globally as requested
-    const [brightness, setBrightness] = useLocalStorage('editor_brightness', 100);
-    const [contrast, setContrast] = useLocalStorage('editor_contrast', 100);
-    const [saturation, setSaturation] = useLocalStorage('editor_saturation', 100);
-    const [filter, setFilter] = useLocalStorage('editor_filter', 'none');
-
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
-    const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
-    const [refImages, setRefImages] = useState<File[]>([]);
-    const [refPreviews, setRefPreviews] = useState<string[]>([]);
     const [isDragging, setIsDragging] = useState(false);
+    const {
+        brightness,
+        setBrightness,
+        contrast,
+        setContrast,
+        saturation,
+        setSaturation,
+        filter,
+        setFilter,
+        canvasFilter,
+        currentImageUrl,
+        setCurrentImageUrl,
+        referenceImages,
+        referencePreviews,
+        addReferenceFiles,
+        removeReferenceAt,
+        resetAdjustments,
+        serializeReferences,
+    } = useEditorSession(image);
 
     const applyFilters = useCallback(() => {
         const canvas = canvasRef.current;
-        if (!canvas || !image) return;
+        if (!canvas || !image || !currentImageUrl) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
         const img = new Image();
         img.crossOrigin = "anonymous";
-        img.src = currentImageUrl || '';
+        img.src = currentImageUrl;
         img.onload = () => {
-            ctx.filter = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none' ? filter : ''}`;
+            ctx.filter = canvasFilter;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0);
         };
-    }, [brightness, contrast, currentImageUrl, filter, image, saturation]);
-
-    useEffect(() => {
-        if (image) {
-            setCurrentImageUrl(image.url);
-
-            if (image.references && image.references.length > 0) {
-                const files = imageWorkflow.hydrateReferences(image.references);
-                setRefImages(files);
-                setRefPreviews(image.references);
-            }
-        }
-
-        if (!image) {
-            setRefImages([]);
-            setRefPreviews([]);
-        }
-    }, [image]);
-
-    useEffect(() => {
-        return () => {
-            // Cleanup previews - only revoke if they are object URLs
-            refPreviews.forEach((url: string) => {
-                if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-            });
-        };
-    }, [refPreviews]);
+    }, [canvasFilter, currentImageUrl, image]);
 
     useEffect(() => {
         if (!image) return;
@@ -91,7 +75,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         if (!canvas) return;
         const dataUrl = canvas.toDataURL('image/png');
 
-        const refDataUrls = await imageWorkflow.serializeReferences(refImages);
+        const refDataUrls = await serializeReferences();
 
         onSave(dataUrl, isCopy, refDataUrls);
     };
@@ -112,7 +96,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                 apiKey,
                 prompt: aiPrompt,
                 sourceImage: blob,
-                referenceImages: refImages,
+                referenceImages,
                 quality: 'medium',
             });
 
@@ -141,9 +125,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
 
         const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
         if (files.length > 0) {
-            setRefImages(prev => [...prev, ...files]);
-            const newPreviews = files.map(file => URL.createObjectURL(file));
-            setRefPreviews(prev => [...prev, ...newPreviews]);
+            addReferenceFiles(files);
         }
     };
 
@@ -272,16 +254,12 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                             >
                                 <label>ADD VISUAL CONTEXT (OPTIONAL) {isDragging && '- DROP TO UPLOAD'}</label>
                                 <div className="reference-grid mini">
-                                    {refPreviews.map((url: string, idx: number) => (
+                                    {referencePreviews.map((url: string, idx: number) => (
                                         <div key={url} className="reference-preview mini glass-panel">
                                             <img src={url} alt="Reference" />
                                             <button
                                                 className="remove-ref"
-                                                onClick={() => {
-                                                    setRefImages((prev: File[]) => prev.filter((_, i) => i !== idx));
-                                                    setRefPreviews((prev: string[]) => prev.filter((_, i) => i !== idx));
-                                                    URL.revokeObjectURL(url);
-                                                }}
+                                                onClick={() => removeReferenceAt(idx)}
                                             >
                                                 <X size={12} />
                                             </button>
@@ -293,10 +271,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                                             multiple
                                             accept="image/*"
                                             onChange={(e) => {
-                                                const files = Array.from(e.target.files || []);
-                                                setRefImages((prev: File[]) => [...prev, ...files]);
-                                                const newPreviews = files.map(file => URL.createObjectURL(file));
-                                                setRefPreviews((prev: string[]) => [...prev, ...newPreviews]);
+                                                addReferenceFiles(Array.from(e.target.files || []));
                                             }}
                                             style={{ display: 'none' }}
                                         />
@@ -318,12 +293,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                         <button className="aura-btn aura-btn--glass" onClick={() => handleExport(true)}>
                             <Copy size={18} /> Save as Copy
                         </button>
-                        <button className="aura-btn aura-btn--glass" onClick={() => {
-                            setBrightness(100);
-                            setContrast(100);
-                            setSaturation(100);
-                            setFilter('none');
-                        }}>
+                        <button className="aura-btn aura-btn--glass" onClick={resetAdjustments}>
                             <Undo2 size={18} /> Reset
                         </button>
                     </div>
