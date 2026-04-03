@@ -134,7 +134,7 @@ function App() {
                     onDeleteSelected={() => archiveController.requestDelete(Array.from(archiveController.selectedIds))}
                 />;
             case 'editor':
-                return <EditorView image={editingImage} apiKey={apiKey} onSave={handleSaveEditedImage} />;
+                return <EditorView key={editingImage?.id ?? 'empty-editor'} image={editingImage} apiKey={apiKey} onSave={handleSaveEditedImage} />;
             case 'settings':
                 return <SettingsView apiKey={apiKey} onApiKeyChange={handleApiKeyChange} />;
             default:
