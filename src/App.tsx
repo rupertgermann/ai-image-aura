@@ -102,7 +102,7 @@ function App() {
                 url: updatedUrl,
                 references: references || editingImage.references
             }
-            await addImage(updatedImage) // SQLiteAdapter's saveImage uses INSERT OR REPLACE
+            await addImage(updatedImage)
             addToast('Masterpiece updated', 'success')
         }
 

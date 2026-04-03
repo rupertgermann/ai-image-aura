@@ -1,5 +1,5 @@
 import type { ArchiveImage } from '../db/types';
-import { SQLiteArchiveMetadataPort } from '../db/SQLiteAdapter';
+import { SQLiteArchiveMetadataPort } from './SQLiteArchiveMetadataPort';
 import { storage, type StorageProvider } from '../services/StorageService';
 
 export type SaveArchiveImageInput = Omit<ArchiveImage, 'id' | 'timestamp'> & {

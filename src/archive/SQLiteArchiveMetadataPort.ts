@@ -1,5 +1,5 @@
 import { SQLocal } from 'sqlocal';
-import type { ArchiveImage } from './types';
+import type { ArchiveImage } from '../db/types';
 
 type ArchiveImageRow = ArchiveImage & { ref_ids?: string };
 
@@ -36,16 +36,9 @@ export class SQLiteArchiveMetadataPort {
             );
         `;
 
-        // Migration: Ensure ref_ids column exists
         await this.sql.sql`ALTER TABLE images ADD COLUMN ref_ids TEXT`.catch(() => null);
-
-        // Migration: Ensure style column exists
         await this.sql.sql`ALTER TABLE images ADD COLUMN style TEXT`.catch(() => null);
-
-        // Migration: Ensure lighting column exists
         await this.sql.sql`ALTER TABLE images ADD COLUMN lighting TEXT`.catch(() => null);
-
-        // Migration: Ensure palette column exists
         await this.sql.sql`ALTER TABLE images ADD COLUMN palette TEXT`.catch(() => null);
 
         this.initialized = true;
