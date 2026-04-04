@@ -1,6 +1,6 @@
 import type { ArchiveImage } from '../db/types';
-import { SQLiteArchiveMetadataPort } from './SQLiteArchiveMetadataPort';
 import { storage, type StorageProvider } from '../services/StorageService';
+import { archiveMetadataPort } from '../db/AuraPersistence';
 
 export type SaveArchiveImageInput = Omit<ArchiveImage, 'id' | 'timestamp'> & {
     id?: string;
@@ -239,7 +239,7 @@ const getTouchedReferenceIds = (left: number[], right: number[]) => {
 
 export function createArchiveStore(deps: CreateArchiveStoreDeps = {}): ArchiveStore {
     return new LocalArchiveStore(
-        deps.metadata ?? new SQLiteArchiveMetadataPort(),
+        deps.metadata ?? archiveMetadataPort,
         deps.blobs ?? new StorageArchiveBlobPort(storage),
         deps.clock ?? (() => new Date().toISOString()),
         deps.makeId ?? (() => crypto.randomUUID()),

@@ -34,13 +34,14 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
         }
     }, [onError, store]);
 
-    const addImage = async (image: ArchiveImage) => {
+    const addImage = async (image: ArchiveImage): Promise<ArchiveImage> => {
         try {
             const savedImage = await store.save(image);
             setImages((current) => sortImagesByTimestamp([
                 savedImage,
                 ...current.filter((entry) => entry.id !== savedImage.id),
             ]));
+            return savedImage;
         } catch (err) {
             const nextError = err instanceof Error ? err : new Error('Failed to save image');
             setError(nextError);
