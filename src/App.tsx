@@ -8,6 +8,7 @@ import ImageDetailModal from './components/ImageDetailModal'
 import Toast from './components/Toast'
 import type { ToastType } from './components/Toast'
 import ConfirmModal from './components/ConfirmModal'
+import { useArchiveController } from './archive/useArchiveController'
 import { generateSessionStore } from './generate-session/GenerateSession'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { useImageArchive } from './hooks/useImageArchive'
@@ -19,11 +20,7 @@ function App() {
     const { images, addImage, deleteImage } = useImageArchive()
     const [apiKey, setApiKey] = useLocalStorage<string>('aura_openapi_key', '')
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null)
-    const [selectedImage, setSelectedImage] = useState<ArchiveImage | null>(null)
     const [toasts, setToasts] = useState<{ id: string; message: string; type: ToastType }[]>([])
-    const [confirmConfig, setConfirmConfig] = useState<{ isOpen: boolean; title: string; message: string; onConfirm: () => void; type?: 'danger' | 'info' }>({
-        isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'info'
-    })
     const [theme, setTheme] = useLocalStorage<'dark' | 'light'>('aura_theme', 'dark')
 
     useEffect(() => {
@@ -64,18 +61,15 @@ function App() {
     }
 
     const handleDeleteImage = async (id: string) => {
-        setConfirmConfig({
-            isOpen: true,
-            title: 'Delete Masterpiece?',
-            message: 'This will permanently remove the image and its binary data from your local storage. This action cannot be undone.',
-            type: 'danger',
-            onConfirm: async () => {
-                await deleteImage(id)
-                setConfirmConfig(prev => ({ ...prev, isOpen: false }))
-                addToast('Image deleted permanently', 'info')
-                if (selectedImage?.id === id) setSelectedImage(null)
-            }
-        })
+        await deleteImage(id)
+    }
+
+    const handleDeleteImages = async (ids: string[]) => {
+        for (const id of ids) {
+            await handleDeleteImage(id)
+        }
+
+        addToast(ids.length === 1 ? 'Image deleted permanently' : `${ids.length} images deleted permanently`, 'info')
     }
 
     const handleEditImage = (image: ArchiveImage) => {
@@ -112,27 +106,16 @@ function App() {
 
     const handleCreateSimilar = async (image: ArchiveImage) => {
         await generateSessionStore.transferFromArchive(image)
-
-        setSelectedImage(null)
         setCurrentView('generate')
         addToast('Settings & references transferred', 'info')
     }
 
-    const handleNextImage = () => {
-        if (!selectedImage) return
-        const currentIndex = images.findIndex(img => img.id === selectedImage.id)
-        if (currentIndex < images.length - 1) {
-            setSelectedImage(images[currentIndex + 1])
-        }
-    }
-
-    const handlePreviousImage = () => {
-        if (!selectedImage) return
-        const currentIndex = images.findIndex(img => img.id === selectedImage.id)
-        if (currentIndex > 0) {
-            setSelectedImage(images[currentIndex - 1])
-        }
-    }
+    const archiveController = useArchiveController({
+        images,
+        onDeleteImages: handleDeleteImages,
+        onEditImage: handleEditImage,
+        onCreateSimilar: handleCreateSimilar,
+    })
 
     const renderView = () => {
         switch (currentView) {
@@ -141,9 +124,14 @@ function App() {
             case 'archive':
                 return <ArchiveView
                     images={images}
-                    onDeleteImage={handleDeleteImage}
-                    onEditImage={handleEditImage}
-                    onSelectImage={setSelectedImage}
+                    selectedIds={archiveController.selectedIds}
+                    onDeleteImage={(id) => archiveController.requestDelete([id])}
+                    onEditImage={archiveController.editImage}
+                    onOpenImage={archiveController.openImage}
+                    onToggleSelection={archiveController.toggleSelection}
+                    onToggleSelectAll={archiveController.toggleSelectAll}
+                    onClearSelection={archiveController.clearSelection}
+                    onDeleteSelected={() => archiveController.requestDelete(Array.from(archiveController.selectedIds))}
                 />;
             case 'editor':
                 return <EditorView image={editingImage} apiKey={apiKey} onSave={handleSaveEditedImage} />;
@@ -168,21 +156,28 @@ function App() {
                 </div>
             </main>
 
-            {selectedImage && (
+            {archiveController.selectedImage && (
                 <ImageDetailModal
-                    image={selectedImage}
-                    onClose={() => setSelectedImage(null)}
-                    onEdit={handleEditImage}
-                    onDelete={handleDeleteImage}
-                    onCreateSimilar={() => handleCreateSimilar(selectedImage)}
-                    onNext={handleNextImage}
-                    onPrevious={handlePreviousImage}
+                    image={archiveController.selectedImage}
+                    onClose={archiveController.closeImage}
+                    onEdit={() => archiveController.selectedImage && archiveController.editImage(archiveController.selectedImage)}
+                    onDelete={() => archiveController.selectedImage && archiveController.requestDelete([archiveController.selectedImage.id])}
+                    onCreateSimilar={archiveController.createSimilar}
+                    onNext={archiveController.showNextImage}
+                    onPrevious={archiveController.showPreviousImage}
                 />
             )}
 
             <ConfirmModal
-                {...confirmConfig}
-                onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                isOpen={archiveController.pendingDeleteIds.length > 0}
+                title={archiveController.pendingDeleteIds.length === 1 ? 'Delete Masterpiece?' : `Delete ${archiveController.pendingDeleteIds.length} Masterpieces?`}
+                message={archiveController.pendingDeleteIds.length === 1
+                    ? 'This will permanently remove the image and its binary data from your local storage. This action cannot be undone.'
+                    : `You are about to permanently remove ${archiveController.pendingDeleteIds.length} images and their binary data. This action cannot be reversed.`}
+                confirmText={archiveController.pendingDeleteIds.length === 1 ? 'Delete' : 'Delete All'}
+                type="danger"
+                onConfirm={archiveController.confirmDelete}
+                onCancel={archiveController.cancelDelete}
             />
 
             <div className="toast-container">
