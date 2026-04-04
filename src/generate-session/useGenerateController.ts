@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, type GenerateDraft } from './GenerateSession';
+import { generateSessionStore, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { lineageStore, type LineageStore } from '../lineage/LineageStore';
+import { saveGeneratedImage } from './saveGeneratedImage';
 
 interface UseGenerateControllerOptions {
     apiKey: string | null;
@@ -11,7 +13,9 @@ interface UseGenerateControllerOptions {
     referenceImages: File[];
     replaceReferences: (dataUrls: string[]) => void;
     serializeReferences: () => Promise<string[]>;
-    onSaveImage: (image: ArchiveImage) => void | Promise<void>;
+    onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
+    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'clearLineageSource'>;
 }
 
 const VALID_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
@@ -24,6 +28,8 @@ export function useGenerateController({
     replaceReferences,
     serializeReferences,
     onSaveImage,
+    lineage = lineageStore,
+    session = generateSessionStore,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -34,18 +40,18 @@ export function useGenerateController({
     }, [setDraft]);
 
     useEffect(() => {
-        generateSessionStore.loadCurrentResult().then((value) => {
+        session.loadCurrentResult().then((value) => {
             if (value) {
                 setCurrentResult(value);
             }
         });
 
-        generateSessionStore.consumeTransferredReferences().then((references) => {
+        session.consumeTransferredReferences().then((references) => {
             if (references.length > 0) {
                 replaceReferences(references);
             }
         });
-    }, [replaceReferences]);
+    }, [replaceReferences, session]);
 
     useEffect(() => {
         if (!VALID_SIZES.has(draft.aspectRatio)) {
@@ -81,13 +87,13 @@ export function useGenerateController({
 
             setCurrentResult(imageUrl);
             updateDraft({ isSaved: false });
-            await generateSessionStore.saveCurrentResult(imageUrl);
+            await session.saveCurrentResult(imageUrl);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to generate image');
         } finally {
             setLoading(false);
         }
-    }, [apiKey, draft, referenceImages, updateDraft]);
+    }, [apiKey, draft, referenceImages, session, updateDraft]);
 
     const save = useCallback(async () => {
         if (!currentResult || draft.isSaved) {
@@ -97,7 +103,7 @@ export function useGenerateController({
         try {
             const references = await serializeReferences();
             const { width, height } = getImageDimensions(draft.aspectRatio);
-            await Promise.resolve(onSaveImage({
+            await saveGeneratedImage({
                 id: crypto.randomUUID(),
                 url: currentResult,
                 prompt: draft.prompt,
@@ -112,12 +118,16 @@ export function useGenerateController({
                 lighting: draft.lighting,
                 palette: draft.palette,
                 references,
-            }));
+            }, {
+                saveImage: async (image) => Promise.resolve(onSaveImage(image)),
+                lineageStore: lineage,
+                sessionStore: session,
+            });
             updateDraft({ isSaved: true });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [currentResult, draft, onSaveImage, serializeReferences, updateDraft]);
+    }, [currentResult, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
 
     const download = useCallback(() => {
         if (!currentResult) {
@@ -129,8 +139,8 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         setCurrentResult(null);
-        await generateSessionStore.clearCurrentResult();
-    }, []);
+        await session.clearCurrentResult();
+    }, [session]);
 
     return {
         currentResult,

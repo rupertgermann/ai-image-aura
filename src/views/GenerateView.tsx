@@ -8,7 +8,7 @@ import ReferenceImageModal from '../components/ReferenceImageModal';
 
 interface GenerateViewProps {
     apiKey: string | null;
-    onSaveImage: (image: ArchiveImage) => void;
+    onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
 }
 
 const EXAMPLE_PROMPTS = [

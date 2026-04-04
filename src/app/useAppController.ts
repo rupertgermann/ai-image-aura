@@ -26,8 +26,9 @@ export function useAppController() {
     }, [notifyError]);
 
     const saveImage = useCallback(async (image: ArchiveImage) => {
-        await addImage(image);
+        const savedImage = await addImage(image);
         addToast('Image saved to archive', 'success');
+        return savedImage;
     }, [addImage, addToast]);
 
     const deleteImages = useCallback(async (ids: string[]) => {

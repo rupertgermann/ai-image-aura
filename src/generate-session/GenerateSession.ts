@@ -6,6 +6,7 @@ import type { ImageBackground, ImageQuality } from '../utils/openai';
 const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
+const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
 const VALID_ASPECT_RATIOS = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
 const LEGACY_KEYS = {
@@ -30,10 +31,16 @@ export interface GenerateDraft {
     isSaved: boolean;
 }
 
+export interface GenerateLineageSource {
+    archiveImageId: string;
+}
+
 export interface GenerateSessionStore {
     readDraft(): GenerateDraft;
     writeDraft(draft: GenerateDraft): void;
     transferFromArchive(image: ArchiveImage): Promise<void>;
+    loadLineageSource(): GenerateLineageSource | null;
+    clearLineageSource(): void;
     loadCurrentResult(): Promise<string | null>;
     saveCurrentResult(result: string): Promise<void>;
     clearCurrentResult(): Promise<void>;
@@ -100,6 +107,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             palette: image.palette || 'none',
             isSaved: false,
         });
+        this.localStorage.setItem(GENERATE_LINEAGE_SOURCE_KEY, JSON.stringify({ archiveImageId: image.id }));
 
         if (image.references && image.references.length > 0) {
             await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));
@@ -107,6 +115,14 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         }
 
         await this.blobStorage.remove(GENERATE_TRANSFERRED_REFERENCES_KEY);
+    }
+
+    loadLineageSource(): GenerateLineageSource | null {
+        return this.readJson<GenerateLineageSource>(GENERATE_LINEAGE_SOURCE_KEY);
+    }
+
+    clearLineageSource(): void {
+        this.localStorage.removeItem(GENERATE_LINEAGE_SOURCE_KEY);
     }
 
     loadCurrentResult(): Promise<string | null> {
