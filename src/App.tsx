@@ -21,6 +21,9 @@ function App() {
         archiveViewProps,
         editorViewProps,
         settingsViewProps,
+        replayGenerateFromLineageStep,
+        replayEditorFromLineageStep,
+        forkFromLineageStep,
     } = useAppController()
 
     const renderView = () => {
@@ -55,10 +58,22 @@ function App() {
             {archiveController.selectedImage && (
                 <ImageDetailModal
                     image={archiveController.selectedImage}
+                    images={archiveViewProps.images}
                     onClose={archiveController.closeImage}
                     onEdit={() => archiveController.selectedImage && archiveController.editImage(archiveController.selectedImage)}
                     onDelete={() => archiveController.selectedImage && archiveController.requestDelete([archiveController.selectedImage.id])}
                     onCreateSimilar={archiveController.createSimilar}
+                    onReplayGenerate={(stepId) => {
+                        archiveController.closeImage()
+                        void replayGenerateFromLineageStep(stepId)
+                    }}
+                    onReplayEditor={(stepId) => {
+                        archiveController.closeImage()
+                        void replayEditorFromLineageStep(stepId)
+                    }}
+                    onForkFromStep={(stepId) => {
+                        void forkFromLineageStep(stepId)
+                    }}
                     onNext={archiveController.showNextImage}
                     onPrevious={archiveController.showPreviousImage}
                 />

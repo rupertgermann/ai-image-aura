@@ -18,6 +18,7 @@ export interface EditorSaveContext {
 export interface SaveEditedImageDeps {
     saveImage: (image: ArchiveImage) => Promise<ArchiveImage>;
     lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
+    parentStepId?: string | null;
     clock?: () => string;
     makeId?: () => string;
 }
@@ -30,7 +31,7 @@ export async function saveEditedImage(
 ): Promise<ArchiveImage> {
     const timestamp = deps.clock?.() ?? new Date().toISOString();
     const savedImage = await deps.saveImage(buildSavedImage(sourceImage, updatedUrl, context, timestamp, deps.makeId));
-    const parentStepId = await resolveParentStepId(sourceImage.id, deps.lineageStore);
+    const parentStepId = deps.parentStepId ?? await resolveParentStepId(sourceImage.id, deps.lineageStore);
 
     await deps.lineageStore.save({
         archiveImageId: savedImage.id,

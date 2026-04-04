@@ -159,6 +159,27 @@ describe('saveEditedImage', () => {
         }));
     });
 
+    it('uses an explicit parent step id when forking from an older lineage step', async () => {
+        const lineage = createStore();
+        await seedSourceLineage(lineage);
+
+        await saveEditedImage(createArchiveImage(), 'data:image/png;base64,forked-overwrite', {
+            ...createSaveContext(),
+            isCopy: false,
+        }, {
+            saveImage: vi.fn(async (image) => image),
+            lineageStore: lineage,
+            parentStepId: 'step-1',
+            clock: () => '2026-04-04T14:00:00.000Z',
+        });
+
+        const steps = await lineage.getByArchiveImageId('source-image');
+        expect(steps.at(-1)).toEqual(expect.objectContaining({
+            parentStepId: 'step-1',
+            timestamp: '2026-04-04T14:00:00.000Z',
+        }));
+    });
+
     it('does not write provenance when archive save fails', async () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);

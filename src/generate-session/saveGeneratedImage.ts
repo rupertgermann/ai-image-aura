@@ -33,6 +33,10 @@ async function resolveParentStepId(
         return null;
     }
 
+    if (lineageSource.stepId) {
+        return lineageSource.stepId;
+    }
+
     const sourceSteps = await lineageStore.getByArchiveImageId(lineageSource.archiveImageId);
     return sourceSteps.at(-1)?.id ?? null;
 }

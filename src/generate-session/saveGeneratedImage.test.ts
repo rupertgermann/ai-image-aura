@@ -130,6 +130,36 @@ describe('saveGeneratedImage', () => {
         ]);
     });
 
+    it('uses the explicitly selected lineage step id for forked saves', async () => {
+        const lineage = createStore();
+        const sessionStore = createSessionStore({ archiveImageId: 'source-image', stepId: 'step-1' });
+        await lineage.save({
+            archiveImageId: 'source-image',
+            parentStepId: null,
+            stepType: 'generation',
+            timestamp: '2026-04-04T09:00:00.000Z',
+            metadata: { prompt: 'first prompt' },
+        });
+        await lineage.save({
+            archiveImageId: 'source-image',
+            parentStepId: 'step-1',
+            stepType: 'overwrite',
+            timestamp: '2026-04-04T10:00:00.000Z',
+            metadata: { prompt: 'newest prompt' },
+        });
+
+        await saveGeneratedImage(createArchiveImage({ id: 'forked-image' }), {
+            saveImage: vi.fn(async (nextImage) => nextImage),
+            lineageStore: lineage,
+            sessionStore,
+        });
+
+        const steps = await lineage.getByArchiveImageId('forked-image');
+        expect(steps.at(-1)).toEqual(expect.objectContaining({
+            parentStepId: 'step-1',
+        }));
+    });
+
     it('does not write provenance when archive save fails', async () => {
         const lineage = createStore();
         const sessionStore = createSessionStore({ archiveImageId: 'source-image' });

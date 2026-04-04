@@ -8,6 +8,7 @@ import { useImageArchive } from '../hooks/useImageArchive';
 import { initializeAuraPersistence } from '../db/AuraPersistence';
 import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
 import { lineageStore } from '../lineage/LineageStore';
+import { buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 
 export function useAppController() {
     const { currentView, apiKey, theme, changeView, updateApiKey, toggleTheme } = useAppPreferences();
@@ -54,7 +55,10 @@ export function useAppController() {
         const savedImage = await saveEditedImage(editingImage, updatedUrl, context, {
             saveImage: async (image) => addImage(image),
             lineageStore,
+            parentStepId: generateSessionStore.loadLineageSource()?.stepId ?? null,
         });
+
+        generateSessionStore.clearLineageSource();
 
         if (savedImage.id !== editingImage.id) {
             addToast('Design saved as new copy', 'success');
@@ -76,6 +80,73 @@ export function useAppController() {
         }
     }, [addToast, changeView, notifyError]);
 
+    const replayGenerateFromLineageStep = useCallback(async (stepId: string) => {
+        try {
+            const step = await lineageStore.getById(stepId);
+            if (!step || !isGenerateReplayable(step)) {
+                notifyError(new Error('This step cannot be replayed into Generate'), 'Replay unavailable');
+                return;
+            }
+
+            const image = images.find((entry) => entry.id === step.archiveImageId);
+            if (!image) {
+                notifyError(new Error('Selected step image is missing from the local archive'), 'Replay unavailable');
+                return;
+            }
+
+            const replay = buildGenerateReplay(image, step);
+            await generateSessionStore.transferFromArchive(image, replay.lineageSource, replay.draft);
+            changeView('generate');
+            addToast('Lineage step loaded into Generate', 'info');
+        } catch (error) {
+            notifyError(error, 'Failed to replay lineage step');
+        }
+    }, [addToast, changeView, images, notifyError]);
+
+    const replayEditorFromLineageStep = useCallback(async (stepId: string) => {
+        try {
+            const step = await lineageStore.getById(stepId);
+            if (!step || !isEditorReplayable(step)) {
+                notifyError(new Error('This step cannot be replayed into Editor'), 'Replay unavailable');
+                return;
+            }
+
+            const image = images.find((entry) => entry.id === step.archiveImageId);
+            if (!image) {
+                notifyError(new Error('Selected step image is missing from the local archive'), 'Replay unavailable');
+                return;
+            }
+
+            generateSessionStore.saveLineageSource({
+                archiveImageId: step.archiveImageId,
+                stepId: step.id,
+            });
+            setEditingImage(image);
+            changeView('editor');
+            addToast('Lineage step loaded into Editor', 'info');
+        } catch (error) {
+            notifyError(error, 'Failed to replay lineage step');
+        }
+    }, [addToast, changeView, images, notifyError]);
+
+    const forkFromLineageStep = useCallback(async (stepId: string) => {
+        try {
+            const step = await lineageStore.getById(stepId);
+            if (!step) {
+                notifyError(new Error('Selected lineage step no longer exists'), 'Fork unavailable');
+                return;
+            }
+
+            generateSessionStore.saveLineageSource({
+                archiveImageId: step.archiveImageId,
+                stepId: step.id,
+            });
+            addToast('Next save will branch from this lineage step', 'info');
+        } catch (error) {
+            notifyError(error, 'Failed to fork from lineage step');
+        }
+    }, [addToast, notifyError]);
+
     const archiveController = useArchiveController({
         images,
         onDeleteImages: deleteImages,
@@ -94,6 +165,9 @@ export function useAppController() {
         updateApiKey,
         toggleTheme,
         removeToast,
+        replayGenerateFromLineageStep,
+        replayEditorFromLineageStep,
+        forkFromLineageStep,
         generateViewProps: {
             apiKey,
             onSaveImage: saveImage,

@@ -4,24 +4,30 @@ import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
 import { lineageStore } from '../lineage/LineageStore';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
+import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
+    images: ArchiveImage[];
     onClose: () => void;
     onEdit: () => void;
     onDelete: () => void;
     onCreateSimilar: () => void;
+    onReplayGenerate: (stepId: string) => void;
+    onReplayEditor: (stepId: string) => void;
+    onForkFromStep: (stepId: string) => void;
     onNext: () => void;
     onPrevious: () => void;
 }
 
 const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
-    image, onClose, onEdit, onDelete, onCreateSimilar, onNext, onPrevious
+    image, images, onClose, onEdit, onDelete, onCreateSimilar, onReplayGenerate, onReplayEditor, onForkFromStep, onNext, onPrevious
 }) => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [copied, setCopied] = useState(false);
     const [timeline, setTimeline] = useState<LineageTimelineData | null>(null);
     const [timelineLoading, setTimelineLoading] = useState(true);
+    const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
     const dateStr = new Date(image.timestamp).toLocaleString();
 
@@ -53,6 +59,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
             .then((nextTimeline) => {
                 if (!cancelled) {
                     setTimeline(nextTimeline);
+                    setSelectedStepId(nextTimeline.entries[0]?.id ?? null);
                 }
             })
             .catch(() => {
@@ -62,6 +69,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         parent: null,
                         descendantCount: 0,
                     });
+                    setSelectedStepId(null);
                 }
             })
             .finally(() => {
@@ -75,6 +83,12 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         };
     }, [image.id]);
 
+    const selectedEntry = timeline?.entries.find((entry) => entry.id === selectedStepId) ?? null;
+    const comparisonImage = selectedEntry ? images.find((entryImage) => entryImage.id === selectedEntry.archiveImageId) ?? null : null;
+    const comparisonError = selectedEntry && !comparisonImage
+        ? 'Selected step image is no longer available locally.'
+        : null;
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className={`modal-content glass-panel ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
@@ -84,7 +98,22 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
                 <div className="modal-main">
                     <div className="modal-image-viewport">
-                        <img src={image.url} alt={image.prompt} className="modal-image" />
+                        {selectedEntry && comparisonImage && comparisonImage.id !== image.id ? (
+                            <div className="comparison-view">
+                                <div className="comparison-pane">
+                                    <span className="comparison-label">Selected Step</span>
+                                    <img src={comparisonImage.url} alt={selectedEntry.summary} className="modal-image comparison-image" />
+                                </div>
+                                <div className="comparison-pane">
+                                    <span className="comparison-label">Current Image</span>
+                                    <img src={image.url} alt={image.prompt} className="modal-image comparison-image" />
+                                </div>
+                            </div>
+                        ) : (
+                            <img src={image.url} alt={image.prompt} className="modal-image" />
+                        )}
+
+                        {comparisonError && <div className="comparison-error glass-panel">{comparisonError}</div>}
 
                         <div className="floating-actions">
                             <button className="aura-btn aura-btn--primary" onClick={downloadImage}>
@@ -187,12 +216,21 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
                                     <div className="lineage-list">
                                         {timeline.entries.map((entry) => (
-                                            <article key={entry.id} className="lineage-entry">
+                                            <article key={entry.id} className={`lineage-entry ${selectedStepId === entry.id ? 'selected' : ''}`}>
                                                 <div className="lineage-entry-header">
-                                                    <span className="status-badge lineage-type">{entry.label}</span>
+                                                    <button className="status-badge lineage-type lineage-select" onClick={() => setSelectedStepId(entry.id)}>{entry.label}</button>
                                                     <span className="lineage-time">{new Date(entry.timestamp).toLocaleString()}</span>
                                                 </div>
                                                 <p className="lineage-summary">{entry.summary}</p>
+                                                <div className="lineage-actions-row">
+                                                    {isGenerateReplayable(entry) && (
+                                                        <button className="aura-btn aura-btn--glass lineage-action-btn" onClick={() => onReplayGenerate(entry.id)}>Replay into Generate</button>
+                                                    )}
+                                                    {isEditorReplayable(entry) && (
+                                                        <button className="aura-btn aura-btn--glass lineage-action-btn" onClick={() => onReplayEditor(entry.id)}>Replay into Editor</button>
+                                                    )}
+                                                    <button className="aura-btn aura-btn--glass lineage-action-btn" onClick={() => onForkFromStep(entry.id)}>Fork from this step</button>
+                                                </div>
                                             </article>
                                         ))}
                                     </div>

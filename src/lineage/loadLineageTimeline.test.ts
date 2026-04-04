@@ -65,6 +65,7 @@ describe('loadLineageTimeline', () => {
             entries: [
                 {
                     id: 'step-1',
+                    archiveImageId: 'image-1',
                     stepType: 'save-as-copy',
                     label: 'Saved as Copy',
                     summary: 'Adjusted contrast, saturation',
@@ -72,6 +73,7 @@ describe('loadLineageTimeline', () => {
                 },
                 {
                     id: 'step-2',
+                    archiveImageId: 'image-1',
                     stepType: 'overwrite',
                     label: 'Overwrite Save',
                     summary: 'Adjusted brightness, saturation, filter',

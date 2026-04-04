@@ -2,6 +2,7 @@ import type { LineageStore, LineageStep } from './LineageStore';
 
 export interface LineageTimelineEntry {
     id: string;
+    archiveImageId: string;
     stepType: LineageStep['stepType'];
     label: string;
     summary: string;
@@ -73,6 +74,7 @@ async function countDescendants(steps: LineageStep[], store: Pick<LineageStore, 
 function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
     return {
         id: step.id,
+        archiveImageId: step.archiveImageId,
         stepType: step.stepType,
         label: getStepLabel(step),
         summary: getStepSummary(step),

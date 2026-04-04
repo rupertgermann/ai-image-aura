@@ -33,13 +33,15 @@ export interface GenerateDraft {
 
 export interface GenerateLineageSource {
     archiveImageId: string;
+    stepId?: string | null;
 }
 
 export interface GenerateSessionStore {
     readDraft(): GenerateDraft;
     writeDraft(draft: GenerateDraft): void;
-    transferFromArchive(image: ArchiveImage): Promise<void>;
+    transferFromArchive(image: ArchiveImage, lineageSource?: GenerateLineageSource | null, draftOverrides?: Partial<GenerateDraft>): Promise<void>;
     loadLineageSource(): GenerateLineageSource | null;
+    saveLineageSource(source: GenerateLineageSource): void;
     clearLineageSource(): void;
     loadCurrentResult(): Promise<string | null>;
     saveCurrentResult(result: string): Promise<void>;
@@ -96,7 +98,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         this.clearLegacyDraftKeys();
     }
 
-    async transferFromArchive(image: ArchiveImage): Promise<void> {
+    async transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
         this.writeDraft({
             prompt: image.prompt,
             quality: coerceQuality(image.quality),
@@ -106,8 +108,13 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             lighting: image.lighting || 'none',
             palette: image.palette || 'none',
             isSaved: false,
+            ...draftOverrides,
         });
-        this.localStorage.setItem(GENERATE_LINEAGE_SOURCE_KEY, JSON.stringify({ archiveImageId: image.id }));
+        if (lineageSource) {
+            this.saveLineageSource(lineageSource);
+        } else {
+            this.clearLineageSource();
+        }
 
         if (image.references && image.references.length > 0) {
             await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));
@@ -119,6 +126,10 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
 
     loadLineageSource(): GenerateLineageSource | null {
         return this.readJson<GenerateLineageSource>(GENERATE_LINEAGE_SOURCE_KEY);
+    }
+
+    saveLineageSource(source: GenerateLineageSource): void {
+        this.localStorage.setItem(GENERATE_LINEAGE_SOURCE_KEY, JSON.stringify(source));
     }
 
     clearLineageSource(): void {
