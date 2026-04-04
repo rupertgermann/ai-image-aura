@@ -95,14 +95,15 @@ export function useGenerateController({
         }
 
         const references = await serializeReferences();
+        const { width, height } = getImageDimensions(draft.aspectRatio);
         await Promise.resolve(onSaveImage({
             id: crypto.randomUUID(),
             url: currentResult,
             prompt: draft.prompt,
             model: 'gpt-image-1.5',
             timestamp: new Date().toISOString(),
-            width: 1024,
-            height: 1024,
+            width,
+            height,
             quality: draft.quality,
             aspectRatio: draft.aspectRatio,
             background: draft.background,
@@ -137,4 +138,18 @@ export function useGenerateController({
         download,
         clear,
     };
+}
+
+function getImageDimensions(aspectRatio: string) {
+    if (aspectRatio === 'auto') {
+        return { width: 1024, height: 1024 };
+    }
+
+    const [width, height] = aspectRatio.split('x').map(Number);
+
+    if (!width || !height) {
+        return { width: 1024, height: 1024 };
+    }
+
+    return { width, height };
 }
