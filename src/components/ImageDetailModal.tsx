@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2 } from 'lucide-react';
+import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
+import { lineageStore } from '../lineage/LineageStore';
+import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
@@ -18,6 +20,8 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 }) => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [timeline, setTimeline] = useState<LineageTimelineData | null>(null);
+    const [timelineLoading, setTimelineLoading] = useState(true);
 
     const dateStr = new Date(image.timestamp).toLocaleString();
 
@@ -40,6 +44,36 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onNext, onPrevious, onClose]);
+
+    React.useEffect(() => {
+        let cancelled = false;
+
+        setTimelineLoading(true);
+        loadLineageTimeline(image.id, lineageStore)
+            .then((nextTimeline) => {
+                if (!cancelled) {
+                    setTimeline(nextTimeline);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setTimeline({
+                        entries: [],
+                        parent: null,
+                        descendantCount: 0,
+                    });
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setTimelineLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [image.id]);
 
     return (
         <div className="modal-overlay" onClick={onClose}>
@@ -131,6 +165,45 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 </div>
                             </div>
                         )}
+
+                        <div className="sidebar-section">
+                            <div className="lineage-header-row">
+                                <label className="section-label" style={{ marginBottom: 0 }}>LINEAGE</label>
+                                {timeline && timeline.descendantCount > 0 && (
+                                    <span className="status-badge lineage-badge">{timeline.descendantCount} version{timeline.descendantCount === 1 ? '' : 's'} from this image</span>
+                                )}
+                            </div>
+
+                            {timelineLoading ? (
+                                <div className="lineage-empty glass-inset">Loading history...</div>
+                            ) : timeline && timeline.entries.length > 0 ? (
+                                <div className="lineage-panel glass-inset">
+                                    {timeline.parent && (
+                                        <div className={`lineage-origin ${timeline.parent.missing ? 'missing' : ''}`}>
+                                            <GitBranch size={14} />
+                                            <span>From: {timeline.parent.label}</span>
+                                        </div>
+                                    )}
+
+                                    <div className="lineage-list">
+                                        {timeline.entries.map((entry) => (
+                                            <article key={entry.id} className="lineage-entry">
+                                                <div className="lineage-entry-header">
+                                                    <span className="status-badge lineage-type">{entry.label}</span>
+                                                    <span className="lineage-time">{new Date(entry.timestamp).toLocaleString()}</span>
+                                                </div>
+                                                <p className="lineage-summary">{entry.summary}</p>
+                                            </article>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="lineage-empty glass-inset">
+                                    <History size={16} />
+                                    <span>No history recorded</span>
+                                </div>
+                            )}
+                        </div>
 
                         <div className="sidebar-actions">
                             <button className="aura-btn aura-btn--primary" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>
