@@ -6,6 +6,7 @@ import type { ImageBackground, ImageQuality } from '../utils/openai';
 const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
+const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
 const VALID_ASPECT_RATIOS = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
 const LEGACY_KEYS = {
@@ -30,10 +31,18 @@ export interface GenerateDraft {
     isSaved: boolean;
 }
 
+export interface GenerateLineageSource {
+    archiveImageId: string;
+    stepId?: string | null;
+}
+
 export interface GenerateSessionStore {
     readDraft(): GenerateDraft;
     writeDraft(draft: GenerateDraft): void;
-    transferFromArchive(image: ArchiveImage): Promise<void>;
+    transferFromArchive(image: ArchiveImage, lineageSource?: GenerateLineageSource | null, draftOverrides?: Partial<GenerateDraft>): Promise<void>;
+    loadLineageSource(): GenerateLineageSource | null;
+    saveLineageSource(source: GenerateLineageSource): void;
+    clearLineageSource(): void;
     loadCurrentResult(): Promise<string | null>;
     saveCurrentResult(result: string): Promise<void>;
     clearCurrentResult(): Promise<void>;
@@ -89,7 +98,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         this.clearLegacyDraftKeys();
     }
 
-    async transferFromArchive(image: ArchiveImage): Promise<void> {
+    async transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
         this.writeDraft({
             prompt: image.prompt,
             quality: coerceQuality(image.quality),
@@ -99,7 +108,13 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             lighting: image.lighting || 'none',
             palette: image.palette || 'none',
             isSaved: false,
+            ...draftOverrides,
         });
+        if (lineageSource) {
+            this.saveLineageSource(lineageSource);
+        } else {
+            this.clearLineageSource();
+        }
 
         if (image.references && image.references.length > 0) {
             await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));
@@ -107,6 +122,18 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         }
 
         await this.blobStorage.remove(GENERATE_TRANSFERRED_REFERENCES_KEY);
+    }
+
+    loadLineageSource(): GenerateLineageSource | null {
+        return this.readJson<GenerateLineageSource>(GENERATE_LINEAGE_SOURCE_KEY);
+    }
+
+    saveLineageSource(source: GenerateLineageSource): void {
+        this.localStorage.setItem(GENERATE_LINEAGE_SOURCE_KEY, JSON.stringify(source));
+    }
+
+    clearLineageSource(): void {
+        this.localStorage.removeItem(GENERATE_LINEAGE_SOURCE_KEY);
     }
 
     loadCurrentResult(): Promise<string | null> {

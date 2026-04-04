@@ -5,10 +5,13 @@ import { useGenerateDraft } from '../generate-session/GenerateSession';
 import { useGenerateController } from '../generate-session/useGenerateController';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
+import { goalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 
 interface GenerateViewProps {
     apiKey: string | null;
-    onSaveImage: (image: ArchiveImage) => void;
+    onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -59,8 +62,15 @@ const PALETTES = [
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [draft, setDraft] = useGenerateDraft();
+    const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
+    const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
+    const [maxIterations, setMaxIterations] = useLocalStorage('generate_autopilot_max_iterations', DEFAULT_AUTOPILOT_MAX_ITERATIONS);
+    const [satisfactionThreshold, setSatisfactionThreshold] = useLocalStorage('generate_autopilot_threshold', DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
+    const [showCostDisclosure, setShowCostDisclosure] = useState(false);
+    const [autopilotNotice, setAutopilotNotice] = useState<string | null>(null);
+    const [translatingGoal, setTranslatingGoal] = useState(false);
     const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
     const referenceCollection = useReferenceImageCollection();
     const referenceImages = referenceCollection.files;
@@ -71,8 +81,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         currentResult,
         loading,
         error,
+        autopilot,
         updateDraft,
         generate,
+        runAutopilot,
+        cancelAutopilot,
         save,
         download,
         clear,
@@ -120,6 +133,53 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         }
     };
 
+    const handleTranslateGoal = async () => {
+        if (!apiKey || !goal.trim()) {
+            return;
+        }
+
+        setTranslatingGoal(true);
+        setAutopilotNotice(null);
+        try {
+            const nextPrompt = await goalPromptTranslator.translate({ goal, apiKey });
+            updateDraft({ prompt: nextPrompt, isSaved: false });
+        } catch (translationError) {
+            setAutopilotNotice(translationError instanceof Error ? translationError.message : 'Failed to translate goal');
+        } finally {
+            setTranslatingGoal(false);
+        }
+    };
+
+    const handleRunAutopilot = async () => {
+        setAutopilotNotice(null);
+        const result = await runAutopilot({
+            goal,
+            maxIterations,
+            satisfactionThreshold,
+        });
+
+        if (!result) {
+            return;
+        }
+
+        if (result.status === 'max-iterations') {
+            setAutopilotNotice('Autopilot reached the iteration limit without meeting the satisfaction threshold.');
+            return;
+        }
+
+        if (result.status === 'cancelled') {
+            setAutopilotNotice('Autopilot was cancelled. Showing the best result so far.');
+            return;
+        }
+
+        if (result.status === 'satisfied' && result.bestIteration) {
+            setAutopilotNotice(`Best result selected from iteration ${result.bestIteration.iterationNumber}.`);
+        }
+    };
+
+    const maxApiCalls = maxIterations * 3;
+    const isAutopilotMode = mode === 'autopilot';
+
 
 
     return (
@@ -131,6 +191,92 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
             <div className="generate-grid">
                 <section className="controls-panel glass-panel">
+                    <div className="input-section">
+                        <label>MODE</label>
+                        <div className="toggle-group">
+                            <button
+                                className={!isAutopilotMode ? 'active' : ''}
+                                onClick={() => setMode('single-shot')}
+                            >Single Shot</button>
+                            <button
+                                className={isAutopilotMode ? 'active' : ''}
+                                onClick={() => setMode('autopilot')}
+                            >Autopilot</button>
+                        </div>
+                    </div>
+
+                    {isAutopilotMode && (
+                        <div className="autopilot-panel glass-panel">
+                            <div className="input-section">
+                                <div className="prompt-header">
+                                    <label>GOAL</label>
+                                    <button
+                                        className="aura-btn aura-btn--glass autopilot-inline-btn"
+                                        onClick={() => { void handleTranslateGoal(); }}
+                                        disabled={!goal.trim() || !apiKey || translatingGoal || loading}
+                                    >
+                                        {translatingGoal ? 'Translating...' : 'Translate to Prompt'}
+                                    </button>
+                                </div>
+                                <textarea
+                                    placeholder="Describe the outcome you want in plain language..."
+                                    value={goal}
+                                    onChange={(e) => setGoal(e.target.value)}
+                                    className="prompt-input autopilot-goal-input"
+                                />
+                            </div>
+
+                            <div className="autopilot-settings-grid">
+                                <div className="option-group">
+                                    <label>MAX ITERATIONS</label>
+                                    <input
+                                        type="range"
+                                        min={1}
+                                        max={MAX_AUTOPILOT_ITERATIONS}
+                                        value={maxIterations}
+                                        onChange={(e) => setMaxIterations(Number(e.target.value))}
+                                        className="range-input"
+                                    />
+                                    <span className="autopilot-metric">{maxIterations}</span>
+                                </div>
+
+                                <div className="option-group">
+                                    <label>SATISFACTION THRESHOLD</label>
+                                    <input
+                                        type="range"
+                                        min={50}
+                                        max={100}
+                                        value={satisfactionThreshold}
+                                        onChange={(e) => setSatisfactionThreshold(Number(e.target.value))}
+                                        className="range-input"
+                                    />
+                                    <span className="autopilot-metric">{satisfactionThreshold}/100</span>
+                                </div>
+                            </div>
+
+                            <div className="autopilot-disclosure glass-panel">
+                                <strong>Cost disclosure</strong>
+                                <p>Up to {maxIterations} iterations and roughly {maxApiCalls} API calls per run.</p>
+                            </div>
+
+                            {showCostDisclosure && (
+                                <div className="autopilot-confirmation glass-panel">
+                                    <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
+                                    <div className="autopilot-confirmation-actions">
+                                        <button className="aura-btn aura-btn--glass" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
+                                        <button
+                                            className="aura-btn aura-btn--primary"
+                                            onClick={() => {
+                                                setShowCostDisclosure(false);
+                                                void handleRunAutopilot();
+                                            }}
+                                        >Confirm Run</button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div className="input-section">
                         <div className="prompt-header">
                             <label>PROMPT</label>
@@ -293,26 +439,73 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         </div>
                     </div>
 
-                    <button
-                        className="aura-btn aura-btn--primary"
-                        onClick={() => { void generate(); }}
-                        disabled={loading || !prompt.trim() || !apiKey}
-                        style={{ width: '100%' }}
-                    >
-                        {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
-                        {loading ? 'Generating...' : 'Generate Image'}
-                    </button>
+                    {isAutopilotMode ? (
+                        <button
+                            className="aura-btn aura-btn--primary"
+                            onClick={() => setShowCostDisclosure(true)}
+                            disabled={loading || !prompt.trim() || !goal.trim() || !apiKey}
+                            style={{ width: '100%' }}
+                        >
+                            {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
+                            {loading ? 'Autopilot Running...' : 'Run Autopilot'}
+                        </button>
+                    ) : (
+                        <button
+                            className="aura-btn aura-btn--primary"
+                            onClick={() => { void generate(); }}
+                            disabled={loading || !prompt.trim() || !apiKey}
+                            style={{ width: '100%' }}
+                        >
+                            {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
+                            {loading ? 'Generating...' : 'Generate Image'}
+                        </button>
+                    )}
+
+                    {isAutopilotMode && autopilot.running && (
+                        <div className="autopilot-live-panel glass-panel">
+                            <div className="autopilot-live-header">
+                                <strong>Iteration {autopilot.iterations.length}/{maxIterations}</strong>
+                                <button className="aura-btn aura-btn--danger" onClick={cancelAutopilot}>Pause / Cancel</button>
+                            </div>
+                            <p className="autopilot-live-feedback">
+                                {autopilot.iterations.at(-1)?.feedback[0] ?? 'Generating the first candidate...'}
+                            </p>
+                            <div className="autopilot-thumbnail-strip">
+                                {autopilot.iterations.map((iteration) => (
+                                    <div key={iteration.stepId} className={`autopilot-thumbnail ${autopilot.bestIterationNumber === iteration.iterationNumber ? 'best' : ''}`}>
+                                        <img src={iteration.imageDataUrl} alt={`Autopilot iteration ${iteration.iterationNumber}`} />
+                                        <span>#{iteration.iterationNumber} · {iteration.score}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {!apiKey && (
                         <div className="error-message">API Key missing. Go to Settings to configure.</div>
                     )}
                     {error && <div className="error-message">{error}</div>}
+                    {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>
 
                 <section className="preview-panel glass-panel">
                     {currentResult ? (
                         <div className="result-container">
                             <img src={currentResult} alt="Generated result" className="result-image" />
+                            {isAutopilotMode && autopilot.iterations.length > 0 && (
+                                <div className="autopilot-result-banner glass-panel">
+                                    <strong>
+                                        {autopilot.bestIterationNumber ? `Best Autopilot Result: iteration ${autopilot.bestIterationNumber}` : 'Autopilot result'}
+                                    </strong>
+                                    <span>
+                                        {autopilot.status === 'max-iterations' && 'Reached iteration limit without converging.'}
+                                        {autopilot.status === 'cancelled' && 'Run cancelled. Showing the best result to date.'}
+                                        {autopilot.status === 'failed' && autopilot.lastErrorIteration && `Run stopped at iteration ${autopilot.lastErrorIteration}.`}
+                                        {autopilot.status === 'satisfied' && 'Satisfaction threshold reached early.'}
+                                        {autopilot.status === 'running' && 'Autopilot is evaluating and refining this run.'}
+                                    </span>
+                                </div>
+                            )}
                             <div className="result-actions">
                                 <button
                                     onClick={() => { void save(); }}

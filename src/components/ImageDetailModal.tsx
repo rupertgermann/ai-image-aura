@@ -1,23 +1,35 @@
 import React, { useState } from 'react';
-import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2 } from 'lucide-react';
+import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
+import { lineageStore } from '../lineage/LineageStore';
+import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
+import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
+    images: ArchiveImage[];
     onClose: () => void;
     onEdit: () => void;
     onDelete: () => void;
     onCreateSimilar: () => void;
+    onReplayGenerate: (stepId: string) => void;
+    onReplayEditor: (stepId: string) => void;
+    onForkFromStep: (stepId: string) => void;
     onNext: () => void;
     onPrevious: () => void;
 }
 
 const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
-    image, onClose, onEdit, onDelete, onCreateSimilar, onNext, onPrevious
+    image, images, onClose, onEdit, onDelete, onCreateSimilar, onReplayGenerate, onReplayEditor, onForkFromStep, onNext, onPrevious
 }) => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [timeline, setTimeline] = useState<LineageTimelineData | null>(null);
+    const [timelineLoading, setTimelineLoading] = useState(true);
+    const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+    const [lineageCollapsed, setLineageCollapsed] = useLocalStorage('archive_detail_lineage_collapsed', false);
 
     const dateStr = new Date(image.timestamp).toLocaleString();
 
@@ -41,6 +53,46 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onNext, onPrevious, onClose]);
 
+    React.useEffect(() => {
+        let cancelled = false;
+
+        setTimelineLoading(true);
+        loadLineageTimeline(image.id, lineageStore)
+            .then((nextTimeline) => {
+                if (!cancelled) {
+                    setTimeline(nextTimeline);
+                    setSelectedStepId(nextTimeline.entries.at(-1)?.id ?? null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setTimeline({
+                        entries: [],
+                        parent: null,
+                        descendantCount: 0,
+                    });
+                    setSelectedStepId(null);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) {
+                    setTimelineLoading(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [image.id]);
+
+    const selectedEntry = timeline?.entries.find((entry) => entry.id === selectedStepId) ?? null;
+    const selectedImage = selectedEntry ? images.find((entryImage) => entryImage.id === selectedEntry.archiveImageId) ?? null : null;
+    const displayedImageUrl = selectedImage?.url ?? selectedEntry?.replayImageDataUrl ?? image.url;
+    const displayedImageLabel = selectedEntry?.label ?? 'Current Image';
+    const comparisonError = selectedEntry && !selectedImage && !selectedEntry.replayImageDataUrl
+        ? 'Selected step image is no longer available locally.'
+        : null;
+
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className={`modal-content glass-panel ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
@@ -50,7 +102,10 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
                 <div className="modal-main">
                     <div className="modal-image-viewport">
-                        <img src={image.url} alt={image.prompt} className="modal-image" />
+                        <span className="comparison-label single-image-label">{displayedImageLabel}</span>
+                        <img src={displayedImageUrl} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" />
+
+                        {comparisonError && <div className="comparison-error glass-panel">{comparisonError}</div>}
 
                         <div className="floating-actions">
                             <button className="aura-btn aura-btn--primary" onClick={downloadImage}>
@@ -131,6 +186,99 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 </div>
                             </div>
                         )}
+
+                        <div className="sidebar-section">
+                            <div className="lineage-header-row">
+                                <button
+                                    className="lineage-section-toggle"
+                                    onClick={() => setLineageCollapsed((current) => !current)}
+                                    type="button"
+                                >
+                                    <label className="section-label" style={{ marginBottom: 0, cursor: 'pointer' }}>LINEAGE</label>
+                                    <div className="lineage-header-actions">
+                                        {timeline && timeline.entries.length > 0 && (
+                                            <span className="status-badge lineage-badge">{timeline.entries.length} step{timeline.entries.length === 1 ? '' : 's'} in history</span>
+                                        )}
+                                        <ChevronRight size={16} className={lineageCollapsed ? '' : 'lineage-chevron-open'} />
+                                    </div>
+                                </button>
+                            </div>
+
+                            {lineageCollapsed ? (
+                                <div className="lineage-empty glass-inset">
+                                    <History size={16} />
+                                    <span>History hidden</span>
+                                </div>
+                            ) : timelineLoading ? (
+                                <div className="lineage-empty glass-inset">Loading history...</div>
+                            ) : timeline && timeline.entries.length > 0 ? (
+                                <div className="lineage-panel glass-inset">
+                                    {timeline.parent && (
+                                        <div className={`lineage-origin ${timeline.parent.missing ? 'missing' : ''}`}>
+                                            <GitBranch size={14} />
+                                            <span>From: {timeline.parent.label}</span>
+                                        </div>
+                                    )}
+
+                                        <div className="lineage-list">
+                                            {timeline.entries.map((entry) => (
+                                            <article
+                                                key={entry.id}
+                                                className={`lineage-entry ${selectedStepId === entry.id ? 'selected' : ''}`}
+                                                onClick={() => setSelectedStepId(entry.id)}
+                                            >
+                                                {entry.runLabel && <div className="lineage-run-label">{entry.runLabel}</div>}
+                                                <div className="lineage-entry-header">
+                                                    <button className="status-badge lineage-type lineage-select" type="button">{entry.label}</button>
+                                                    <span className="lineage-time">{new Date(entry.timestamp).toLocaleString()}</span>
+                                                </div>
+                                                <p className="lineage-summary">{entry.summary}</p>
+                                                {entry.goalText && (
+                                                    <div className="lineage-meta-block">
+                                                        <strong>Goal</strong>
+                                                        <p>{entry.goalText}</p>
+                                                    </div>
+                                                )}
+                                                {(entry.iterationNumber !== null || entry.evaluatorScore !== null || entry.evaluatorFeedback.length > 0) && (
+                                                    <div className="lineage-meta-block">
+                                                        <strong>Autopilot</strong>
+                                                        <p>
+                                                            {entry.iterationNumber !== null && `Iteration ${entry.iterationNumber}`}
+                                                            {entry.iterationNumber !== null && entry.evaluatorScore !== null && ' · '}
+                                                            {entry.evaluatorScore !== null && `Score ${entry.evaluatorScore}`}
+                                                        </p>
+                                                        {entry.evaluatorFeedback.length > 0 && <p>{entry.evaluatorFeedback.join(' ')}</p>}
+                                                    </div>
+                                                )}
+                                                <div className="lineage-actions-row">
+                                                    {isGenerateReplayable(entry) && (
+                                                        <button className="aura-btn aura-btn--glass lineage-action-btn" type="button" onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            onReplayGenerate(entry.id);
+                                                        }}>Replay into Generate</button>
+                                                    )}
+                                                    {isEditorReplayable(entry) && (
+                                                        <button className="aura-btn aura-btn--glass lineage-action-btn" type="button" onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            onReplayEditor(entry.id);
+                                                        }}>Replay into Editor</button>
+                                                    )}
+                                                    <button className="aura-btn aura-btn--glass lineage-action-btn" type="button" onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        onForkFromStep(entry.id);
+                                                    }}>Fork from this step</button>
+                                                </div>
+                                            </article>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="lineage-empty glass-inset">
+                                    <History size={16} />
+                                    <span>No history recorded</span>
+                                </div>
+                            )}
+                        </div>
 
                         <div className="sidebar-actions">
                             <button className="aura-btn aura-btn--primary" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>

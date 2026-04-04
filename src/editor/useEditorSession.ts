@@ -41,6 +41,12 @@ export function useEditorSession(image: ArchiveImage | null) {
         setSaturation,
         filter,
         setFilter,
+        adjustments: {
+            brightness,
+            contrast,
+            saturation,
+            filter,
+        },
         canvasFilter,
         currentImageUrl,
         setCurrentImageUrl,
