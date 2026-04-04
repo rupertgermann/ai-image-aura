@@ -21,7 +21,7 @@ When Autopilot is active, the user describes what they are trying to create — 
 
 1. Translate the goal into an initial generation prompt
 2. Generate an image using the existing image workflow
-3. Evaluate the result against the goal using GPT-4o vision
+3. Evaluate the result against the goal using GPT-5.4 vision
 4. Produce a structured critique: a satisfaction score and specific, actionable feedback
 5. Refine the prompt using the critique
 6. Generate again from the refined prompt
@@ -64,21 +64,21 @@ The product shift is from **user as prompt engineer** to **user as creative dire
 29. As a power user, I want to see the raw evaluator feedback for each iteration rather than just a score, so that I can understand the model's reasoning in detail.
 30. As a power user, I want the lineage export to include autopilot metadata — goal text, per-iteration scores, and feedback — so that I can analyse past runs outside the app.
 31. As a maintainer, I want the autopilot orchestration to be cleanly separated from image generation, evaluation, and prompt refinement, so that each concern can be tested and evolved independently.
-32. As a maintainer, I want the GPT-4o evaluation call to use a stable, versioned system prompt, so that changes to the evaluator behaviour are explicit and reviewable.
+32. As a maintainer, I want the GPT-5.4 evaluation call to use a stable, versioned system prompt, so that changes to the evaluator behaviour are explicit and reviewable.
 33. As a maintainer, I want the satisfaction score parsing to be isolated in a dedicated module, so that changes to the response format do not cascade across the codebase.
 34. As a maintainer, I want autopilot runs to be cancellable from the UI, so that a runaway loop can always be stopped without requiring a page reload.
 
 ## Implementation Decisions
 
 - Introduce a dedicated `AutopilotSession` module that owns the generate → evaluate → refine loop. It accepts a goal, generation settings, an API key, and callbacks for iteration progress. It returns the ranked list of results when complete or cancelled.
-- Introduce a `PromptRefiner` module that takes a goal, the current prompt, and evaluator feedback, and returns a refined prompt. It calls GPT-4o with a fixed system prompt designed to produce a single improved generation prompt as output.
-- Introduce a `SatisfactionEvaluator` module that takes an image data URL and a goal, calls GPT-4o vision, and returns a structured result: a numeric score from 0 to 100 and an array of specific, human-readable feedback sentences. The system prompt for this call is versioned and centrally owned by the module.
+- Introduce a `PromptRefiner` module that takes a goal, the current prompt, and evaluator feedback, and returns a refined prompt. It calls GPT-5.4 with a fixed system prompt designed to produce a single improved generation prompt as output.
+- Introduce a `SatisfactionEvaluator` module that takes an image data URL and a goal, calls GPT-5.4 vision, and returns a structured result: a numeric score from 0 to 100 and an array of specific, human-readable feedback sentences. The system prompt for this call is versioned and centrally owned by the module.
 - `ImageWorkflow.generate()` is called unchanged at each iteration. The Autopilot is pure orchestration above the existing workflow boundary and does not modify it.
 - Each iteration within an autopilot run is recorded as a lineage step with a `parent_step_id` pointing to the previous iteration's step. The first iteration's parent is the step that initiated the run (if any).
 - Lineage step records for autopilot iterations include additional autopilot-specific metadata: the goal text, the iteration number, the evaluator score, and the evaluator feedback text.
 - `useGenerateController` gains an `autopilot` action that delegates to `AutopilotSession`. The existing `generate` action is unchanged.
 - The Generate view gains a mode toggle between "Single Shot" and "Autopilot". Mode selection is persisted in the existing local state store.
-- Autopilot mode shows a goal field (multi-line, free text) and a prompt field. The prompt field is auto-populated by translating the goal into an initial prompt via a lightweight GPT-4o call on demand, but remains fully editable by the user.
+- Autopilot mode shows a goal field (multi-line, free text) and a prompt field. The prompt field is auto-populated by translating the goal into an initial prompt via a lightweight GPT-5.4 call on demand, but remains fully editable by the user.
 - A live iteration panel displays the current iteration count, the active evaluator feedback, and a thumbnail strip of all intermediate images generated so far.
 - The autopilot loop is cancellable at any point. Cancellation preserves all lineage nodes produced before the cancel and presents the best-scored result to date.
 - Max iterations is configurable per run, with a default of 4 and a hard ceiling of 8. This setting is persisted in local state.
@@ -86,7 +86,7 @@ The product shift is from **user as prompt engineer** to **user as creative dire
 - When the loop terminates — whether by convergence, cancellation, or reaching the iteration limit — the result presented to the user is the iteration with the highest evaluator score, not necessarily the final iteration.
 - A cost disclosure panel is shown before each autopilot run starts, stating the configured max iterations and the resulting maximum number of API calls. The user must confirm before the run begins.
 - The existing generation settings (quality, aspect ratio, background, style, lighting, palette) apply to every iteration within a run. They are not changed between iterations.
-- GPT-4o is used for both evaluation and prompt refinement. The same API key the user already configured for image generation is used. No additional credentials are required.
+- GPT-5.4 is used for both evaluation and prompt refinement. The same API key the user already configured for image generation is used. No additional credentials are required.
 - Generation in Autopilot mode uses `gpt-image-1.5` via the existing `imageWorkflow.generate()` path. No new image model is introduced.
 - Goal text and the last-used autopilot settings (max iterations, threshold) are persisted in the existing local storage layer between sessions.
 - Errors during generation or evaluation stop the current run at the failed iteration. All successfully completed iteration lineage nodes are retained. The error is surfaced in the UI with a clear message.
@@ -95,7 +95,7 @@ The product shift is from **user as prompt engineer** to **user as creative dire
 
 - Good tests validate observable behaviour through stable module interfaces, not internal implementation details or storage mechanics.
 - `AutopilotSession` should be tested by asserting on the sequence of iteration callbacks it produces, the termination condition it applies, and the result it returns, given injected mock implementations of `generate`, `evaluate`, and `refine`.
-- `SatisfactionEvaluator` should be tested by asserting that it correctly parses structured GPT-4o responses into a score and feedback array, and that it handles malformed or partial responses gracefully without throwing.
+- `SatisfactionEvaluator` should be tested by asserting that it correctly parses structured GPT-5.4 responses into a score and feedback array, and that it handles malformed or partial responses gracefully without throwing.
 - `PromptRefiner` should be tested by asserting that it returns a non-empty string prompt given a goal and feedback input, and that it propagates errors from the underlying API call correctly.
 - Lineage capture for autopilot iterations should be tested by asserting that each completed iteration produces a lineage step with the correct `parent_step_id` chain, iteration metadata, and score.
 - Early stopping should be tested by asserting that `AutopilotSession` halts and returns the best-scored result as soon as the satisfaction threshold is met, without proceeding to the next iteration.
@@ -107,7 +107,7 @@ The product shift is from **user as prompt engineer** to **user as creative dire
 ## Out of Scope
 
 - Support for image generation models other than `gpt-image-1.5` in the autopilot loop.
-- Support for evaluation models other than GPT-4o.
+- Support for evaluation models other than GPT-5.4.
 - Multi-user collaboration, cloud sync, or cross-device history sharing.
 - Batch autopilot: running an autopilot session across multiple goals or prompts simultaneously.
 - Saving or sharing autopilot "recipes" (goal + settings combinations) as reusable presets — planned for a future release.

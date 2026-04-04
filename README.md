@@ -2,7 +2,7 @@
 
 AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with the OpenAI Images API.
 
-The app runs entirely in the browser. API keys, generated images, reference images, and archive metadata stay on the local device instead of passing through an application backend.
+The app runs entirely in the browser. API keys, generated images, reference images, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
 
 ## Screens
 
@@ -21,16 +21,15 @@ The app runs entirely in the browser. API keys, generated images, reference imag
 ## Highlights
 
 - Prompt-based image generation with `gpt-image-1.5`
-- Autopilot mode for goal-driven generate -> evaluate -> refine loops with GPT-4o
+- `Single Shot` and `Autopilot` generation modes
+- Goal-to-prompt translation, iterative scoring, and prompt refinement powered by `gpt-5.4`
 - Prompt enhancement controls for style, lighting, palette, quality, aspect ratio, and background
 - Reference-image workflows for guided generation and AI-assisted edits
-- Creative lineage tracking across generate, create-similar, edit, overwrite, save-as-copy, and autopilot flows
-- Local archive with search, lineage-aware image detail view, replay/fork actions, prompt copy, and keyboard navigation
-- Bulk archive actions including multi-select, ZIP export with lineage manifests, and bulk delete
-- In-browser editor with brightness, contrast, saturation, filters, AI transforms, reset, overwrite, and save-as-copy flows
-- ZIP import/export support for archive images plus lineage metadata
-- Persistent UI state for theme, prompts, generation options, autopilot settings, and editor controls
-- Local-first storage powered by SQLocal and IndexedDB
+- Creative lineage tracking across generation, create-similar, editor saves, AI edits, save-as-copy branches, and Autopilot iterations
+- Local archive with search, multi-select actions, ZIP export, lineage-aware detail view, replay actions, fork actions, and keyboard navigation
+- In-browser editor with brightness, contrast, saturation, filters, AI transforms, overwrite, save-as-copy, and reset controls
+- Persistent local UI state for theme, prompts, generation settings, Autopilot settings, archive search, and editor controls
+- Local-first persistence powered by SQLocal and IndexedDB
 
 ## Tech Stack
 
@@ -39,7 +38,8 @@ The app runs entirely in the browser. API keys, generated images, reference imag
 - Vite 7
 - SQLocal for browser-local SQLite metadata
 - `idb-keyval` for binary and transient IndexedDB storage
-- JSZip for ZIP downloads
+- JSZip for archive export bundles
+- Vitest for module and workflow tests
 
 ## Runtime Requirements
 
@@ -59,6 +59,7 @@ Open the app in your browser, go to **Settings**, and enter an OpenAI API key to
 
 ```bash
 npm run dev
+npm run test
 npm run typecheck
 npm run build
 npm run lint
@@ -73,7 +74,10 @@ npm run preview
   Starts the Vite development server.
 
 - `npm run dev -- --port 5175`
-  Starts the Vite development server on port 5175.
+  Starts the Vite development server on a custom port.
+
+- `npm run test`
+  Runs the Vitest suite in non-watch mode.
 
 - `npm run typecheck`
   Runs the TypeScript project build in type-check mode.
@@ -93,6 +97,9 @@ npm run preview
 - `npm run preview`
   Serves the production build locally with Vite preview.
 
+- `npm run preview -- --port 4174`
+  Serves the production build on a custom preview port.
+
 ## Application Overview
 
 ### Generate
@@ -100,89 +107,91 @@ npm run preview
 The Generate view supports:
 
 - Mode toggle between `Single Shot` and `Autopilot`
-- Free-form text prompts
-- Example prompt presets
+- Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode
 - Quality options: `low`, `medium`, `high`
 - Aspect ratio options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
 - Background options: `auto`, `opaque`, `transparent`
-- Style presets
-- Lighting presets
-- Palette presets
-- Configurable Autopilot iteration count and satisfaction threshold
-- Cost disclosure before Autopilot runs
-- Live Autopilot iteration feedback, thumbnails, and cancel support
-- Multiple reference image uploads via file picker or drag-and-drop
+- Style, lighting, and palette modifiers that are merged into the request prompt
+- Configurable Autopilot iteration count from `1` to `8`
+- Configurable Autopilot satisfaction threshold from `50` to `100`
+- Cost disclosure and confirmation before each Autopilot run
+- Live Autopilot progress, best-iteration highlighting, and pause/cancel support
+- Multiple reference image uploads through file picker and drag-and-drop
+- Reference preview modal with next and previous navigation
 - Save-to-archive, download, and clear-result actions
 
-When reference images are attached, the app switches from the image generation endpoint to the image edit endpoint so the request can include uploaded image inputs.
+Prompt-only generations use the OpenAI generations endpoint. When reference images are attached, the app switches to the edits endpoint so the request can include uploaded image inputs.
 
-In Autopilot mode, the app uses the current generation settings for every iteration, evaluates results against the user's goal with GPT-4o, refines the prompt, and keeps the best-scoring result as the primary output.
+Autopilot reuses the current generation settings for every iteration, evaluates results against the goal, refines the prompt between iterations, and keeps the best-scoring result as the primary output.
 
 ### Archive
 
 The Archive view supports:
 
-- Prompt-based search
+- Prompt-based search with persisted search text
 - Multi-select image management
-- Select-all and deselect-all actions
-- ZIP export for selected images plus lineage manifests
-- ZIP import/restore support for archive images and lineage metadata
+- Select-all and deselect-all actions scoped to the current filtered result set
+- ZIP export for selected images together with archive and lineage manifests
 - Bulk deletion with confirmation
-- Image detail modal with prompt copy, metadata display, reference preview, and lineage timeline
-- Lineage replay into Generate and Editor
-- Lineage forking from any recorded step
-- Parent/descendant indicators and side-by-side lineage comparison
-- Autopilot lineage metadata including goal, iteration, score, and evaluator feedback
+- Image detail modal with prompt copy, metadata display, reference previews, lineage timeline, and step selection
+- Lineage replay into Generate for generation, reference-generation, and Autopilot steps
+- Lineage replay into Editor for replayable edit branches
+- Fork-from-step actions for branching future saves from any recorded lineage step
+- Autopilot lineage metadata including goal, iteration number, score, and evaluator feedback
 - Previous and next navigation from the detail modal with keyboard arrow support
 - Create Similar to transfer prompt settings and references back into Generate
+
+The lineage detail view can display the currently selected archive image, an ancestor step, or a stored Autopilot iteration preview from the lineage metadata.
 
 ### Editor
 
 The Editor view supports:
 
 - Brightness, contrast, and saturation controls
-- Quick visual filters
-- AI transformation prompts applied to the current image
+- Quick filters: `Normal`, `B&W`, `Sepia`, and `Soft`
+- AI transformation prompts applied to the current canvas image
 - Optional reference images for edit guidance
 - Save changes in place
 - Save as copy
 - Reset controls back to defaults
 
-Editor settings persist locally between sessions.
+Editor adjustments persist locally per image, and editor saves are recorded in lineage as overwrite, save-as-copy, or AI-edit steps depending on the action taken.
 
 ### Settings
 
 The Settings view supports:
 
 - Local OpenAI API key storage in the browser
-- Immediate generation/edit availability once a key is stored
+- Saved-key status feedback and masked key entry
+- Immediate generation and editing availability once a key is stored
 
-The sidebar also includes a persistent light and dark theme toggle.
+The sidebar also includes a persistent theme toggle and a collapsible navigation rail.
 
 ## Storage Model
 
 The application is designed as a local-first web app.
 
 - OpenAI API keys are stored in browser `localStorage`
-- View state and generation/editor preferences are stored in browser `localStorage`
-- Generated images and reference image payloads are stored in IndexedDB via `idb-keyval`
-- Archive metadata is stored in a browser-local SQLite database via SQLocal
+- View state, generation settings, Autopilot settings, archive search, and editor adjustments are stored in browser `localStorage`
+- Current generated results and transferred reference payloads are stored in IndexedDB via `idb-keyval`
+- Archive image metadata is stored in a browser-local SQLite database via SQLocal
 - Lineage metadata is stored in a browser-local SQLite database via SQLocal
-- Exported archive bundles include `archive-manifest.json` and `lineage-manifest.json`
+- Archive ZIP bundles contain `archive-manifest.json` and `lineage-manifest.json`
 
 There is no custom backend service in this repository.
 
 ## OpenAI Integration
 
-The app calls the OpenAI Images API directly from the browser.
+The app calls the OpenAI API directly from the browser.
 
 - Prompt-only generations use `POST /v1/images/generations`
 - Reference-based generations and editor transforms use `POST /v1/images/edits`
 - Autopilot goal translation, evaluation, and prompt refinement use `POST /v1/responses`
-- The configured model is `gpt-image-1.5`
-- Autopilot language and vision reasoning uses `gpt-4o`
-- The app expects base64 image output and converts it to browser-safe data URLs for preview and persistence
+- The image generation model is `gpt-image-1.5`
+- Autopilot reasoning uses `gpt-5.4`
+- The app requests a single image per generation or edit operation
+- Image responses are consumed as base64 payloads and converted into browser-safe data URLs for preview and persistence
 
 Additional implementation details live in:
 
@@ -191,7 +200,7 @@ Additional implementation details live in:
 
 ## Privacy and Security
 
-- This project is designed for local use in the browser
+- The project is designed for local use in the browser
 - Secrets are not committed to the repository
 - The repository does not ship with embedded API keys, `.env` files, or private key material
 - Sensitive OpenAI request payloads are not logged by the client helper
@@ -202,26 +211,38 @@ If you fork this project, keep the same standard for your own commits and issues
 
 ```text
 src/
-  autopilot/       Autopilot orchestration and GPT-4o helpers
-  components/      Reusable UI components
-  db/              SQLocal adapter and archive types
-  generate-session Generate draft, save, replay, and autopilot session glue
-  hooks/           Local state and archive hooks
-  lineage/         Lineage storage, replay, timeline, and export helpers
-  services/        IndexedDB-backed storage service
-  utils/           OpenAI and file helpers
+  app/             App-level controller, notifications, and persisted preferences
+  archive/         Archive storage, ZIP export/import helpers, and archive controllers
+  autopilot/       Autopilot orchestration and GPT-5.4 helper modules
+  components/      Reusable UI components and modals
+  db/              SQLocal bootstrap and persistence types
+  editor/          Canvas editing, editor sessions, and save flows
+  generate-session Generate draft persistence, save logic, and Autopilot glue
+  image-workflow/  OpenAI request orchestration for generate and edit flows
+  lineage/         Lineage storage, replay, timelines, and metadata helpers
+  references/      Reference image collection state and hydration helpers
+  services/        IndexedDB-backed storage adapters
+  utils/           OpenAI and file conversion helpers
   views/           Generate, Archive, Editor, and Settings views
 docs/
-  10x-improvement-plan.md
+  agentic-creative-autopilot-prd.md
+  creative-lineage-autopilot-qa-plan.md
+  creative-lineage-graph-prd.md
   openAI_create_image.md
   openAI_image_generation.md
+  prompt.md
+plans/
+  creative-lineage-and-autopilot.md
 ```
 
 ## Documentation
 
-- `docs/10x-improvement-plan.md` outlines the roadmap
-- `docs/openAI_image_generation.md` describes the current OpenAI integration model
-- `docs/openAI_create_image.md` maps UI actions to the request formats used by the app
+- `docs/openAI_image_generation.md` describes the current OpenAI integration and request routing
+- `docs/openAI_create_image.md` maps Generate, Editor, and Autopilot flows to the request payloads used by the app
+- `docs/creative-lineage-graph-prd.md` captures the lineage product requirements
+- `docs/agentic-creative-autopilot-prd.md` captures the Autopilot product requirements
+- `docs/creative-lineage-autopilot-qa-plan.md` outlines QA coverage for lineage and Autopilot flows
+- `plans/creative-lineage-and-autopilot.md` summarizes the implementation plan behind the current lineage and Autopilot architecture
 
 ## License
 

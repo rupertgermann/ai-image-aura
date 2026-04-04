@@ -169,15 +169,15 @@ Add an import/restore path that reads the manifest on ZIP import, validates that
 
 Introduce two standalone, dependency-injected modules:
 
-**`SatisfactionEvaluator`**: accepts an image data URL, a goal string, and an API key. Calls GPT-4o vision with a versioned, centrally-owned system prompt. Returns `{ score: number, feedback: string[] }`. Handles malformed or partial responses without throwing — returns a low score with a generic feedback entry on parse failure. The system prompt version is a named constant in the module.
+**`SatisfactionEvaluator`**: accepts an image data URL, a goal string, and an API key. Calls GPT-5.4 vision with a versioned, centrally-owned system prompt. Returns `{ score: number, feedback: string[] }`. Handles malformed or partial responses without throwing — returns a low score with a generic feedback entry on parse failure. The system prompt version is a named constant in the module.
 
-**`PromptRefiner`**: accepts a goal string, a current prompt string, and a feedback array. Calls GPT-4o with a fixed system prompt designed to return a single improved generation prompt. Returns the refined prompt string. Propagates API errors to the caller. The system prompt is versioned and owned by the module.
+**`PromptRefiner`**: accepts a goal string, a current prompt string, and a feedback array. Calls GPT-5.4 with a fixed system prompt designed to return a single improved generation prompt. Returns the refined prompt string. Propagates API errors to the caller. The system prompt is versioned and owned by the module.
 
 Neither module has any UI dependency. Both accept an injected API client so they are fully testable with mocked responses.
 
 ### Acceptance criteria
 
-- [x] `SatisfactionEvaluator` returns a `{ score, feedback }` object for a valid GPT-4o response
+- [x] `SatisfactionEvaluator` returns a `{ score, feedback }` object for a valid GPT-5.4 response
 - [x] `SatisfactionEvaluator` returns a graceful low-score result (no throw) when the response is malformed or missing required fields
 - [x] `PromptRefiner` returns a non-empty string prompt given a goal and feedback
 - [x] `PromptRefiner` propagates API errors correctly to the caller
@@ -234,7 +234,7 @@ Add a mode toggle to `GenerateView` with two options: **Single Shot** (existing 
 
 **Autopilot mode UI**:
 - Goal field: multi-line free-text input for the creative intent statement. Goal text is persisted between sessions.
-- Prompt field: auto-populated by a lightweight GPT-4o translation of the goal on demand, but fully editable by the user.
+- Prompt field: auto-populated by a lightweight GPT-5.4 translation of the goal on demand, but fully editable by the user.
 - Settings carry over from the existing generation settings panel (quality, aspect ratio, background, style, lighting, palette) — no re-configuration needed.
 - Cost disclosure panel: shown before each run, stating configured max iterations and maximum API call count. User must confirm before the run begins.
 - Max iterations control (default 4, ceiling 8) and satisfaction threshold control (default 90/100), both persisted in local state.
