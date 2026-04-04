@@ -1,9 +1,8 @@
 import React from 'react';
+import { downloadArchiveImagesAsZip } from '../archive/ArchiveExport';
 import ImageCard from '../components/ImageCard';
 import type { ArchiveImage } from '../db/types';
-import { downloadBlob } from '../download/download';
 import { Image as ImageIcon, Search, Download, Trash2, X, Loader2 } from 'lucide-react';
-import JSZip from 'jszip';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface ArchiveViewProps {
@@ -16,6 +15,7 @@ interface ArchiveViewProps {
     onToggleSelectAll: (ids: string[]) => void;
     onClearSelection: () => void;
     onDeleteSelected: () => void;
+    onBulkDownloadError: (error: Error) => void;
 }
 
 const ArchiveView: React.FC<ArchiveViewProps> = ({
@@ -28,6 +28,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
     onToggleSelectAll,
     onClearSelection,
     onDeleteSelected,
+    onBulkDownloadError,
 }) => {
     const [search, setSearch] = useLocalStorage('archive_search', '');
     const [isZipping, setIsZipping] = React.useState(false);
@@ -37,25 +38,9 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
 
         setIsZipping(true);
         try {
-            const zip = new JSZip();
-            const selectedImages = images.filter(img => selectedIds.has(img.id));
-
-            for (const img of selectedImages) {
-                // Fetch the image data
-                const response = await fetch(img.url);
-                const blob = await response.blob();
-
-                // Add to zip with a descriptive name
-                const filename = `aura-${img.id}.png`;
-                zip.file(filename, blob);
-            }
-
-            // Generate and download
-            const content = await zip.generateAsync({ type: 'blob' });
-            downloadBlob(content, `aura-collection-${new Date().getTime()}.zip`);
+            await downloadArchiveImagesAsZip(images.filter((image) => selectedIds.has(image.id)));
         } catch (error) {
-            console.error('Failed to create ZIP:', error);
-            // Could add a toast here if available in this view
+            onBulkDownloadError(error instanceof Error ? error : new Error('Failed to create ZIP archive'));
         } finally {
             setIsZipping(false);
         }
