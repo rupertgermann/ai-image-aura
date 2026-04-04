@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
+import { useEditorCanvas } from '../editor/useEditorCanvas';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import { useEditorSession } from '../editor/useEditorSession';
 
@@ -11,8 +12,6 @@ interface EditorViewProps {
 }
 
 const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
@@ -36,44 +35,10 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         resetAdjustments,
         serializeReferences,
     } = useEditorSession(image);
-
-    const applyFilters = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas || !image || !currentImageUrl) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = currentImageUrl;
-        img.onload = () => {
-            ctx.filter = canvasFilter;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(img, 0, 0);
-        };
-    }, [canvasFilter, currentImageUrl, image]);
-
-    useEffect(() => {
-        if (!image) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = currentImageUrl || '';
-        img.onload = () => {
-            canvas.width = img.width;
-            canvas.height = img.height;
-            applyFilters();
-        };
-    }, [applyFilters, currentImageUrl, image]);
+    const { canvasRef, exportDataUrl, exportBlob } = useEditorCanvas(currentImageUrl, canvasFilter);
 
     const handleExport = async (isCopy: boolean = false) => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const dataUrl = canvas.toDataURL('image/png');
+        const dataUrl = exportDataUrl();
 
         const refDataUrls = await serializeReferences();
 
@@ -81,16 +46,13 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
     };
 
     const handleAiEdit = async () => {
-        if (!apiKey || !aiPrompt.trim() || !canvasRef.current || !currentImageUrl) return;
+        if (!apiKey || !aiPrompt.trim() || !currentImageUrl) return;
 
         setAiLoading(true);
         setAiError(null);
 
         try {
-            const canvas = canvasRef.current;
-            const blob = await new Promise<Blob>((resolve, reject) => {
-                canvas.toBlob((b: Blob | null) => b ? resolve(b) : reject(new Error('Canvas conversion failed')), 'image/png');
-            });
+            const blob = await exportBlob();
 
             const newUrl = await imageWorkflow.edit({
                 apiKey,
