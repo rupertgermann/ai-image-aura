@@ -1,55 +1,21 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useArchiveController } from '../archive/useArchiveController';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore } from '../generate-session/GenerateSession';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useAppNotifications } from './useAppNotifications';
+import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
-import type { ToastType } from '../components/Toast';
-import type { AppView } from '../types';
-
-interface AppToast {
-    id: string;
-    message: string;
-    type: ToastType;
-}
 
 export function useAppController() {
-    const [currentView, setCurrentView] = useLocalStorage<AppView>('aura_current_view', 'generate');
-    const { images, addImage, deleteImage } = useImageArchive();
-    const [apiKey, setApiKey] = useLocalStorage<string>('aura_openapi_key', '');
+    const { currentView, apiKey, theme, changeView, updateApiKey, toggleTheme } = useAppPreferences();
+    const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
+    const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
+        notifyError(error, `Archive ${operation} failed`);
+    }, [notifyError]);
+    const { images, addImage, deleteImage } = useImageArchive({
+        onError: handleArchiveError,
+    });
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
-    const [toasts, setToasts] = useState<AppToast[]>([]);
-    const [theme, setTheme] = useLocalStorage<'dark' | 'light'>('aura_theme', 'dark');
-
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-    }, [theme]);
-
-    useEffect(() => {
-        if (!apiKey) {
-            const legacyKey = localStorage.getItem('openai_api_key');
-            if (legacyKey) {
-                setApiKey(legacyKey);
-            }
-        }
-    }, [apiKey, setApiKey]);
-
-    const addToast = useCallback((message: string, type: ToastType = 'info') => {
-        const id = crypto.randomUUID();
-        setToasts((currentToasts) => [...currentToasts, { id, message, type }]);
-    }, []);
-
-    const removeToast = useCallback((id: string) => {
-        setToasts((currentToasts) => currentToasts.filter((toast) => toast.id !== id));
-    }, []);
-
-    const changeView = useCallback((view: AppView) => {
-        setCurrentView(view);
-    }, [setCurrentView]);
-
-    const updateApiKey = useCallback((key: string) => {
-        setApiKey(key);
-    }, [setApiKey]);
 
     const saveImage = useCallback(async (image: ArchiveImage) => {
         await addImage(image);
@@ -66,8 +32,8 @@ export function useAppController() {
 
     const editImage = useCallback((image: ArchiveImage) => {
         setEditingImage(image);
-        setCurrentView('editor');
-    }, [setCurrentView]);
+        changeView('editor');
+    }, [changeView]);
 
     const saveEditedImage = useCallback(async (updatedUrl: string, isCopy: boolean = false, references?: string[]) => {
         if (!editingImage) {
@@ -92,19 +58,19 @@ export function useAppController() {
             addToast('Masterpiece updated', 'success');
         }
 
-        setCurrentView('archive');
+        changeView('archive');
         setEditingImage(null);
-    }, [addImage, addToast, editingImage, setCurrentView]);
+    }, [addImage, addToast, changeView, editingImage]);
 
     const createSimilar = useCallback(async (image: ArchiveImage) => {
-        await generateSessionStore.transferFromArchive(image);
-        setCurrentView('generate');
-        addToast('Settings & references transferred', 'info');
-    }, [addToast, setCurrentView]);
-
-    const toggleTheme = useCallback(() => {
-        setTheme((currentTheme) => currentTheme === 'dark' ? 'light' : 'dark');
-    }, [setTheme]);
+        try {
+            await generateSessionStore.transferFromArchive(image);
+            changeView('generate');
+            addToast('Settings & references transferred', 'info');
+        } catch (error) {
+            notifyError(error, 'Failed to transfer image settings');
+        }
+    }, [addToast, changeView, notifyError]);
 
     const archiveController = useArchiveController({
         images,
@@ -138,6 +104,7 @@ export function useAppController() {
             onToggleSelectAll: archiveController.toggleSelectAll,
             onClearSelection: archiveController.clearSelection,
             onDeleteSelected: () => archiveController.requestDelete(Array.from(archiveController.selectedIds)),
+            onBulkDownloadError: (error: Error) => notifyError(error, 'Failed to export archive ZIP'),
         },
         editorViewProps: {
             key: editingImage?.id ?? 'empty-editor',

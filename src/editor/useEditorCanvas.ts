@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function useEditorCanvas(currentImageUrl: string | null, canvasFilter: string) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [readyToken, setReadyToken] = useState<string | null>(null);
+    const canvasToken = currentImageUrl ? `${currentImageUrl}:${canvasFilter}` : null;
+    const isReady = readyToken === canvasToken;
 
     useEffect(() => {
         if (!currentImageUrl) {
@@ -32,12 +35,18 @@ export function useEditorCanvas(currentImageUrl: string | null, canvasFilter: st
             context.filter = canvasFilter;
             context.clearRect(0, 0, canvas.width, canvas.height);
             context.drawImage(image, 0, 0);
+            setReadyToken(canvasToken);
+        };
+        image.onerror = () => {
+            if (!cancelled) {
+                setReadyToken(null);
+            }
         };
 
         return () => {
             cancelled = true;
         };
-    }, [canvasFilter, currentImageUrl]);
+    }, [canvasFilter, canvasToken, currentImageUrl]);
 
     const exportDataUrl = useCallback(() => {
         const canvas = canvasRef.current;
@@ -68,6 +77,7 @@ export function useEditorCanvas(currentImageUrl: string | null, canvasFilter: st
 
     return {
         canvasRef,
+        isReady,
         exportDataUrl,
         exportBlob,
     };

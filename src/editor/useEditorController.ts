@@ -3,6 +3,7 @@ import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 
 interface UseEditorControllerOptions {
     apiKey: string | null;
+    isCanvasReady: boolean;
     currentImageUrl: string | null;
     setCurrentImageUrl: (url: string) => void;
     referenceImages: File[];
@@ -15,6 +16,7 @@ interface UseEditorControllerOptions {
 
 export function useEditorController({
     apiKey,
+    isCanvasReady,
     currentImageUrl,
     setCurrentImageUrl,
     referenceImages,
@@ -30,13 +32,21 @@ export function useEditorController({
     const [isDragging, setIsDragging] = useState(false);
 
     const save = useCallback(async (isCopy: boolean = false) => {
-        const dataUrl = exportDataUrl();
-        const references = await serializeReferences();
-        await Promise.resolve(onSave(dataUrl, isCopy, references));
-    }, [exportDataUrl, onSave, serializeReferences]);
+        if (!isCanvasReady) {
+            return;
+        }
+
+        try {
+            const dataUrl = exportDataUrl();
+            const references = await serializeReferences();
+            await Promise.resolve(onSave(dataUrl, isCopy, references));
+        } catch (err: unknown) {
+            setAiError(err instanceof Error ? err.message : 'Failed to save image');
+        }
+    }, [exportDataUrl, isCanvasReady, onSave, serializeReferences]);
 
     const applyAiEdit = useCallback(async () => {
-        if (!apiKey || !aiPrompt.trim() || !currentImageUrl) {
+        if (!apiKey || !aiPrompt.trim() || !currentImageUrl || !isCanvasReady) {
             return;
         }
 
@@ -60,7 +70,7 @@ export function useEditorController({
         } finally {
             setAiLoading(false);
         }
-    }, [aiPrompt, apiKey, currentImageUrl, exportBlob, referenceImages, setCurrentImageUrl]);
+    }, [aiPrompt, apiKey, currentImageUrl, exportBlob, isCanvasReady, referenceImages, setCurrentImageUrl]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -88,6 +98,7 @@ export function useEditorController({
         aiLoading,
         aiError,
         isDragging,
+        isCanvasReady,
         save,
         applyAiEdit,
         handleDragOver,

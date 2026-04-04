@@ -94,25 +94,29 @@ export function useGenerateController({
             return;
         }
 
-        const references = await serializeReferences();
-        const { width, height } = getImageDimensions(draft.aspectRatio);
-        await Promise.resolve(onSaveImage({
-            id: crypto.randomUUID(),
-            url: currentResult,
-            prompt: draft.prompt,
-            model: 'gpt-image-1.5',
-            timestamp: new Date().toISOString(),
-            width,
-            height,
-            quality: draft.quality,
-            aspectRatio: draft.aspectRatio,
-            background: draft.background,
-            style: draft.style,
-            lighting: draft.lighting,
-            palette: draft.palette,
-            references,
-        }));
-        updateDraft({ isSaved: true });
+        try {
+            const references = await serializeReferences();
+            const { width, height } = getImageDimensions(draft.aspectRatio);
+            await Promise.resolve(onSaveImage({
+                id: crypto.randomUUID(),
+                url: currentResult,
+                prompt: draft.prompt,
+                model: 'gpt-image-1.5',
+                timestamp: new Date().toISOString(),
+                width,
+                height,
+                quality: draft.quality,
+                aspectRatio: draft.aspectRatio,
+                background: draft.background,
+                style: draft.style,
+                lighting: draft.lighting,
+                palette: draft.palette,
+                references,
+            }));
+            updateDraft({ isSaved: true });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to save image');
+        }
     }, [currentResult, draft, onSaveImage, serializeReferences, updateDraft]);
 
     const download = useCallback(() => {
