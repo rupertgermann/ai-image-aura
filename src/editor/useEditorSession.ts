@@ -9,10 +9,11 @@ const DEFAULT_SATURATION = 100;
 const DEFAULT_FILTER = 'none';
 
 export function useEditorSession(image: ArchiveImage | null) {
-    const [brightness, setBrightness] = useLocalStorage('editor_brightness', DEFAULT_BRIGHTNESS);
-    const [contrast, setContrast] = useLocalStorage('editor_contrast', DEFAULT_CONTRAST);
-    const [saturation, setSaturation] = useLocalStorage('editor_saturation', DEFAULT_SATURATION);
-    const [filter, setFilter] = useLocalStorage('editor_filter', DEFAULT_FILTER);
+    const sessionKey = image?.id ?? 'default';
+    const [brightness, setBrightness] = useLocalStorage(`editor_${sessionKey}_brightness`, DEFAULT_BRIGHTNESS);
+    const [contrast, setContrast] = useLocalStorage(`editor_${sessionKey}_contrast`, DEFAULT_CONTRAST);
+    const [saturation, setSaturation] = useLocalStorage(`editor_${sessionKey}_saturation`, DEFAULT_SATURATION);
+    const [filter, setFilter] = useLocalStorage(`editor_${sessionKey}_filter`, DEFAULT_FILTER);
     const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(() => image?.url ?? null);
     const referenceCollection = useReferenceImageCollection({ initialDataUrls: image?.references });
 

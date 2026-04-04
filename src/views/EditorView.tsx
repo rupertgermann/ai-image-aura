@@ -31,13 +31,14 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         resetAdjustments,
         serializeReferences,
     } = useEditorSession(image);
-    const { canvasRef, exportDataUrl, exportBlob } = useEditorCanvas(currentImageUrl, canvasFilter);
+    const { canvasRef, isReady, exportDataUrl, exportBlob } = useEditorCanvas(currentImageUrl, canvasFilter);
     const {
         aiPrompt,
         setAiPrompt,
         aiLoading,
         aiError,
         isDragging,
+        isCanvasReady,
         save,
         applyAiEdit,
         handleDragOver,
@@ -45,6 +46,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         handleDrop,
     } = useEditorController({
         apiKey,
+        isCanvasReady: isReady,
         currentImageUrl,
         setCurrentImageUrl,
         referenceImages,
@@ -160,12 +162,12 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                                 onChange={(e) => setAiPrompt(e.target.value)}
                                 className="aura-input"
                                 style={{ minHeight: '100px', resize: 'vertical' }}
-                                disabled={aiLoading || !apiKey}
+                                disabled={aiLoading || !apiKey || !isCanvasReady}
                             />
                             <button
                                 className="aura-btn aura-btn--primary"
                                 onClick={() => { void applyAiEdit(); }}
-                                disabled={aiLoading || !aiPrompt.trim() || !apiKey}
+                                disabled={aiLoading || !aiPrompt.trim() || !apiKey || !isCanvasReady}
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
@@ -213,10 +215,10 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                     </div>
 
                     <div className="editor-actions">
-                        <button className="aura-btn aura-btn--primary" onClick={() => { void save(false); }}>
+                        <button className="aura-btn aura-btn--primary" onClick={() => { void save(false); }} disabled={!isCanvasReady}>
                             <Save size={18} /> Save Changes
                         </button>
-                        <button className="aura-btn aura-btn--glass" onClick={() => { void save(true); }}>
+                        <button className="aura-btn aura-btn--glass" onClick={() => { void save(true); }} disabled={!isCanvasReady}>
                             <Copy size={18} /> Save as Copy
                         </button>
                         <button className="aura-btn aura-btn--glass" onClick={resetAdjustments}>
