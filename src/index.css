@@ -1064,9 +1064,9 @@ textarea {
 }
 
 .modal-content {
-    width: 95vw;
-    max-width: 1400px;
-    height: 85vh;
+    width: 100vw;
+    max-width: none;
+    height: 99vh;
     display: flex;
     position: relative;
     overflow: hidden;
@@ -1152,9 +1152,9 @@ textarea {
 
 .sidebar-toggle {
     position: absolute;
-    top: 50%;
+    top: 20px;
     right: 0;
-    transform: translate(50%, -50%);
+    transform: translateX(50%);
     width: 32px;
     height: 64px;
     background: var(--accent-primary);
@@ -1174,7 +1174,7 @@ textarea {
 .sidebar-closed .sidebar-toggle {
     right: 0;
     border-radius: 8px;
-    transform: translate(0, -50%);
+    transform: translateX(0);
     margin-right: 12px;
 }
 
