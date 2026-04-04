@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import SettingsView from './views/SettingsView'
 import GenerateView from './views/GenerateView'
@@ -6,137 +5,34 @@ import ArchiveView from './views/ArchiveView'
 import EditorView from './views/EditorView'
 import ImageDetailModal from './components/ImageDetailModal'
 import Toast from './components/Toast'
-import type { ToastType } from './components/Toast'
 import ConfirmModal from './components/ConfirmModal'
-import { useArchiveController } from './archive/useArchiveController'
-import { generateSessionStore } from './generate-session/GenerateSession'
-import { useLocalStorage } from './hooks/useLocalStorage'
-import { useImageArchive } from './hooks/useImageArchive'
-import type { ArchiveImage } from './db/types'
-import type { AppView } from './types'
+import { useAppController } from './app/useAppController'
 
 function App() {
-    const [currentView, setCurrentView] = useLocalStorage<AppView>('aura_current_view', 'generate')
-    const { images, addImage, deleteImage } = useImageArchive()
-    const [apiKey, setApiKey] = useLocalStorage<string>('aura_openapi_key', '')
-    const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null)
-    const [toasts, setToasts] = useState<{ id: string; message: string; type: ToastType }[]>([])
-    const [theme, setTheme] = useLocalStorage<'dark' | 'light'>('aura_theme', 'dark')
-
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme)
-    }, [theme])
-
-    const addToast = (message: string, type: ToastType = 'info') => {
-        const id = crypto.randomUUID()
-        setToasts(prev => [...prev, { id, message, type }])
-    }
-
-    const removeToast = (id: string) => {
-        setToasts(prev => prev.filter(t => t.id !== id))
-    }
-
-    // Migration for legacy API keys
-    useEffect(() => {
-        if (!apiKey) {
-            const legacyKey = localStorage.getItem('openai_api_key');
-            if (legacyKey) {
-                setApiKey(legacyKey);
-                // We leave the legacy key for safety but the app now uses aura_openapi_key
-            }
-        }
-    }, [apiKey, setApiKey]);
-
-    const handleViewChange = (view: AppView) => {
-        setCurrentView(view)
-    }
-
-    const handleApiKeyChange = (key: string) => {
-        setApiKey(key)
-    }
-
-    const handleSaveImage = async (image: ArchiveImage) => {
-        await addImage(image)
-        addToast('Image saved to archive', 'success')
-    }
-
-    const handleDeleteImage = async (id: string) => {
-        await deleteImage(id)
-    }
-
-    const handleDeleteImages = async (ids: string[]) => {
-        for (const id of ids) {
-            await handleDeleteImage(id)
-        }
-
-        addToast(ids.length === 1 ? 'Image deleted permanently' : `${ids.length} images deleted permanently`, 'info')
-    }
-
-    const handleEditImage = (image: ArchiveImage) => {
-        setEditingImage(image)
-        setCurrentView('editor')
-    }
-
-    const handleSaveEditedImage = async (updatedUrl: string, isCopy: boolean = false, references?: string[]) => {
-        if (!editingImage) return
-
-        if (isCopy) {
-            const newImage = {
-                ...editingImage,
-                id: crypto.randomUUID(),
-                url: updatedUrl,
-                timestamp: new Date().toISOString(),
-                references: references || editingImage.references
-            }
-            await addImage(newImage)
-            addToast('Design saved as new copy', 'success')
-        } else {
-            const updatedImage = {
-                ...editingImage,
-                url: updatedUrl,
-                references: references || editingImage.references
-            }
-            await addImage(updatedImage)
-            addToast('Masterpiece updated', 'success')
-        }
-
-        setCurrentView('archive')
-        setEditingImage(null)
-    }
-
-    const handleCreateSimilar = async (image: ArchiveImage) => {
-        await generateSessionStore.transferFromArchive(image)
-        setCurrentView('generate')
-        addToast('Settings & references transferred', 'info')
-    }
-
-    const archiveController = useArchiveController({
-        images,
-        onDeleteImages: handleDeleteImages,
-        onEditImage: handleEditImage,
-        onCreateSimilar: handleCreateSimilar,
-    })
+    const {
+        currentView,
+        theme,
+        toasts,
+        archiveController,
+        changeView,
+        toggleTheme,
+        removeToast,
+        generateViewProps,
+        archiveViewProps,
+        editorViewProps,
+        settingsViewProps,
+    } = useAppController()
 
     const renderView = () => {
         switch (currentView) {
             case 'generate':
-                return <GenerateView apiKey={apiKey} onSaveImage={handleSaveImage} />;
+                return <GenerateView {...generateViewProps} />;
             case 'archive':
-                return <ArchiveView
-                    images={images}
-                    selectedIds={archiveController.selectedIds}
-                    onDeleteImage={(id) => archiveController.requestDelete([id])}
-                    onEditImage={archiveController.editImage}
-                    onOpenImage={archiveController.openImage}
-                    onToggleSelection={archiveController.toggleSelection}
-                    onToggleSelectAll={archiveController.toggleSelectAll}
-                    onClearSelection={archiveController.clearSelection}
-                    onDeleteSelected={() => archiveController.requestDelete(Array.from(archiveController.selectedIds))}
-                />;
+                return <ArchiveView {...archiveViewProps} />;
             case 'editor':
-                return <EditorView key={editingImage?.id ?? 'empty-editor'} image={editingImage} apiKey={apiKey} onSave={handleSaveEditedImage} />;
+                return <EditorView {...editorViewProps} />;
             case 'settings':
-                return <SettingsView apiKey={apiKey} onApiKeyChange={handleApiKeyChange} />;
+                return <SettingsView {...settingsViewProps} />;
             default:
                 return <div>View not found</div>;
         }
@@ -146,9 +42,9 @@ function App() {
         <div className="app-container">
             <Sidebar
                 currentView={currentView}
-                onViewChange={handleViewChange}
+                onViewChange={changeView}
                 theme={theme}
-                onThemeToggle={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+                onThemeToggle={toggleTheme}
             />
             <main className="main-content">
                 <div className="view-wrapper">
