@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 
 const DEFAULT_BRIGHTNESS = 100;
 const DEFAULT_CONTRAST = 100;
@@ -14,53 +14,11 @@ export function useEditorSession(image: ArchiveImage | null) {
     const [saturation, setSaturation] = useLocalStorage('editor_saturation', DEFAULT_SATURATION);
     const [filter, setFilter] = useLocalStorage('editor_filter', DEFAULT_FILTER);
     const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(() => image?.url ?? null);
-    const [referenceImages, setReferenceImages] = useState<File[]>(() => {
-        return image?.references ? imageWorkflow.hydrateReferences(image.references) : [];
-    });
-    const [referencePreviews, setReferencePreviews] = useState<string[]>(() => image?.references ?? []);
-    const referencePreviewsRef = useRef(referencePreviews);
-
-    useEffect(() => {
-        referencePreviewsRef.current = referencePreviews;
-    }, [referencePreviews]);
-
-    useEffect(() => {
-        return () => {
-            referencePreviewsRef.current.forEach((url) => {
-                if (url.startsWith('blob:')) {
-                    URL.revokeObjectURL(url);
-                }
-            });
-        };
-    }, []);
+    const referenceCollection = useReferenceImageCollection({ initialDataUrls: image?.references });
 
     const canvasFilter = useMemo(() => {
         return `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) ${filter !== 'none' ? filter : ''}`;
     }, [brightness, contrast, saturation, filter]);
-
-    const addReferenceFiles = (files: File[]) => {
-        if (files.length === 0) {
-            return;
-        }
-
-        setReferenceImages((currentImages) => [...currentImages, ...files]);
-        setReferencePreviews((currentPreviews) => [
-            ...currentPreviews,
-            ...files.map((file) => URL.createObjectURL(file)),
-        ]);
-    };
-
-    const removeReferenceAt = (index: number) => {
-        setReferenceImages((currentImages) => currentImages.filter((_, currentIndex) => currentIndex !== index));
-        setReferencePreviews((currentPreviews) => {
-            const previewToRemove = currentPreviews[index];
-            if (previewToRemove?.startsWith('blob:')) {
-                URL.revokeObjectURL(previewToRemove);
-            }
-
-            return currentPreviews.filter((_, currentIndex) => currentIndex !== index);
-        });
-    };
 
     const resetAdjustments = () => {
         setBrightness(DEFAULT_BRIGHTNESS);
@@ -70,7 +28,7 @@ export function useEditorSession(image: ArchiveImage | null) {
     };
 
     const serializeReferences = () => {
-        return imageWorkflow.serializeReferences(referenceImages);
+        return referenceCollection.serialize();
     };
 
     return {
@@ -85,10 +43,10 @@ export function useEditorSession(image: ArchiveImage | null) {
         canvasFilter,
         currentImageUrl,
         setCurrentImageUrl,
-        referenceImages,
-        referencePreviews,
-        addReferenceFiles,
-        removeReferenceAt,
+        referenceImages: referenceCollection.files,
+        referencePreviews: referenceCollection.previews,
+        addReferenceFiles: referenceCollection.addFiles,
+        removeReferenceAt: referenceCollection.removeAt,
         resetAdjustments,
         serializeReferences,
     };
