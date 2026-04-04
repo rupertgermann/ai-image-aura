@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2 } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
+import { downloadArchiveImage } from '../download/download';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
     onClose: () => void;
-    onEdit: (image: ArchiveImage) => void;
-    onDelete: (id: string) => void;
+    onEdit: () => void;
+    onDelete: () => void;
     onCreateSimilar: () => void;
     onNext: () => void;
     onPrevious: () => void;
@@ -27,10 +28,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     };
 
     const downloadImage = () => {
-        const link = document.createElement('a');
-        link.href = image.url;
-        link.download = `aura-${image.id}.png`;
-        link.click();
+        downloadArchiveImage(image);
     };
 
     React.useEffect(() => {
@@ -58,7 +56,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             <button className="aura-btn aura-btn--primary" onClick={downloadImage}>
                                 <Download size={18} /> Download
                             </button>
-                            <button className="aura-btn aura-btn--glass" onClick={() => onEdit(image)}>
+                            <button className="aura-btn aura-btn--glass" onClick={onEdit}>
                                 <Edit2 size={18} /> Edit
                             </button>
                         </div>
@@ -142,7 +140,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 <Copy size={18} /> Copy Prompt
                             </button>
                             <div className="divider" style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
-                            <button className="aura-btn aura-btn--danger" onClick={() => onDelete(image.id)} style={{ width: '100%', padding: '1rem' }}>
+                            <button className="aura-btn aura-btn--danger" onClick={onDelete} style={{ width: '100%', padding: '1rem' }}>
                                 <Trash2 size={18} /> Delete Permanently
                             </button>
                         </div>

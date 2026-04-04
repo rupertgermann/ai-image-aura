@@ -1,87 +1,56 @@
 import React from 'react';
+import { downloadArchiveImagesAsZip } from '../archive/ArchiveExport';
 import ImageCard from '../components/ImageCard';
 import type { ArchiveImage } from '../db/types';
 import { Image as ImageIcon, Search, Download, Trash2, X, Loader2 } from 'lucide-react';
-import JSZip from 'jszip';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import ConfirmModal from '../components/ConfirmModal';
 
 interface ArchiveViewProps {
     images: ArchiveImage[];
+    selectedIds: Set<string>;
     onDeleteImage: (id: string) => void;
     onEditImage: (image: ArchiveImage) => void;
-    onSelectImage: (image: ArchiveImage) => void;
+    onOpenImage: (image: ArchiveImage) => void;
+    onToggleSelection: (id: string) => void;
+    onToggleSelectAll: (ids: string[]) => void;
+    onClearSelection: () => void;
+    onDeleteSelected: () => void;
+    onBulkDownloadError: (error: Error) => void;
 }
 
-const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEditImage, onSelectImage }) => {
+const ArchiveView: React.FC<ArchiveViewProps> = ({
+    images,
+    selectedIds,
+    onDeleteImage,
+    onEditImage,
+    onOpenImage,
+    onToggleSelection,
+    onToggleSelectAll,
+    onClearSelection,
+    onDeleteSelected,
+    onBulkDownloadError,
+}) => {
     const [search, setSearch] = useLocalStorage('archive_search', '');
-    const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-    const [isConfirmOpen, setIsConfirmOpen] = React.useState(false);
     const [isZipping, setIsZipping] = React.useState(false);
-
-    const toggleSelect = (id: string) => {
-        setSelectedIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
-    };
-
-    const selectAll = () => {
-        if (selectedIds.size === filteredImages.length) {
-            setSelectedIds(new Set());
-        } else {
-            setSelectedIds(new Set(filteredImages.map(img => img.id)));
-        }
-    };
 
     const handleBulkDownload = async () => {
         if (selectedIds.size === 0) return;
 
         setIsZipping(true);
         try {
-            const zip = new JSZip();
-            const selectedImages = images.filter(img => selectedIds.has(img.id));
-
-            for (const img of selectedImages) {
-                // Fetch the image data
-                const response = await fetch(img.url);
-                const blob = await response.blob();
-
-                // Add to zip with a descriptive name
-                const filename = `aura-${img.id}.png`;
-                zip.file(filename, blob);
-            }
-
-            // Generate and download
-            const content = await zip.generateAsync({ type: 'blob' });
-            const zipUrl = URL.createObjectURL(content);
-
-            const link = document.createElement('a');
-            link.href = zipUrl;
-            link.download = `aura-collection-${new Date().getTime()}.zip`;
-            link.click();
-
-            // Cleanup
-            setTimeout(() => URL.revokeObjectURL(zipUrl), 10000);
+            await downloadArchiveImagesAsZip(images.filter((image) => selectedIds.has(image.id)));
         } catch (error) {
-            console.error('Failed to create ZIP:', error);
-            // Could add a toast here if available in this view
+            onBulkDownloadError(error instanceof Error ? error : new Error('Failed to create ZIP archive'));
         } finally {
             setIsZipping(false);
         }
     };
 
-    const handleBulkDelete = () => {
-        selectedIds.forEach(id => onDeleteImage(id));
-        setSelectedIds(new Set());
-        setIsConfirmOpen(false);
-    };
-
     const filteredImages = images.filter(img =>
         img.prompt.toLowerCase().includes(search.toLowerCase())
     );
+    const filteredImageIds = filteredImages.map((image) => image.id);
+    const allFilteredSelected = filteredImageIds.length > 0 && filteredImageIds.every((id) => selectedIds.has(id));
 
     return (
         <div className="archive-container">
@@ -93,11 +62,11 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                     </div>
                     <div className="header-actions">
                         <button
-                            className={`aura-btn aura-btn--glass ${selectedIds.size === filteredImages.length && filteredImages.length > 0 ? 'aura-btn--primary' : ''}`}
-                            onClick={selectAll}
+                            className={`aura-btn aura-btn--glass ${allFilteredSelected ? 'aura-btn--primary' : ''}`}
+                            onClick={() => onToggleSelectAll(filteredImageIds)}
                             disabled={filteredImages.length === 0}
                         >
-                            {selectedIds.size === filteredImages.length && filteredImages.length > 0 ? 'Deselect All' : 'Select All'}
+                            {allFilteredSelected ? 'Deselect All' : 'Select All'}
                         </button>
                         <div className="search-box glass-panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
                             <Search size={18} className="search-icon" style={{ position: 'absolute', left: '1rem', pointerEvents: 'none' }} />
@@ -130,9 +99,9 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                             image={img}
                             onDelete={onDeleteImage}
                             onEdit={onEditImage}
-                            onClick={() => onSelectImage(img)}
+                            onClick={() => onOpenImage(img)}
                             selected={selectedIds.has(img.id)}
-                            onSelect={() => toggleSelect(img.id)}
+                            onSelect={() => onToggleSelection(img.id)}
                         />
                     ))}
                 </div>
@@ -145,7 +114,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                         <span>Images Selected</span>
                     </div>
                     <div className="bulk-actions">
-                        <button className="aura-btn aura-btn--glass" onClick={() => setSelectedIds(new Set())}>
+                        <button className="aura-btn aura-btn--glass" onClick={onClearSelection}>
                             <X size={18} /> Cancel
                         </button>
                         <button
@@ -156,22 +125,12 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({ images, onDeleteImage, onEdit
                             {isZipping ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
                             {isZipping ? 'Generating ZIP...' : 'Download as ZIP'}
                         </button>
-                        <button className="aura-btn aura-btn--danger" onClick={() => setIsConfirmOpen(true)}>
+                        <button className="aura-btn aura-btn--danger" onClick={onDeleteSelected}>
                             <Trash2 size={18} /> Delete All
                         </button>
                     </div>
                 </div>
             )}
-
-            <ConfirmModal
-                isOpen={isConfirmOpen}
-                title={`Delete ${selectedIds.size} Masterpieces?`}
-                message={`You are about to permanently remove ${selectedIds.size} images and their binary data. This action cannot be reversed.`}
-                confirmText="Delete All"
-                type="danger"
-                onConfirm={handleBulkDelete}
-                onCancel={() => setIsConfirmOpen(false)}
-            />
         </div>
     );
 };

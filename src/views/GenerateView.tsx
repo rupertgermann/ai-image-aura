@@ -1,17 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { storage } from '../services/StorageService';
 import type { ArchiveImage } from '../db/types';
-import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { useGenerateDraft } from '../generate-session/GenerateSession';
+import { useGenerateController } from '../generate-session/useGenerateController';
+import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 
 interface GenerateViewProps {
     apiKey: string | null;
     onSaveImage: (image: ArchiveImage) => void;
 }
-
-const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 
 const EXAMPLE_PROMPTS = [
     "a lobster piloting a vintage scooter",
@@ -60,21 +58,33 @@ const PALETTES = [
 ];
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
-    const [prompt, setPrompt] = useLocalStorage('aura_generate_prompt', '');
-    const [quality, setQuality] = useLocalStorage<'low' | 'medium' | 'high'>('aura_generate_quality', 'medium');
-    const [aspectRatio, setAspectRatio] = useLocalStorage('aura_generate_aspect_ratio', '1024x1024');
-    const [background, setBackground] = useLocalStorage<'opaque' | 'transparent' | 'auto'>('aura_generate_background', 'auto');
-    const [style, setStyle] = useLocalStorage('aura_generate_style', 'none');
-    const [lighting, setLighting] = useLocalStorage('aura_generate_lighting', 'none');
-    const [palette, setPalette] = useLocalStorage('aura_generate_palette', 'none');
-    const [currentResult, setCurrentResult] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [isSaved, setIsSaved] = useLocalStorage('aura_generate_is_saved', false);
-    const [referenceImages, setReferenceImages] = useState<File[]>([]);
-    const [referencePreviews, setReferencePreviews] = useState<string[]>([]);
+    const [draft, setDraft] = useGenerateDraft();
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
+    const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
+    const referenceCollection = useReferenceImageCollection();
+    const referenceImages = referenceCollection.files;
+    const referencePreviews = referenceCollection.previews;
+    const addReferenceFiles = referenceCollection.addFiles;
+    const removeReferenceAt = referenceCollection.removeAt;
+    const {
+        currentResult,
+        loading,
+        error,
+        updateDraft,
+        generate,
+        save,
+        download,
+        clear,
+    } = useGenerateController({
+        apiKey,
+        draft,
+        setDraft,
+        referenceImages,
+        replaceReferences: referenceCollection.replaceWithDataUrls,
+        serializeReferences: referenceCollection.serialize,
+        onSaveImage,
+    });
 
     const handleNextReference = () => {
         if (viewingReferenceIndex === null) return;
@@ -88,118 +98,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         setViewingReferenceIndex((prev) =>
             prev !== null && prev > 0 ? prev - 1 : prev
         );
-    };
-
-    useEffect(() => {
-        storage.load('generate_current_result').then(val => {
-            if (val) setCurrentResult(val);
-        });
-
-        storage.load('generate_transferred_references').then(val => {
-            if (val) {
-                try {
-                    const refs = JSON.parse(val) as string[];
-                    const files = imageWorkflow.hydrateReferences(refs);
-                    setReferenceImages(files);
-                    setReferencePreviews(refs);
-                    // Clear it so it doesn't persist forever
-                    storage.remove('generate_transferred_references');
-                } catch (e) {
-                    console.error('Failed to load transferred references', e);
-                }
-            }
-        });
-
-    }, []);
-
-    useEffect(() => {
-        return () => {
-            // Cleanup previews - only revoke if they are object URLs, not data URLs
-            // Actually, in this component we always use object URLs for new uploads, 
-            // but transferred refs might be data URLs.
-            // dataURL previews don't need revocation.
-            referencePreviews.forEach((url: string) => {
-                if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-            });
-        };
-    }, [referencePreviews]);
-
-    // Sanitize persistent state for GPT-Image-1.5 compatibility
-    useEffect(() => {
-        if (!VALID_SIZES.includes(aspectRatio)) {
-            console.warn(`Sanitizing invalid aspectRatio: ${aspectRatio}`);
-            setAspectRatio('1024x1024');
-        }
-    }, [aspectRatio, setAspectRatio]);
-
-    const handleGenerate = async () => {
-        if (!apiKey) {
-            setError('Please set your OpenAI API Key in Settings first.');
-            return;
-        }
-        if (!prompt.trim()) return;
-
-        setLoading(true);
-        setError(null);
-        try {
-            const imageUrl = await imageWorkflow.generate({
-                apiKey,
-                prompt,
-                quality,
-                aspectRatio,
-                background,
-                style,
-                lighting,
-                palette,
-                referenceImages,
-            });
-
-            setCurrentResult(imageUrl);
-            setIsSaved(false);
-            await storage.save('generate_current_result', imageUrl);
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to generate image');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDownload = () => {
-        if (!currentResult) return;
-        const link = document.createElement('a');
-        link.href = currentResult;
-        link.download = `aura-generation-${Date.now()}.png`;
-        link.click();
-    };
-
-    const handleSave = () => {
-        if (!currentResult || isSaved) return;
-
-        const saveRefImages = async () => {
-            const refDataUrls = await imageWorkflow.serializeReferences(referenceImages);
-
-            const newImage: ArchiveImage = {
-                id: crypto.randomUUID(),
-                url: currentResult,
-                prompt,
-                model: 'gpt-image-1.5',
-                timestamp: new Date().toISOString(),
-                width: 1024,
-                height: 1024,
-                quality,
-                aspectRatio: aspectRatio,
-                background,
-                style,
-                lighting,
-                palette,
-                references: refDataUrls
-            };
-
-            onSaveImage(newImage);
-            setIsSaved(true);
-        };
-
-        saveRefImages();
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -218,9 +116,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
         const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
         if (files.length > 0) {
-            setReferenceImages(prev => [...prev, ...files]);
-            const newPreviews = files.map(file => URL.createObjectURL(file));
-            setReferencePreviews(prev => [...prev, ...newPreviews]);
+            addReferenceFiles(files);
         }
     };
 
@@ -241,7 +137,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <select
                                 value=""
                                 onChange={(e) => {
-                                    if (e.target.value) setPrompt(e.target.value);
+                                    if (e.target.value) updateDraft({ prompt: e.target.value });
                                 }}
                                 className="example-prompt-select"
                             >
@@ -254,7 +150,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <textarea
                             placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
                             value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
+                            onChange={(e) => updateDraft({ prompt: e.target.value })}
                             className="prompt-input"
                         />
                     </div>
@@ -265,15 +161,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="toggle-group">
                                 <button
                                     className={quality === 'low' ? 'active' : ''}
-                                    onClick={() => setQuality('low')}
+                                    onClick={() => updateDraft({ quality: 'low' })}
                                 >Low</button>
                                 <button
                                     className={quality === 'medium' ? 'active' : ''}
-                                    onClick={() => setQuality('medium')}
+                                    onClick={() => updateDraft({ quality: 'medium' })}
                                 >Medium</button>
                                 <button
                                     className={quality === 'high' ? 'active' : ''}
-                                    onClick={() => setQuality('high')}
+                                    onClick={() => updateDraft({ quality: 'high' })}
                                 >High</button>
                             </div>
                         </div>
@@ -281,8 +177,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="option-group">
                             <label>ASPECT RATIO</label>
                             <select
-                                value={VALID_SIZES.includes(aspectRatio) ? aspectRatio : '1024x1024'}
-                                onChange={(e) => setAspectRatio(e.target.value)}
+                                value={aspectRatio}
+                                onChange={(e) => updateDraft({ aspectRatio: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="auto">Auto</option>
@@ -297,15 +193,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="toggle-group">
                                 <button
                                     className={background === 'auto' ? 'active' : ''}
-                                    onClick={() => setBackground('auto')}
+                                    onClick={() => updateDraft({ background: 'auto' })}
                                 >Auto</button>
                                 <button
                                     className={background === 'opaque' ? 'active' : ''}
-                                    onClick={() => setBackground('opaque')}
+                                    onClick={() => updateDraft({ background: 'opaque' })}
                                 >Opaque</button>
                                 <button
                                     className={background === 'transparent' ? 'active' : ''}
-                                    onClick={() => setBackground('transparent')}
+                                    onClick={() => updateDraft({ background: 'transparent' })}
                                 >Transparent</button>
                             </div>
                         </div>
@@ -314,7 +210,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>STYLE</label>
                             <select
                                 value={style}
-                                onChange={(e) => setStyle(e.target.value)}
+                                onChange={(e) => updateDraft({ style: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
@@ -328,7 +224,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>LIGHTING</label>
                             <select
                                 value={lighting}
-                                onChange={(e) => setLighting(e.target.value)}
+                                onChange={(e) => updateDraft({ lighting: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
@@ -342,7 +238,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <label>PALETTE</label>
                             <select
                                 value={palette}
-                                onChange={(e) => setPalette(e.target.value)}
+                                onChange={(e) => updateDraft({ palette: e.target.value })}
                                 className="select-input"
                             >
                                 <option value="none">None</option>
@@ -373,9 +269,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                         className="remove-ref"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            setReferenceImages((prev: File[]) => prev.filter((_, i) => i !== idx));
-                                            setReferencePreviews((prev: string[]) => prev.filter((_, i) => i !== idx));
-                                            URL.revokeObjectURL(url);
+                                            removeReferenceAt(idx);
                                             if (viewingReferenceIndex === idx) setViewingReferenceIndex(null);
                                         }}
                                     >
@@ -389,10 +283,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                     multiple
                                     accept="image/*"
                                     onChange={(e) => {
-                                        const files = Array.from(e.target.files || []);
-                                        setReferenceImages((prev: File[]) => [...prev, ...files]);
-                                        const newPreviews = files.map(file => URL.createObjectURL(file));
-                                        setReferencePreviews((prev: string[]) => [...prev, ...newPreviews]);
+                                        addReferenceFiles(Array.from(e.target.files || []));
                                     }}
                                     style={{ display: 'none' }}
                                 />
@@ -404,7 +295,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
                     <button
                         className="aura-btn aura-btn--primary"
-                        onClick={handleGenerate}
+                        onClick={() => { void generate(); }}
                         disabled={loading || !prompt.trim() || !apiKey}
                         style={{ width: '100%' }}
                     >
@@ -424,19 +315,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             <div className="result-actions">
                                 <button
-                                    onClick={handleSave}
+                                    onClick={() => { void save(); }}
                                     className={`aura-btn ${isSaved ? 'aura-btn--success' : 'aura-btn--primary'}`}
                                     disabled={isSaved}
                                 >
                                     <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
-                                <button className="aura-btn aura-btn--glass" onClick={handleDownload}>
+                                <button className="aura-btn aura-btn--glass" onClick={download}>
                                     <Download size={18} /> Download
                                 </button>
-                                <button onClick={async () => {
-                                    setCurrentResult(null);
-                                    await storage.remove('generate_current_result');
-                                }} className="aura-btn aura-btn--danger">
+                                <button onClick={() => { void clear(); }} className="aura-btn aura-btn--danger">
                                     <Trash2 size={18} />
                                 </button>
                             </div>
