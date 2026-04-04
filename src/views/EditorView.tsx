@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { useEditorCanvas } from '../editor/useEditorCanvas';
-import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 
 interface EditorViewProps {
@@ -12,10 +12,6 @@ interface EditorViewProps {
 }
 
 const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
-    const [aiPrompt, setAiPrompt] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
-    const [aiError, setAiError] = useState<string | null>(null);
-    const [isDragging, setIsDragging] = useState(false);
     const {
         brightness,
         setBrightness,
@@ -36,60 +32,28 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         serializeReferences,
     } = useEditorSession(image);
     const { canvasRef, exportDataUrl, exportBlob } = useEditorCanvas(currentImageUrl, canvasFilter);
-
-    const handleExport = async (isCopy: boolean = false) => {
-        const dataUrl = exportDataUrl();
-
-        const refDataUrls = await serializeReferences();
-
-        onSave(dataUrl, isCopy, refDataUrls);
-    };
-
-    const handleAiEdit = async () => {
-        if (!apiKey || !aiPrompt.trim() || !currentImageUrl) return;
-
-        setAiLoading(true);
-        setAiError(null);
-
-        try {
-            const blob = await exportBlob();
-
-            const newUrl = await imageWorkflow.edit({
-                apiKey,
-                prompt: aiPrompt,
-                sourceImage: blob,
-                referenceImages,
-                quality: 'medium',
-            });
-
-            setCurrentImageUrl(newUrl);
-            setAiPrompt('');
-        } catch (err: unknown) {
-            setAiError(err instanceof Error ? err.message : 'AI Edit failed');
-        } finally {
-            setAiLoading(false);
-        }
-    };
-
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(true);
-    };
-
-    const handleDragLeave = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(false);
-    };
-
-    const handleDrop = (e: React.DragEvent) => {
-        e.preventDefault();
-        setIsDragging(false);
-
-        const files = Array.from(e.dataTransfer.files).filter(file => file.type.startsWith('image/'));
-        if (files.length > 0) {
-            addReferenceFiles(files);
-        }
-    };
+    const {
+        aiPrompt,
+        setAiPrompt,
+        aiLoading,
+        aiError,
+        isDragging,
+        save,
+        applyAiEdit,
+        handleDragOver,
+        handleDragLeave,
+        handleDrop,
+    } = useEditorController({
+        apiKey,
+        currentImageUrl,
+        setCurrentImageUrl,
+        referenceImages,
+        addReferenceFiles,
+        serializeReferences,
+        exportDataUrl,
+        exportBlob,
+        onSave,
+    });
 
     if (!image) {
         return (
@@ -200,7 +164,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                             />
                             <button
                                 className="aura-btn aura-btn--primary"
-                                onClick={handleAiEdit}
+                                onClick={() => { void applyAiEdit(); }}
                                 disabled={aiLoading || !aiPrompt.trim() || !apiKey}
                                 style={{ width: '100%' }}
                             >
@@ -249,10 +213,10 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                     </div>
 
                     <div className="editor-actions">
-                        <button className="aura-btn aura-btn--primary" onClick={() => handleExport(false)}>
+                        <button className="aura-btn aura-btn--primary" onClick={() => { void save(false); }}>
                             <Save size={18} /> Save Changes
                         </button>
-                        <button className="aura-btn aura-btn--glass" onClick={() => handleExport(true)}>
+                        <button className="aura-btn aura-btn--glass" onClick={() => { void save(true); }}>
                             <Copy size={18} /> Save as Copy
                         </button>
                         <button className="aura-btn aura-btn--glass" onClick={resetAdjustments}>
