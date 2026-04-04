@@ -1,10 +1,11 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useArchiveController } from '../archive/useArchiveController';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore } from '../generate-session/GenerateSession';
 import { useAppNotifications } from './useAppNotifications';
 import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
+import { initializeAuraPersistence } from '../db/AuraPersistence';
 
 export function useAppController() {
     const { currentView, apiKey, theme, changeView, updateApiKey, toggleTheme } = useAppPreferences();
@@ -16,6 +17,13 @@ export function useAppController() {
         onError: handleArchiveError,
     });
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
+
+    useEffect(() => {
+        initializeAuraPersistence().catch((error) => {
+            const nextError = error instanceof Error ? error : new Error('Failed to initialize local storage');
+            notifyError(nextError, 'Storage initialization failed');
+        });
+    }, [notifyError]);
 
     const saveImage = useCallback(async (image: ArchiveImage) => {
         await addImage(image);
