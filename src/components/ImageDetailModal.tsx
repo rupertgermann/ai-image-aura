@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2 } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
+import { downloadArchiveImage } from '../download/download';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
@@ -27,10 +28,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     };
 
     const downloadImage = () => {
-        const link = document.createElement('a');
-        link.href = image.url;
-        link.download = `aura-${image.id}.png`;
-        link.click();
+        downloadArchiveImage(image);
     };
 
     React.useEffect(() => {
