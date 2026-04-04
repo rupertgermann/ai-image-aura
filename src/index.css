@@ -1119,6 +1119,7 @@ textarea {
     border-left: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
     flex-direction: column;
+    min-height: 0;
     transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
 }
 
@@ -1131,10 +1132,22 @@ textarea {
 
 .sidebar-inner {
     width: 400px;
+    height: 100%;
     padding: 40px;
     display: flex;
     flex-direction: column;
     gap: 32px;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.sidebar-inner {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.sidebar-inner::-webkit-scrollbar {
+    display: none;
 }
 
 .sidebar-toggle {
@@ -1227,15 +1240,30 @@ textarea {
 }
 
 .lineage-header-row {
+    margin-bottom: 12px;
+}
+
+.lineage-section-toggle {
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
+    text-align: left;
+}
+
+.lineage-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .lineage-badge {
     text-align: right;
+}
+
+.lineage-chevron-open {
+    transform: rotate(90deg);
 }
 
 .lineage-panel {
@@ -1270,11 +1298,18 @@ textarea {
     border-radius: 14px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+    transition: var(--transition-smooth);
 }
 
 .lineage-entry.selected {
     border-color: rgba(168, 85, 247, 0.45);
     background: rgba(168, 85, 247, 0.08);
+}
+
+.lineage-entry:hover {
+    border-color: rgba(168, 85, 247, 0.22);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .lineage-run-label {
@@ -1385,6 +1420,21 @@ textarea {
     text-transform: uppercase;
     color: var(--text-dim);
     font-weight: 700;
+}
+
+.single-image-label {
+    position: absolute;
+    top: 20px;
+    left: 68px;
+    z-index: 2;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    max-width: min(320px, calc(100% - 140px));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .comparison-image {
