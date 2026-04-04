@@ -6,17 +6,13 @@ The app runs entirely in the browser. API keys, generated images, reference imag
 
 ## Screens
 
-### Generate
+| Generate | Archive |
+|----------|---------|
+| ![Generate view](docs/screens/Generate.png) | ![Archive view](docs/screens/Archive.png) |
 
-![Generate view](docs/screens/Generate.png)
-
-### Archive
-
-![Archive view](docs/screens/Archive.png)
-
-### Editor
-
-![Editor view](docs/screens/Editor.png)
+| Editor | Detail |
+|--------|--------|
+| ![Editor view](docs/screens/Editor.png) | ![Detail view](docs/screens/Detail.png) |
 
 ## Highlights
 
