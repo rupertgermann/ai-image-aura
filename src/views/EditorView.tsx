@@ -4,11 +4,12 @@ import type { ArchiveImage } from '../db/types';
 import { useEditorCanvas } from '../editor/useEditorCanvas';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
+import type { EditorSaveContext } from '../editor/saveEditedImage';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
     apiKey: string | null;
-    onSave: (updatedUrl: string, isCopy?: boolean, references?: string[]) => void;
+    onSave: (updatedUrl: string, context: EditorSaveContext) => void;
 }
 
 const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
@@ -21,6 +22,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         setSaturation,
         filter,
         setFilter,
+        adjustments,
         canvasFilter,
         currentImageUrl,
         setCurrentImageUrl,
@@ -54,6 +56,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         serializeReferences,
         exportDataUrl,
         exportBlob,
+        adjustments,
         onSave,
     });
 

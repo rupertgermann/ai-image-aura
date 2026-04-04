@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import type { EditorAdjustments, EditorSaveContext } from './saveEditedImage';
 
 interface UseEditorControllerOptions {
     apiKey: string | null;
@@ -11,7 +12,8 @@ interface UseEditorControllerOptions {
     serializeReferences: () => Promise<string[]>;
     exportDataUrl: () => string;
     exportBlob: () => Promise<Blob>;
-    onSave: (updatedUrl: string, isCopy?: boolean, references?: string[]) => void | Promise<void>;
+    adjustments: EditorAdjustments;
+    onSave: (updatedUrl: string, context: EditorSaveContext) => void | Promise<void>;
 }
 
 export function useEditorController({
@@ -24,12 +26,14 @@ export function useEditorController({
     serializeReferences,
     exportDataUrl,
     exportBlob,
+    adjustments,
     onSave,
 }: UseEditorControllerOptions) {
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [lastAiEditPrompt, setLastAiEditPrompt] = useState<string | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
         if (!isCanvasReady) {
@@ -39,11 +43,16 @@ export function useEditorController({
         try {
             const dataUrl = exportDataUrl();
             const references = await serializeReferences();
-            await Promise.resolve(onSave(dataUrl, isCopy, references));
+            await Promise.resolve(onSave(dataUrl, {
+                isCopy,
+                references,
+                adjustments,
+                aiEditPrompt: lastAiEditPrompt,
+            }));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [exportDataUrl, isCanvasReady, onSave, serializeReferences]);
+    }, [adjustments, exportDataUrl, isCanvasReady, lastAiEditPrompt, onSave, serializeReferences]);
 
     const applyAiEdit = useCallback(async () => {
         if (!apiKey || !aiPrompt.trim() || !currentImageUrl || !isCanvasReady) {
@@ -64,6 +73,7 @@ export function useEditorController({
             });
 
             setCurrentImageUrl(newUrl);
+            setLastAiEditPrompt(aiPrompt.trim());
             setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');

@@ -6,6 +6,8 @@ import { useAppNotifications } from './useAppNotifications';
 import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
 import { initializeAuraPersistence } from '../db/AuraPersistence';
+import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
+import { lineageStore } from '../lineage/LineageStore';
 
 export function useAppController() {
     const { currentView, apiKey, theme, changeView, updateApiKey, toggleTheme } = useAppPreferences();
@@ -44,26 +46,19 @@ export function useAppController() {
         changeView('editor');
     }, [changeView]);
 
-    const saveEditedImage = useCallback(async (updatedUrl: string, isCopy: boolean = false, references?: string[]) => {
+    const handleSaveEditedImage = useCallback(async (updatedUrl: string, context: EditorSaveContext) => {
         if (!editingImage) {
             return;
         }
 
-        if (isCopy) {
-            await addImage({
-                ...editingImage,
-                id: crypto.randomUUID(),
-                url: updatedUrl,
-                timestamp: new Date().toISOString(),
-                references: references || editingImage.references,
-            });
+        const savedImage = await saveEditedImage(editingImage, updatedUrl, context, {
+            saveImage: async (image) => addImage(image),
+            lineageStore,
+        });
+
+        if (savedImage.id !== editingImage.id) {
             addToast('Design saved as new copy', 'success');
         } else {
-            await addImage({
-                ...editingImage,
-                url: updatedUrl,
-                references: references || editingImage.references,
-            });
             addToast('Masterpiece updated', 'success');
         }
 
@@ -119,7 +114,7 @@ export function useAppController() {
             key: editingImage?.id ?? 'empty-editor',
             image: editingImage,
             apiKey,
-            onSave: saveEditedImage,
+            onSave: handleSaveEditedImage,
         },
         settingsViewProps: {
             apiKey,
