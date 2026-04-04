@@ -1,10 +1,28 @@
-import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
 import { generateSessionStore, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
-import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
+import { runGenerateAutopilot } from './runGenerateAutopilot';
+import { createAutopilotSession, type AutopilotSession } from '../autopilot/AutopilotSession';
+
+interface AutopilotProgressState {
+    running: boolean;
+    iterations: Array<{
+        stepId: string;
+        archiveImageId: string;
+        iterationNumber: number;
+        prompt: string;
+        imageDataUrl: string;
+        score: number;
+        feedback: string[];
+    }>;
+    status: 'idle' | 'running' | 'satisfied' | 'max-iterations' | 'cancelled' | 'failed';
+    bestIterationNumber: number | null;
+    lastErrorIteration: number | null;
+}
 
 interface UseGenerateControllerOptions {
     apiKey: string | null;
@@ -15,7 +33,9 @@ interface UseGenerateControllerOptions {
     serializeReferences: () => Promise<string[]>;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
-    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'clearLineageSource'>;
+    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
+    workflow?: Pick<ImageWorkflow, 'generate'>;
+    createAutopilot?: typeof createAutopilotSession;
 }
 
 const VALID_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
@@ -30,10 +50,20 @@ export function useGenerateController({
     onSaveImage,
     lineage = lineageStore,
     session = generateSessionStore,
+    workflow = imageWorkflow,
+    createAutopilot = createAutopilotSession,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
+        running: false,
+        iterations: [],
+        status: 'idle',
+        bestIterationNumber: null,
+        lastErrorIteration: null,
+    });
+    const autopilotSessionRef = useRef<AutopilotSession | null>(null);
 
     const updateDraft = useCallback((patch: Partial<GenerateDraft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
@@ -71,9 +101,13 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        setAutopilot((current) => ({
+            ...current,
+            running: false,
+        }));
 
         try {
-            const imageUrl = await imageWorkflow.generate({
+            const imageUrl = await workflow.generate({
                 apiKey,
                 prompt: draft.prompt,
                 quality: draft.quality,
@@ -93,7 +127,104 @@ export function useGenerateController({
         } finally {
             setLoading(false);
         }
-    }, [apiKey, draft, referenceImages, session, updateDraft]);
+    }, [apiKey, draft, referenceImages, session, updateDraft, workflow]);
+
+    const runAutopilot = useCallback(async (input: { goal: string; maxIterations?: number; satisfactionThreshold?: number }) => {
+        if (!apiKey) {
+            setError('Please set your OpenAI API Key in Settings first.');
+            return null;
+        }
+
+        if (!draft.prompt.trim() || !input.goal.trim()) {
+            return null;
+        }
+
+        setLoading(true);
+        setError(null);
+        setAutopilot({
+            running: true,
+            iterations: [],
+            status: 'running',
+            bestIterationNumber: null,
+            lastErrorIteration: null,
+        });
+
+        try {
+            const outcome = await runGenerateAutopilot({
+                goal: input.goal,
+                apiKey,
+                draft,
+                referenceImages,
+                sessionStore: session,
+                lineageStore: lineage,
+                workflow,
+                createSession: createAutopilot,
+                onSessionCreated: (sessionInstance) => {
+                    autopilotSessionRef.current = sessionInstance;
+                },
+                maxIterations: input.maxIterations,
+                satisfactionThreshold: input.satisfactionThreshold,
+                onIterationComplete: (iteration) => {
+                    setAutopilot((current) => {
+                        const iterations = [...current.iterations, iteration];
+                        const bestIteration = iterations.reduce<typeof iteration | null>((best, candidate) => {
+                            if (!best || candidate.score > best.score) {
+                                return candidate;
+                            }
+
+                            if (candidate.score === best.score && candidate.iterationNumber < best.iterationNumber) {
+                                return candidate;
+                            }
+
+                            return best;
+                        }, null);
+
+                        return {
+                            ...current,
+                            iterations,
+                            bestIterationNumber: bestIteration?.iterationNumber ?? null,
+                        };
+                    });
+                    setCurrentResult(iteration.imageDataUrl);
+                },
+                onError: (error, iterationNumber) => {
+                    setError(error.message);
+                    setAutopilot((current) => ({
+                        ...current,
+                        lastErrorIteration: iterationNumber,
+                    }));
+                },
+            });
+
+            if (outcome.result.bestIteration) {
+                setCurrentResult(outcome.result.bestIteration.imageDataUrl);
+                updateDraft({
+                    prompt: outcome.result.bestIteration.prompt,
+                    isSaved: false,
+                });
+            }
+
+            if (outcome.result.status === 'failed' && outcome.result.error) {
+                setError(outcome.result.error.message);
+            }
+
+            setAutopilot((current) => ({
+                ...current,
+                running: false,
+                status: outcome.result.status,
+                bestIterationNumber: outcome.result.bestIteration?.iterationNumber ?? current.bestIterationNumber,
+            }));
+
+            return outcome.result;
+        } finally {
+            autopilotSessionRef.current = null;
+            setLoading(false);
+        }
+    }, [apiKey, createAutopilot, draft, lineage, referenceImages, session, updateDraft, workflow]);
+
+    const cancelAutopilot = useCallback(() => {
+        autopilotSessionRef.current?.cancel();
+    }, []);
 
     const save = useCallback(async () => {
         if (!currentResult || draft.isSaved) {
@@ -146,8 +277,11 @@ export function useGenerateController({
         currentResult,
         loading,
         error,
+        autopilot,
         updateDraft,
         generate,
+        runAutopilot,
+        cancelAutopilot,
         save,
         download,
         clear,

@@ -30,14 +30,14 @@ Graceful degradation is built in from the start: `getById` and `getChildren` ret
 
 ### Acceptance criteria
 
-- [ ] `lineage_steps` table is created on first storage init and persists across page refreshes
-- [ ] `LineageStore.save()` writes a step and returns it with a stable `id`
-- [ ] `LineageStore.getById()` returns `null` for unknown ids without throwing
-- [ ] `LineageStore.getByArchiveImageId()` returns all steps associated with an image, ordered by timestamp
-- [ ] `LineageStore.getChildren()` returns all steps whose `parentStepId` equals the given id
-- [ ] `LineageStore.remove()` deletes a step without affecting sibling or child steps
-- [ ] All operations tolerate a missing or empty table gracefully
-- [ ] Module-level tests cover save, read, children lookup, and missing-parent scenarios using injected storage dependencies
+- [x] `lineage_steps` table is created on first storage init and persists across page refreshes
+- [x] `LineageStore.save()` writes a step and returns it with a stable `id`
+- [x] `LineageStore.getById()` returns `null` for unknown ids without throwing
+- [x] `LineageStore.getByArchiveImageId()` returns all steps associated with an image, ordered by timestamp
+- [x] `LineageStore.getChildren()` returns all steps whose `parentStepId` equals the given id
+- [x] `LineageStore.remove()` deletes a step without affecting sibling or child steps
+- [x] All operations tolerate a missing or empty table gracefully
+- [x] Module-level tests cover save, read, children lookup, and missing-parent scenarios using injected storage dependencies
 
 ---
 
@@ -55,11 +55,11 @@ This phase adds no UI. Lineage steps are written silently in the background. The
 
 ### Acceptance criteria
 
-- [ ] Saving a generated image writes a `generation` lineage step linked to the new archive image id
-- [ ] A generation with reference images writes a `reference-generation` step that records reference ids in metadata
-- [ ] Saving a "Create Similar" result writes a step whose `parentStepId` points to the source image's prior step
-- [ ] A failed `archiveStore.save()` does not write a lineage step (provenance is not captured for failed saves)
-- [ ] Workflow-level tests assert that generate-and-save produces the correct step type, fields, and parent link
+- [x] Saving a generated image writes a `generation` lineage step linked to the new archive image id
+- [x] A generation with reference images writes a `reference-generation` step that records reference ids in metadata
+- [x] Saving a "Create Similar" result writes a step whose `parentStepId` points to the source image's prior step
+- [x] A failed `archiveStore.save()` does not write a lineage step (provenance is not captured for failed saves)
+- [x] Workflow-level tests assert that generate-and-save produces the correct step type, fields, and parent link
 
 ---
 
@@ -80,11 +80,11 @@ Each step records the editor adjustments that were applied where available (from
 
 ### Acceptance criteria
 
-- [ ] An AI edit saved as a new copy produces an `ai-edit` lineage step with the edit prompt and correct parent
-- [ ] A manual edit saved as a new copy produces a `save-as-copy` step branching from the source
-- [ ] An overwrite save produces a new lineage step pointing to the previous step for that image, leaving the archive image id unchanged
-- [ ] Each editor save path is covered by workflow-level tests asserting step type, parent link, and key metadata fields
-- [ ] A failed save does not write a lineage step
+- [x] An AI edit saved as a new copy produces an `ai-edit` lineage step with the edit prompt and correct parent
+- [x] A manual edit saved as a new copy produces a `save-as-copy` step branching from the source
+- [x] An overwrite save produces a new lineage step pointing to the previous step for that image, leaving the archive image id unchanged
+- [x] Each editor save path is covered by workflow-level tests asserting step type, parent link, and key metadata fields
+- [x] A failed save does not write a lineage step
 
 ---
 
@@ -106,13 +106,13 @@ Missing parents or broken references render as a muted "Origin unknown" entry ra
 
 ### Acceptance criteria
 
-- [ ] Archive detail modal shows a lineage panel for images that have lineage steps
-- [ ] Each step entry displays its type label, summary, and timestamp
-- [ ] A parent link indicator is shown when the image's earliest step has a `parentStepId`
-- [ ] A descendant count badge is shown when other steps reference this image's steps as parent
-- [ ] Missing or broken parent references render a graceful fallback, not an error
-- [ ] Images with no lineage steps show a neutral "No history recorded" state
-- [ ] The panel is readable and does not block or obscure the main image view
+- [x] Archive detail modal shows a lineage panel for images that have lineage steps
+- [x] Each step entry displays its type label, summary, and timestamp
+- [x] A parent link indicator is shown when the image's earliest step has a `parentStepId`
+- [x] A descendant count badge is shown when other steps reference this image's steps as parent
+- [x] Missing or broken parent references render a graceful fallback, not an error
+- [x] Images with no lineage steps show a neutral "No history recorded" state
+- [x] The panel is readable and does not block or obscure the main image view
 
 ---
 
@@ -132,12 +132,12 @@ Add a side-by-side comparison control to the detail modal: selecting any step in
 
 ### Acceptance criteria
 
-- [ ] "Replay into Generate" populates the Generate draft with the correct prompt, settings, and reference ids, then navigates to GenerateView
-- [ ] "Replay into Editor" loads the correct image into the Editor canvas and navigates to EditorView
-- [ ] "Fork from this step" marks the chosen step as the pending parent for the next save, and that parent link is written correctly when the user saves
-- [ ] Replay from a step with missing blobs shows a clear error message rather than loading a broken state
-- [ ] Comparison view shows the selected step's image alongside the current image
-- [ ] Workflow tests assert that replay correctly hydrates draft state and that fork correctly sets the parent link on the next save
+- [x] "Replay into Generate" populates the Generate draft with the correct prompt, settings, and reference ids, then navigates to GenerateView
+- [x] "Replay into Editor" loads the correct image into the Editor canvas and navigates to EditorView
+- [x] "Fork from this step" marks the chosen step as the pending parent for the next save, and that parent link is written correctly when the user saves
+- [x] Replay from a step with missing blobs shows a clear error message rather than loading a broken state
+- [x] Comparison view shows the selected step's image alongside the current image
+- [x] Workflow tests assert that replay correctly hydrates draft state and that fork correctly sets the parent link on the next save
 
 ---
 
@@ -153,11 +153,11 @@ Add an import/restore path that reads the manifest on ZIP import, validates that
 
 ### Acceptance criteria
 
-- [ ] Exported ZIP contains a `lineage-manifest.json` with `"version": 1` and a complete array of lineage steps for all exported images
-- [ ] Manifest includes all step fields: id, parentStepId, archiveImageId, stepType, timestamp, and metadata
-- [ ] A fresh import of an exported ZIP restores both images and their lineage steps, preserving all parent-child relationships
-- [ ] An import with broken parent references reports the broken links in a validation summary rather than failing silently
-- [ ] Export and import tests verify round-trip fidelity for generate, edit, overwrite, and save-as-copy step types
+- [x] Exported ZIP contains a `lineage-manifest.json` with `"version": 1` and a complete array of lineage steps for all exported images
+- [x] Manifest includes all step fields: id, parentStepId, archiveImageId, stepType, timestamp, and metadata
+- [x] A fresh import of an exported ZIP restores both images and their lineage steps, preserving all parent-child relationships
+- [x] An import with broken parent references reports the broken links in a validation summary rather than failing silently
+- [x] Export and import tests verify round-trip fidelity for generate, edit, overwrite, and save-as-copy step types
 
 ---
 
@@ -177,12 +177,12 @@ Neither module has any UI dependency. Both accept an injected API client so they
 
 ### Acceptance criteria
 
-- [ ] `SatisfactionEvaluator` returns a `{ score, feedback }` object for a valid GPT-4o response
-- [ ] `SatisfactionEvaluator` returns a graceful low-score result (no throw) when the response is malformed or missing required fields
-- [ ] `PromptRefiner` returns a non-empty string prompt given a goal and feedback
-- [ ] `PromptRefiner` propagates API errors correctly to the caller
-- [ ] Both modules have versioned system prompt constants that are reviewable as source-controlled strings
-- [ ] Module-level tests cover happy path, malformed response, and API error scenarios using injected mock clients
+- [x] `SatisfactionEvaluator` returns a `{ score, feedback }` object for a valid GPT-4o response
+- [x] `SatisfactionEvaluator` returns a graceful low-score result (no throw) when the response is malformed or missing required fields
+- [x] `PromptRefiner` returns a non-empty string prompt given a goal and feedback
+- [x] `PromptRefiner` propagates API errors correctly to the caller
+- [x] Both modules have versioned system prompt constants that are reviewable as source-controlled strings
+- [x] Module-level tests cover happy path, malformed response, and API error scenarios using injected mock clients
 
 ---
 
@@ -213,14 +213,14 @@ Wire `AutopilotSession` into `useGenerateController` as a new `runAutopilot()` a
 
 ### Acceptance criteria
 
-- [ ] `AutopilotSession` runs the full generate → evaluate → refine loop for the configured number of iterations
-- [ ] Early stopping halts the loop as soon as the satisfaction threshold is met, without proceeding to the next iteration
-- [ ] The session returns the highest-scoring iteration result, not necessarily the final one
-- [ ] Each completed iteration writes an `autopilot-iteration` lineage step with the correct `parentStepId` chain, iteration number, score, and feedback
-- [ ] Cancellation stops the loop after the current iteration, preserves all completed lineage steps, and returns the best result to date
-- [ ] A generation or evaluation failure stops the run, retains all prior lineage steps, and surfaces the error via callback without throwing unhandled exceptions
-- [ ] `AutopilotSession` tests use injected mock generate/evaluate/refine implementations and assert on the callback sequence, termination condition, and returned result
-- [ ] `useGenerateController.runAutopilot()` delegates to `AutopilotSession`; the existing `generate()` action is unmodified
+- [x] `AutopilotSession` runs the full generate → evaluate → refine loop for the configured number of iterations
+- [x] Early stopping halts the loop as soon as the satisfaction threshold is met, without proceeding to the next iteration
+- [x] The session returns the highest-scoring iteration result, not necessarily the final one
+- [x] Each completed iteration writes an `autopilot-iteration` lineage step with the correct `parentStepId` chain, iteration number, score, and feedback
+- [x] Cancellation stops the loop after the current iteration, preserves all completed lineage steps, and returns the best result to date
+- [x] A generation or evaluation failure stops the run, retains all prior lineage steps, and surfaces the error via callback without throwing unhandled exceptions
+- [x] `AutopilotSession` tests use injected mock generate/evaluate/refine implementations and assert on the callback sequence, termination condition, and returned result
+- [x] `useGenerateController.runAutopilot()` delegates to `AutopilotSession`; the existing `generate()` action is unmodified
 
 ---
 
@@ -257,16 +257,16 @@ Add a mode toggle to `GenerateView` with two options: **Single Shot** (existing 
 
 ### Acceptance criteria
 
-- [ ] Mode toggle switches between Single Shot and Autopilot; selection persists across sessions
-- [ ] Autopilot mode shows goal field, auto-populated prompt field, and settings controls
-- [ ] Goal text persists between sessions
-- [ ] Cost disclosure panel is shown before each run and requires explicit confirmation
-- [ ] Live iteration panel updates with iteration number, feedback, and thumbnails as the run progresses
-- [ ] Cancel button stops the run after the current iteration and presents the best result to date
-- [ ] Post-run state presents the highest-scoring result with a clear label
-- [ ] Runs that hit the iteration limit without converging display an explicit notice
-- [ ] Generation or evaluation errors surface a clear per-iteration error message
-- [ ] The existing Single Shot generate flow is completely unaffected
+- [x] Mode toggle switches between Single Shot and Autopilot; selection persists across sessions
+- [x] Autopilot mode shows goal field, auto-populated prompt field, and settings controls
+- [x] Goal text persists between sessions
+- [x] Cost disclosure panel is shown before each run and requires explicit confirmation
+- [x] Live iteration panel updates with iteration number, feedback, and thumbnails as the run progresses
+- [x] Cancel button stops the run after the current iteration and presents the best result to date
+- [x] Post-run state presents the highest-scoring result with a clear label
+- [x] Runs that hit the iteration limit without converging display an explicit notice
+- [x] Generation or evaluation errors surface a clear per-iteration error message
+- [x] The existing Single Shot generate flow is completely unaffected
 
 ---
 
@@ -284,9 +284,9 @@ Extend the `lineage-manifest.json` export schema to include autopilot metadata f
 
 ### Acceptance criteria
 
-- [ ] Archive detail lineage timeline shows goal text, iteration number, score, and feedback for `autopilot-iteration` steps
-- [ ] Steps belonging to the same autopilot run are visually grouped or labelled consistently
-- [ ] "Replay into Generate" on an autopilot iteration step loads the correct prompt and settings into the Generate draft
-- [ ] Exported `lineage-manifest.json` includes autopilot metadata fields for all `autopilot-iteration` steps
-- [ ] Import of a manifest containing autopilot steps restores the full metadata without error
-- [ ] Existing non-autopilot lineage behaviour is unaffected
+- [x] Archive detail lineage timeline shows goal text, iteration number, score, and feedback for `autopilot-iteration` steps
+- [x] Steps belonging to the same autopilot run are visually grouped or labelled consistently
+- [x] "Replay into Generate" on an autopilot iteration step loads the correct prompt and settings into the Generate draft
+- [x] Exported `lineage-manifest.json` includes autopilot metadata fields for all `autopilot-iteration` steps
+- [x] Import of a manifest containing autopilot steps restores the full metadata without error
+- [x] Existing non-autopilot lineage behaviour is unaffected

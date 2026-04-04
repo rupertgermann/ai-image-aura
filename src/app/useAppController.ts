@@ -88,14 +88,14 @@ export function useAppController() {
                 return;
             }
 
-            const image = images.find((entry) => entry.id === step.archiveImageId);
-            if (!image) {
-                notifyError(new Error('Selected step image is missing from the local archive'), 'Replay unavailable');
-                return;
-            }
-
+            const image = images.find((entry) => entry.id === step.archiveImageId) ?? null;
             const replay = buildGenerateReplay(image, step);
-            await generateSessionStore.transferFromArchive(image, replay.lineageSource, replay.draft);
+            if (image) {
+                await generateSessionStore.transferFromArchive(image, replay.lineageSource, replay.draft);
+            } else {
+                generateSessionStore.writeDraft(replay.draft);
+                generateSessionStore.saveLineageSource(replay.lineageSource);
+            }
             changeView('generate');
             addToast('Lineage step loaded into Generate', 'info');
         } catch (error) {

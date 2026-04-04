@@ -7,6 +7,12 @@ export interface LineageTimelineEntry {
     label: string;
     summary: string;
     timestamp: string;
+    goalText: string | null;
+    iterationNumber: number | null;
+    evaluatorScore: number | null;
+    evaluatorFeedback: string[];
+    replayImageDataUrl: string | null;
+    runLabel: string | null;
 }
 
 export interface LineageTimelineParent {
@@ -31,10 +37,11 @@ export async function loadLineageTimeline(
     archiveImageId: string,
     store: TimelineStore,
 ): Promise<LineageTimelineData> {
-    const steps = await store.getByArchiveImageId(archiveImageId);
+    const directSteps = await store.getByArchiveImageId(archiveImageId);
+    const steps = await expandWithAncestors(directSteps, store);
     const [parent, descendantCount] = await Promise.all([
-        loadParent(steps, store),
-        countDescendants(steps, store),
+        loadParent(directSteps, store),
+        countDescendants(directSteps, store),
     ]);
 
     return {
@@ -42,6 +49,25 @@ export async function loadLineageTimeline(
         parent,
         descendantCount,
     };
+}
+
+async function expandWithAncestors(steps: LineageStep[], store: Pick<LineageStore, 'getById'>) {
+    const orderedSteps = [...steps];
+    const seen = new Set(orderedSteps.map((step) => step.id));
+    let parentStepId = orderedSteps[0]?.parentStepId ?? null;
+
+    while (parentStepId) {
+        const parentStep = await store.getById(parentStepId);
+        if (!parentStep || seen.has(parentStep.id)) {
+            break;
+        }
+
+        orderedSteps.unshift(parentStep);
+        seen.add(parentStep.id);
+        parentStepId = parentStep.parentStepId;
+    }
+
+    return orderedSteps;
 }
 
 async function loadParent(steps: LineageStep[], store: Pick<LineageStore, 'getById'>): Promise<LineageTimelineParent | null> {
@@ -79,6 +105,12 @@ function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
         label: getStepLabel(step),
         summary: getStepSummary(step),
         timestamp: step.timestamp,
+        goalText: asString(step.metadata.goalText),
+        iterationNumber: asNumberOrNull(step.metadata.iterationNumber),
+        evaluatorScore: asNumberOrNull(step.metadata.evaluatorScore),
+        evaluatorFeedback: asStringArray(step.metadata.evaluatorFeedback),
+        replayImageDataUrl: asString(step.metadata.outputImageDataUrl),
+        runLabel: getRunLabel(step),
     };
 }
 
@@ -130,8 +162,30 @@ function getStepSummary(step: LineageStep) {
         case 'save-as-copy':
             return summarizeAdjustments(metadata.editorAdjustments) ?? 'Branched from previous version';
         case 'autopilot-iteration':
-            return 'Autopilot iteration recorded';
+            return summarizeAutopilot(metadata);
     }
+}
+
+function summarizeAutopilot(metadata: Record<string, unknown>) {
+    const iterationNumber = asNumberOrNull(metadata.iterationNumber);
+    const score = asNumberOrNull(metadata.evaluatorScore);
+    const goalText = excerpt(asString(metadata.goalText), 56);
+    const parts = [
+        iterationNumber !== null ? `Iteration ${iterationNumber}` : null,
+        score !== null ? `score ${score}` : null,
+        goalText ? `goal: ${goalText}` : null,
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join(' · ') : 'Autopilot iteration recorded';
+}
+
+function getRunLabel(step: LineageStep) {
+    if (step.stepType !== 'autopilot-iteration') {
+        return null;
+    }
+
+    const goalText = excerpt(asString(step.metadata.goalText), 36);
+    return goalText ? `Autopilot Run · ${goalText}` : 'Autopilot Run';
 }
 
 function summarizeAdjustments(value: unknown) {
@@ -181,4 +235,14 @@ function asString(value: unknown) {
 
 function asNumber(value: unknown) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function asNumberOrNull(value: unknown) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function asStringArray(value: unknown) {
+    return Array.isArray(value)
+        ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        : [];
 }

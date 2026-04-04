@@ -64,12 +64,32 @@ describe('loadLineageTimeline', () => {
         expect(timeline).toEqual({
             entries: [
                 {
+                    id: 'parent-1',
+                    archiveImageId: 'image-0',
+                    stepType: 'ai-edit',
+                    label: 'AI Edit',
+                    summary: 'AI edit: add a brighter horizon glow',
+                    timestamp: '2026-04-04T08:00:00.000Z',
+                    goalText: null,
+                    iterationNumber: null,
+                    evaluatorScore: null,
+                    evaluatorFeedback: [],
+                    replayImageDataUrl: null,
+                    runLabel: null,
+                },
+                {
                     id: 'step-1',
                     archiveImageId: 'image-1',
                     stepType: 'save-as-copy',
                     label: 'Saved as Copy',
                     summary: 'Adjusted contrast, saturation',
                     timestamp: '2026-04-04T09:00:00.000Z',
+                    goalText: null,
+                    iterationNumber: null,
+                    evaluatorScore: null,
+                    evaluatorFeedback: [],
+                    replayImageDataUrl: null,
+                    runLabel: null,
                 },
                 {
                     id: 'step-2',
@@ -78,6 +98,12 @@ describe('loadLineageTimeline', () => {
                     label: 'Overwrite Save',
                     summary: 'Adjusted brightness, saturation, filter',
                     timestamp: '2026-04-04T10:00:00.000Z',
+                    goalText: null,
+                    iterationNumber: null,
+                    evaluatorScore: null,
+                    evaluatorFeedback: [],
+                    replayImageDataUrl: null,
+                    runLabel: null,
                 },
             ],
             parent: {
@@ -128,6 +154,62 @@ describe('loadLineageTimeline', () => {
             parent: null,
             descendantCount: 0,
         });
+    });
+
+    it('includes autopilot ancestor metadata for saved images', async () => {
+        const autopilotStep = createStep({
+            id: 'auto-1',
+            archiveImageId: 'autopilot:run:iteration:1',
+            stepType: 'autopilot-iteration',
+            timestamp: '2026-04-04T08:00:00.000Z',
+            metadata: {
+                goalText: 'A moody editorial portrait with electric blue haze',
+                iterationNumber: 1,
+                evaluatorScore: 84,
+                evaluatorFeedback: ['Push the rim light harder.'],
+                outputImageDataUrl: 'data:image/png;base64,auto1',
+            },
+        });
+        const savedStep = createStep({
+            id: 'saved-1',
+            archiveImageId: 'image-1',
+            parentStepId: 'auto-1',
+            stepType: 'generation',
+            timestamp: '2026-04-04T09:00:00.000Z',
+            metadata: {
+                prompt: 'editorial portrait, electric blue haze',
+            },
+        });
+
+        const timeline = await loadLineageTimeline('image-1', createStore({
+            byArchiveImageId: {
+                'image-1': [savedStep],
+            },
+            byId: {
+                'auto-1': autopilotStep,
+            },
+            children: {
+                'saved-1': [],
+            },
+        }));
+
+        expect(timeline.entries).toEqual([
+            expect.objectContaining({
+                id: 'auto-1',
+                stepType: 'autopilot-iteration',
+                goalText: 'A moody editorial portrait with electric blue haze',
+                iterationNumber: 1,
+                evaluatorScore: 84,
+                evaluatorFeedback: ['Push the rim light harder.'],
+                replayImageDataUrl: 'data:image/png;base64,auto1',
+                runLabel: 'Autopilot Run · A moody editorial portrait with ele...',
+            }),
+            expect.objectContaining({
+                id: 'saved-1',
+                stepType: 'generation',
+                runLabel: null,
+            }),
+        ]);
     });
 });
 

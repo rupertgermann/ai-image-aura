@@ -42,9 +42,45 @@ describe('replayLineageStep', () => {
 
     it('reports which lineage steps can replay into generate or editor', () => {
         expect(isGenerateReplayable(createStep({ id: 'a', archiveImageId: 'image-a', stepType: 'generation', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
+        expect(isGenerateReplayable(createStep({ id: 'aa', archiveImageId: 'image-aa', stepType: 'autopilot-iteration', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
         expect(isGenerateReplayable(createStep({ id: 'b', archiveImageId: 'image-b', stepType: 'ai-edit', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(false);
         expect(isEditorReplayable(createStep({ id: 'c', archiveImageId: 'image-c', stepType: 'save-as-copy', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
         expect(isEditorReplayable(createStep({ id: 'd', archiveImageId: 'image-d', stepType: 'reference-generation', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(false);
+    });
+
+    it('hydrates a generate draft from an autopilot step without an archive image fallback', () => {
+        const step = createStep({
+            id: 'step-9',
+            archiveImageId: 'autopilot:run:iteration:2',
+            stepType: 'autopilot-iteration',
+            timestamp: '2026-04-04T10:00:00.000Z',
+            metadata: {
+                prompt: 'editorial portrait, deep blue haze, dramatic rim light',
+                quality: 'high',
+                aspectRatio: '1536x1024',
+                background: 'transparent',
+                style: '35mm film still',
+                lighting: 'neon rim light',
+                palette: 'cobalt + vermilion + bone',
+            },
+        });
+
+        expect(buildGenerateReplay(null, step)).toEqual({
+            draft: {
+                prompt: 'editorial portrait, deep blue haze, dramatic rim light',
+                quality: 'high',
+                aspectRatio: '1536x1024',
+                background: 'transparent',
+                style: '35mm film still',
+                lighting: 'neon rim light',
+                palette: 'cobalt + vermilion + bone',
+                isSaved: false,
+            },
+            lineageSource: {
+                archiveImageId: 'autopilot:run:iteration:2',
+                stepId: 'step-9',
+            },
+        });
     });
 });
 

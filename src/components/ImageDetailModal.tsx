@@ -85,7 +85,8 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
     const selectedEntry = timeline?.entries.find((entry) => entry.id === selectedStepId) ?? null;
     const comparisonImage = selectedEntry ? images.find((entryImage) => entryImage.id === selectedEntry.archiveImageId) ?? null : null;
-    const comparisonError = selectedEntry && !comparisonImage
+    const comparisonPreviewUrl = comparisonImage?.url ?? selectedEntry?.replayImageDataUrl ?? null;
+    const comparisonError = selectedEntry && !comparisonPreviewUrl
         ? 'Selected step image is no longer available locally.'
         : null;
 
@@ -98,11 +99,11 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
                 <div className="modal-main">
                     <div className="modal-image-viewport">
-                        {selectedEntry && comparisonImage && comparisonImage.id !== image.id ? (
+                        {selectedEntry && comparisonPreviewUrl && selectedEntry.archiveImageId !== image.id ? (
                             <div className="comparison-view">
                                 <div className="comparison-pane">
                                     <span className="comparison-label">Selected Step</span>
-                                    <img src={comparisonImage.url} alt={selectedEntry.summary} className="modal-image comparison-image" />
+                                    <img src={comparisonPreviewUrl} alt={selectedEntry.summary} className="modal-image comparison-image" />
                                 </div>
                                 <div className="comparison-pane">
                                     <span className="comparison-label">Current Image</span>
@@ -217,11 +218,29 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                     <div className="lineage-list">
                                         {timeline.entries.map((entry) => (
                                             <article key={entry.id} className={`lineage-entry ${selectedStepId === entry.id ? 'selected' : ''}`}>
+                                                {entry.runLabel && <div className="lineage-run-label">{entry.runLabel}</div>}
                                                 <div className="lineage-entry-header">
                                                     <button className="status-badge lineage-type lineage-select" onClick={() => setSelectedStepId(entry.id)}>{entry.label}</button>
                                                     <span className="lineage-time">{new Date(entry.timestamp).toLocaleString()}</span>
                                                 </div>
                                                 <p className="lineage-summary">{entry.summary}</p>
+                                                {entry.goalText && (
+                                                    <div className="lineage-meta-block">
+                                                        <strong>Goal</strong>
+                                                        <p>{entry.goalText}</p>
+                                                    </div>
+                                                )}
+                                                {(entry.iterationNumber !== null || entry.evaluatorScore !== null || entry.evaluatorFeedback.length > 0) && (
+                                                    <div className="lineage-meta-block">
+                                                        <strong>Autopilot</strong>
+                                                        <p>
+                                                            {entry.iterationNumber !== null && `Iteration ${entry.iterationNumber}`}
+                                                            {entry.iterationNumber !== null && entry.evaluatorScore !== null && ' · '}
+                                                            {entry.evaluatorScore !== null && `Score ${entry.evaluatorScore}`}
+                                                        </p>
+                                                        {entry.evaluatorFeedback.length > 0 && <p>{entry.evaluatorFeedback.join(' ')}</p>}
+                                                    </div>
+                                                )}
                                                 <div className="lineage-actions-row">
                                                     {isGenerateReplayable(entry) && (
                                                         <button className="aura-btn aura-btn--glass lineage-action-btn" onClick={() => onReplayGenerate(entry.id)}>Replay into Generate</button>
