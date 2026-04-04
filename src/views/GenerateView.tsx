@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
-import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, useGenerateDraft } from '../generate-session/GenerateSession';
-import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { useGenerateDraft } from '../generate-session/GenerateSession';
+import { useGenerateController } from '../generate-session/useGenerateController';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 
@@ -11,8 +10,6 @@ interface GenerateViewProps {
     apiKey: string | null;
     onSaveImage: (image: ArchiveImage) => void;
 }
-
-const VALID_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
 
 const EXAMPLE_PROMPTS = [
     "a lobster piloting a vintage scooter",
@@ -62,9 +59,6 @@ const PALETTES = [
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [draft, setDraft] = useGenerateDraft();
-    const [currentResult, setCurrentResult] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
     const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
@@ -73,12 +67,24 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const referencePreviews = referenceCollection.previews;
     const addReferenceFiles = referenceCollection.addFiles;
     const removeReferenceAt = referenceCollection.removeAt;
-    const replaceReferences = referenceCollection.replaceWithDataUrls;
-    const serializeReferences = referenceCollection.serialize;
-
-    const updateDraft = (patch: Partial<typeof draft>) => {
-        setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
-    };
+    const {
+        currentResult,
+        loading,
+        error,
+        updateDraft,
+        generate,
+        save,
+        download,
+        clear,
+    } = useGenerateController({
+        apiKey,
+        draft,
+        setDraft,
+        referenceImages,
+        replaceReferences: referenceCollection.replaceWithDataUrls,
+        serializeReferences: referenceCollection.serialize,
+        onSaveImage,
+    });
 
     const handleNextReference = () => {
         if (viewingReferenceIndex === null) return;
@@ -92,92 +98,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         setViewingReferenceIndex((prev) =>
             prev !== null && prev > 0 ? prev - 1 : prev
         );
-    };
-
-    useEffect(() => {
-        generateSessionStore.loadCurrentResult().then(val => {
-            if (val) setCurrentResult(val);
-        });
-
-        generateSessionStore.consumeTransferredReferences().then((refs) => {
-            if (refs.length > 0) {
-                replaceReferences(refs);
-            }
-        });
-
-    }, [replaceReferences]);
-
-    useEffect(() => {
-        if (!VALID_SIZES.includes(aspectRatio)) {
-            setDraft((currentDraft) => ({ ...currentDraft, aspectRatio: '1024x1024' }));
-        }
-    }, [aspectRatio, setDraft]);
-
-    const handleGenerate = async () => {
-        if (!apiKey) {
-            setError('Please set your OpenAI API Key in Settings first.');
-            return;
-        }
-        if (!prompt.trim()) return;
-
-        setLoading(true);
-        setError(null);
-        try {
-            const imageUrl = await imageWorkflow.generate({
-                apiKey,
-                prompt,
-                quality,
-                aspectRatio,
-                background,
-                style,
-                lighting,
-                palette,
-                referenceImages,
-            });
-
-            setCurrentResult(imageUrl);
-            updateDraft({ isSaved: false });
-            await generateSessionStore.saveCurrentResult(imageUrl);
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to generate image');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDownload = () => {
-        if (!currentResult) return;
-        downloadGeneratedImage(currentResult);
-    };
-
-    const handleSave = () => {
-        if (!currentResult || isSaved) return;
-
-        const saveRefImages = async () => {
-            const refDataUrls = await serializeReferences();
-
-            const newImage: ArchiveImage = {
-                id: crypto.randomUUID(),
-                url: currentResult,
-                prompt,
-                model: 'gpt-image-1.5',
-                timestamp: new Date().toISOString(),
-                width: 1024,
-                height: 1024,
-                quality,
-                aspectRatio: aspectRatio,
-                background,
-                style,
-                lighting,
-                palette,
-                references: refDataUrls
-            };
-
-            onSaveImage(newImage);
-            updateDraft({ isSaved: true });
-        };
-
-        saveRefImages();
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -257,7 +177,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="option-group">
                             <label>ASPECT RATIO</label>
                             <select
-                                value={VALID_SIZES.includes(aspectRatio) ? aspectRatio : '1024x1024'}
+                                value={aspectRatio}
                                 onChange={(e) => updateDraft({ aspectRatio: e.target.value })}
                                 className="select-input"
                             >
@@ -375,7 +295,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
                     <button
                         className="aura-btn aura-btn--primary"
-                        onClick={handleGenerate}
+                        onClick={() => { void generate(); }}
                         disabled={loading || !prompt.trim() || !apiKey}
                         style={{ width: '100%' }}
                     >
@@ -395,19 +315,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             <div className="result-actions">
                                 <button
-                                    onClick={handleSave}
+                                    onClick={() => { void save(); }}
                                     className={`aura-btn ${isSaved ? 'aura-btn--success' : 'aura-btn--primary'}`}
                                     disabled={isSaved}
                                 >
                                     <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
-                                <button className="aura-btn aura-btn--glass" onClick={handleDownload}>
+                                <button className="aura-btn aura-btn--glass" onClick={download}>
                                     <Download size={18} /> Download
                                 </button>
-                                <button onClick={async () => {
-                                    setCurrentResult(null);
-                                    await generateSessionStore.clearCurrentResult();
-                                }} className="aura-btn aura-btn--danger">
+                                <button onClick={() => { void clear(); }} className="aura-btn aura-btn--danger">
                                     <Trash2 size={18} />
                                 </button>
                             </div>
