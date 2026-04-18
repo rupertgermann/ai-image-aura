@@ -48,7 +48,7 @@ export function MigrationGate({
         }
 
         const next = migrator.detect();
-        const hasAny = next.apiKey.present;
+        const hasAny = next.apiKey.present || next.generateDraft.present;
         setSnapshot(hasAny ? next : null);
     }, [evaluationToken, migrator]);
 
@@ -60,6 +60,9 @@ export function MigrationGate({
             onMigrationComplete?.(outcome);
             if (outcome.apiKey.error) {
                 onMigrationError?.(outcome.apiKey.error);
+            }
+            if (outcome.generateDraft.error) {
+                onMigrationError?.(outcome.generateDraft.error);
             }
         } catch (error) {
             const wrapped = error instanceof Error ? error : new Error(String(error));

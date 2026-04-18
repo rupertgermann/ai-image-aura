@@ -26,6 +26,7 @@ export function SessionProvider({ hydrator, children, fallback }: SessionProvide
     const value = useMemo<SessionContextValue>(() => ({
         state,
         setApiKey: hydrator.setApiKey,
+        setGenerateDraft: hydrator.setGenerateDraft,
     }), [state, hydrator]);
 
     if (!state.isHydrated) {

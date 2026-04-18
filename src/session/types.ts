@@ -1,12 +1,16 @@
+import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from '../generate-session/GenerateSession';
+
 export interface SessionSnapshot {
     apiKey: string;
+    generateDraft: GenerateDraft;
 }
 
 export const EMPTY_SESSION_SNAPSHOT: SessionSnapshot = {
     apiKey: '',
+    generateDraft: DEFAULT_GENERATE_DRAFT,
 };
 
-export type SessionDomain = 'apiKey';
+export type SessionDomain = 'apiKey' | 'generateDraft';
 
 export type SessionOperation = 'load' | 'save' | 'clear';
 

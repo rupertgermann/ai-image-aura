@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { storage, type StorageProvider } from '../services/StorageService';
 import type { ImageBackground, ImageQuality } from '../utils/openai';
+import { useSessionContext } from '../session/sessionContextValue';
 
-const GENERATE_DRAFT_KEY = 'aura_generate_draft';
+export const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
 const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
 const VALID_ASPECT_RATIOS = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
-const LEGACY_KEYS = {
+export const LEGACY_DRAFT_KEYS = {
     prompt: 'aura_generate_prompt',
     quality: 'aura_generate_quality',
     aspectRatio: 'aura_generate_aspect_ratio',
@@ -19,6 +21,8 @@ const LEGACY_KEYS = {
     palette: 'aura_generate_palette',
     isSaved: 'aura_generate_is_saved',
 } as const;
+
+export type LegacyDraftField = keyof typeof LEGACY_DRAFT_KEYS;
 
 export interface GenerateDraft {
     prompt: string;
@@ -49,12 +53,18 @@ export interface GenerateSessionStore {
     consumeTransferredReferences(): Promise<string[]>;
 }
 
+export interface SessionDraftHandle {
+    getDraft(): GenerateDraft;
+    setDraft(draft: GenerateDraft): Promise<void> | void;
+}
+
 interface CreateGenerateSessionStoreDeps {
+    draftHandle: SessionDraftHandle;
     blobStorage?: StorageProvider;
     localStorage?: Storage;
 }
 
-const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
+export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
     prompt: '',
     quality: 'medium',
     aspectRatio: '1024x1024',
@@ -65,37 +75,24 @@ const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
     isSaved: false,
 };
 
-class LocalGenerateSessionStore implements GenerateSessionStore {
+class HandleBackedGenerateSessionStore implements GenerateSessionStore {
     private readonly blobStorage: StorageProvider;
     private readonly localStorage: Storage;
+    private readonly draftHandle: SessionDraftHandle;
 
-    constructor(blobStorage: StorageProvider, localStorage: Storage) {
+    constructor(blobStorage: StorageProvider, localStorage: Storage, draftHandle: SessionDraftHandle) {
         this.blobStorage = blobStorage;
         this.localStorage = localStorage;
+        this.draftHandle = draftHandle;
     }
 
     readDraft(): GenerateDraft {
-        const storedDraft = this.readJson<GenerateDraft>(GENERATE_DRAFT_KEY);
-        if (storedDraft) {
-            return sanitizeGenerateDraft(storedDraft);
-        }
-
-        return sanitizeGenerateDraft({
-            prompt: this.readLegacyValue(LEGACY_KEYS.prompt, DEFAULT_GENERATE_DRAFT.prompt),
-            quality: this.readLegacyValue(LEGACY_KEYS.quality, DEFAULT_GENERATE_DRAFT.quality),
-            aspectRatio: this.readLegacyValue(LEGACY_KEYS.aspectRatio, DEFAULT_GENERATE_DRAFT.aspectRatio),
-            background: this.readLegacyValue(LEGACY_KEYS.background, DEFAULT_GENERATE_DRAFT.background),
-            style: this.readLegacyValue(LEGACY_KEYS.style, DEFAULT_GENERATE_DRAFT.style),
-            lighting: this.readLegacyValue(LEGACY_KEYS.lighting, DEFAULT_GENERATE_DRAFT.lighting),
-            palette: this.readLegacyValue(LEGACY_KEYS.palette, DEFAULT_GENERATE_DRAFT.palette),
-            isSaved: this.readLegacyValue(LEGACY_KEYS.isSaved, DEFAULT_GENERATE_DRAFT.isSaved),
-        });
+        return sanitizeGenerateDraft(this.draftHandle.getDraft());
     }
 
     writeDraft(draft: GenerateDraft): void {
         const nextDraft = sanitizeGenerateDraft(draft);
-        this.localStorage.setItem(GENERATE_DRAFT_KEY, JSON.stringify(nextDraft));
-        this.clearLegacyDraftKeys();
+        void this.draftHandle.setDraft(nextDraft);
     }
 
     async transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
@@ -164,19 +161,6 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         }
     }
 
-    private readLegacyValue<T>(key: string, fallback: T): T {
-        const rawValue = this.localStorage.getItem(key);
-        if (!rawValue) {
-            return fallback;
-        }
-
-        try {
-            return JSON.parse(rawValue) as T;
-        } catch {
-            return rawValue as T;
-        }
-    }
-
     private readJson<T>(key: string): T | null {
         const rawValue = this.localStorage.getItem(key);
         if (!rawValue) {
@@ -189,32 +173,37 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             return null;
         }
     }
-
-    private clearLegacyDraftKeys() {
-        Object.values(LEGACY_KEYS).forEach((key) => this.localStorage.removeItem(key));
-    }
 }
 
-export function createGenerateSessionStore(deps: CreateGenerateSessionStoreDeps = {}): GenerateSessionStore {
-    return new LocalGenerateSessionStore(
+export function createGenerateSessionStore(deps: CreateGenerateSessionStoreDeps): GenerateSessionStore {
+    return new HandleBackedGenerateSessionStore(
         deps.blobStorage ?? storage,
         deps.localStorage ?? window.localStorage,
+        deps.draftHandle,
     );
 }
 
-export const generateSessionStore = createGenerateSessionStore();
-
-export function useGenerateDraft(store: GenerateSessionStore = generateSessionStore) {
-    const [draft, setDraft] = useState<GenerateDraft>(() => store.readDraft());
-
+export function useGenerateDraft(): readonly [GenerateDraft, Dispatch<SetStateAction<GenerateDraft>>] {
+    const ctx = useSessionContext();
+    const draft = ctx.state.snapshot.generateDraft;
+    const draftRef = useRef(draft);
     useEffect(() => {
-        store.writeDraft(draft);
-    }, [draft, store]);
-
+        draftRef.current = draft;
+    }, [draft]);
+    const { setGenerateDraft } = ctx;
+    const setDraft = useCallback<Dispatch<SetStateAction<GenerateDraft>>>(
+        (update) => {
+            const next = typeof update === 'function'
+                ? (update as (current: GenerateDraft) => GenerateDraft)(draftRef.current)
+                : update;
+            void setGenerateDraft(sanitizeGenerateDraft(next));
+        },
+        [setGenerateDraft],
+    );
     return [draft, setDraft] as const;
 }
 
-const sanitizeGenerateDraft = (draft: Partial<GenerateDraft>): GenerateDraft => ({
+export const sanitizeGenerateDraft = (draft: Partial<Record<keyof GenerateDraft, unknown>>): GenerateDraft => ({
     prompt: typeof draft.prompt === 'string' ? draft.prompt : DEFAULT_GENERATE_DRAFT.prompt,
     quality: coerceQuality(draft.quality),
     aspectRatio: typeof draft.aspectRatio === 'string' && VALID_ASPECT_RATIOS.has(draft.aspectRatio)

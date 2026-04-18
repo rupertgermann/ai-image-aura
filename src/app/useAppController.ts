@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useArchiveController } from '../archive/useArchiveController';
 import type { ArchiveImage } from '../db/types';
-import { generateSessionStore } from '../generate-session/GenerateSession';
+import { generateSessionStore } from '../session/sessionBootstrap';
 import { useAppNotifications } from './useAppNotifications';
 import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';

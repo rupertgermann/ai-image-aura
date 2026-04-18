@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
+import { generateSessionStore } from '../session/sessionBootstrap';
+import type { GenerateDraft, GenerateSessionStore } from './GenerateSession';
 import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';

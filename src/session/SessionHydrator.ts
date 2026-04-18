@@ -1,13 +1,22 @@
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
+import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import {
+    DEFAULT_GENERATE_DRAFT,
+    sanitizeGenerateDraft,
+    type GenerateDraft,
+} from '../generate-session/GenerateSession';
 import {
     EMPTY_SESSION_SNAPSHOT,
     INITIAL_SESSION_STATE,
+    type SessionDomain,
     type SessionError,
+    type SessionOperation,
     type SessionState,
 } from './types';
 
 export interface SessionHydratorDeps {
     credentialsPort: CredentialsPort;
+    generateDraftPort: GenerateDraftPort;
     bootstrap?: () => Promise<void>;
 }
 
@@ -15,8 +24,10 @@ export interface SessionHydrator {
     hydrate(): Promise<void>;
     refresh(): Promise<void>;
     getState(): SessionState;
+    getDraft(): GenerateDraft;
     subscribe(listener: () => void): () => void;
     setApiKey(value: string): Promise<void>;
+    setGenerateDraft(value: GenerateDraft): Promise<void>;
 }
 
 export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrator {
@@ -46,25 +57,42 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
         return value instanceof Error ? value : new Error(String(value));
     }
 
-    async function loadFromPort(markHydrated: boolean): Promise<void> {
-        try {
-            const apiKey = await deps.credentialsPort.load();
-            setState({
-                snapshot: { ...EMPTY_SESSION_SNAPSHOT, apiKey: apiKey ?? '' },
-                isHydrated: markHydrated || state.isHydrated,
-                lastError: null,
-            });
-        } catch (error) {
-            setState({
-                snapshot: state.snapshot,
-                isHydrated: markHydrated || state.isHydrated,
-                lastError: {
-                    domain: 'apiKey',
-                    operation: 'load',
-                    cause: toError(error),
-                },
-            });
-        }
+    function makeError(domain: SessionDomain, operation: SessionOperation, cause: unknown): SessionError {
+        return { domain, operation, cause: toError(cause) };
+    }
+
+    async function loadFromPorts(markHydrated: boolean): Promise<void> {
+        const [apiKeyResult, draftResult] = await Promise.all([
+            deps.credentialsPort.load().then(
+                (value) => ({ ok: true as const, value }),
+                (error) => ({ ok: false as const, error }),
+            ),
+            deps.generateDraftPort.load().then(
+                (value) => ({ ok: true as const, value }),
+                (error) => ({ ok: false as const, error }),
+            ),
+        ]);
+
+        const nextApiKey = apiKeyResult.ok ? (apiKeyResult.value ?? '') : state.snapshot.apiKey;
+        const nextDraft = draftResult.ok
+            ? (draftResult.value ? sanitizeGenerateDraft(draftResult.value) : DEFAULT_GENERATE_DRAFT)
+            : state.snapshot.generateDraft;
+
+        const loadError = !apiKeyResult.ok
+            ? makeError('apiKey', 'load', apiKeyResult.error)
+            : !draftResult.ok
+                ? makeError('generateDraft', 'load', draftResult.error)
+                : null;
+
+        setState({
+            snapshot: {
+                ...EMPTY_SESSION_SNAPSHOT,
+                apiKey: nextApiKey,
+                generateDraft: nextDraft,
+            },
+            isHydrated: markHydrated || state.isHydrated,
+            lastError: loadError,
+        });
     }
 
     return {
@@ -81,25 +109,24 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                         setState({
                             snapshot: EMPTY_SESSION_SNAPSHOT,
                             isHydrated: true,
-                            lastError: {
-                                domain: 'apiKey',
-                                operation: 'load',
-                                cause: toError(error),
-                            },
+                            lastError: makeError('apiKey', 'load', error),
                         });
                         return;
                     }
                 }
-                await loadFromPort(true);
+                await loadFromPorts(true);
             })();
 
             return hydrationPromise;
         },
         refresh(): Promise<void> {
-            return loadFromPort(false);
+            return loadFromPorts(false);
         },
         getState(): SessionState {
             return state;
+        },
+        getDraft(): GenerateDraft {
+            return state.snapshot.generateDraft;
         },
         subscribe(listener: () => void): () => void {
             listeners.add(listener);
@@ -115,7 +142,7 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                 lastError: null,
             });
 
-            const operation = value === '' ? 'clear' : 'save';
+            const operation: SessionOperation = value === '' ? 'clear' : 'save';
 
             try {
                 if (operation === 'clear') {
@@ -124,11 +151,22 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                     await deps.credentialsPort.save(value);
                 }
             } catch (error) {
-                recordError({
-                    domain: 'apiKey',
-                    operation,
-                    cause: toError(error),
-                });
+                recordError(makeError('apiKey', operation, error));
+            }
+        },
+        async setGenerateDraft(value: GenerateDraft): Promise<void> {
+            const sanitized = sanitizeGenerateDraft(value);
+            const previousState = state;
+            setState({
+                ...previousState,
+                snapshot: { ...previousState.snapshot, generateDraft: sanitized },
+                lastError: null,
+            });
+
+            try {
+                await deps.generateDraftPort.save(sanitized);
+            } catch (error) {
+                recordError(makeError('generateDraft', 'save', error));
             }
         },
     };

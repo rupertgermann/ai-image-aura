@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createSessionHydrator, type SessionHydratorDeps } from './SessionHydrator';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
+import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import {
+    DEFAULT_GENERATE_DRAFT,
+    type GenerateDraft,
+} from '../generate-session/GenerateSession';
 
 class InMemoryCredentialsPort implements CredentialsPort {
     apiKey: string | null;
@@ -51,36 +56,131 @@ class FlakyCredentialsPort implements CredentialsPort {
     }
 }
 
+class InMemoryGenerateDraftPort implements GenerateDraftPort {
+    draft: GenerateDraft | null;
+    saveCalls: GenerateDraft[] = [];
+    clearCalls = 0;
+
+    constructor(initial: GenerateDraft | null = null) {
+        this.draft = initial;
+    }
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<GenerateDraft | null> {
+        return this.draft;
+    }
+
+    async save(draft: GenerateDraft): Promise<void> {
+        this.saveCalls.push(draft);
+        this.draft = draft;
+    }
+
+    async clear(): Promise<void> {
+        this.clearCalls += 1;
+        this.draft = null;
+    }
+}
+
+class FlakyGenerateDraftPort implements GenerateDraftPort {
+    private shouldFail: 'save' | 'load' | 'clear' | null;
+
+    constructor(failOn: 'save' | 'load' | 'clear' | null = null) {
+        this.shouldFail = failOn;
+    }
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<GenerateDraft | null> {
+        if (this.shouldFail === 'load') throw new Error('load draft failed');
+        return null;
+    }
+
+    async save(): Promise<void> {
+        if (this.shouldFail === 'save') throw new Error('save draft failed');
+    }
+
+    async clear(): Promise<void> {
+        if (this.shouldFail === 'clear') throw new Error('clear draft failed');
+    }
+}
+
 function makeHydrator(deps: Partial<SessionHydratorDeps> = {}) {
     return createSessionHydrator({
         credentialsPort: deps.credentialsPort ?? new InMemoryCredentialsPort(),
+        generateDraftPort: deps.generateDraftPort ?? new InMemoryGenerateDraftPort(),
         bootstrap: deps.bootstrap,
     });
 }
 
+function makeDraft(overrides: Partial<GenerateDraft> = {}): GenerateDraft {
+    return {
+        prompt: 'a koi pond at dusk',
+        quality: 'high',
+        aspectRatio: '1024x1024',
+        background: 'auto',
+        style: 'risograph poster',
+        lighting: 'golden hour',
+        palette: 'copper + teal + cream',
+        isSaved: false,
+        ...overrides,
+    };
+}
+
 describe('SessionHydrator.hydrate', () => {
     it('hydrates an empty store to defaults', async () => {
-        const hydrator = makeHydrator({ credentialsPort: new InMemoryCredentialsPort(null) });
+        const hydrator = makeHydrator({
+            credentialsPort: new InMemoryCredentialsPort(null),
+            generateDraftPort: new InMemoryGenerateDraftPort(null),
+        });
 
         await hydrator.hydrate();
 
         expect(hydrator.getState()).toEqual({
-            snapshot: { apiKey: '' },
+            snapshot: { apiKey: '', generateDraft: DEFAULT_GENERATE_DRAFT },
             isHydrated: true,
             lastError: null,
         });
     });
 
-    it('hydrates a populated store with the persisted api key', async () => {
-        const hydrator = makeHydrator({ credentialsPort: new InMemoryCredentialsPort('sk-stored') });
+    it('hydrates a populated store with the persisted api key and draft', async () => {
+        const storedDraft = makeDraft({ prompt: 'stored prompt' });
+        const hydrator = makeHydrator({
+            credentialsPort: new InMemoryCredentialsPort('sk-stored'),
+            generateDraftPort: new InMemoryGenerateDraftPort(storedDraft),
+        });
 
         await hydrator.hydrate();
 
         expect(hydrator.getState().snapshot.apiKey).toBe('sk-stored');
+        expect(hydrator.getState().snapshot.generateDraft).toEqual(storedDraft);
         expect(hydrator.getState().isHydrated).toBe(true);
     });
 
-    it('awaits the bootstrap step before loading from the port', async () => {
+    it('loads api key and draft in parallel', async () => {
+        const order: string[] = [];
+        const credentialsPort = new InMemoryCredentialsPort('sk-stored');
+        const draftPort = new InMemoryGenerateDraftPort(makeDraft());
+
+        credentialsPort.load = async () => {
+            order.push('apiKey-start');
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            order.push('apiKey-end');
+            return 'sk-stored';
+        };
+        draftPort.load = async () => {
+            order.push('draft-start');
+            return makeDraft();
+        };
+
+        const hydrator = makeHydrator({ credentialsPort, generateDraftPort: draftPort });
+        await hydrator.hydrate();
+
+        expect(order[0]).toBe('apiKey-start');
+        expect(order[1]).toBe('draft-start');
+    });
+
+    it('awaits the bootstrap step before loading from the ports', async () => {
         const order: string[] = [];
         const port = new InMemoryCredentialsPort('sk-stored');
         const originalLoad = port.load.bind(port);
@@ -95,18 +195,32 @@ describe('SessionHydrator.hydrate', () => {
         const hydrator = makeHydrator({ credentialsPort: port, bootstrap });
         await hydrator.hydrate();
 
-        expect(order).toEqual(['bootstrap', 'load']);
+        expect(order[0]).toBe('bootstrap');
+        expect(order).toContain('load');
     });
 
-    it('records a load error and stays hydrated when the port fails', async () => {
+    it('records a load error and stays hydrated when the credentials port fails', async () => {
         const hydrator = makeHydrator({ credentialsPort: new FlakyCredentialsPort('load') });
 
         await hydrator.hydrate();
 
         const state = hydrator.getState();
         expect(state.isHydrated).toBe(true);
+        expect(state.lastError?.domain).toBe('apiKey');
         expect(state.lastError?.operation).toBe('load');
         expect(state.snapshot.apiKey).toBe('');
+    });
+
+    it('records a load error and stays hydrated when the draft port fails', async () => {
+        const hydrator = makeHydrator({ generateDraftPort: new FlakyGenerateDraftPort('load') });
+
+        await hydrator.hydrate();
+
+        const state = hydrator.getState();
+        expect(state.isHydrated).toBe(true);
+        expect(state.lastError?.domain).toBe('generateDraft');
+        expect(state.lastError?.operation).toBe('load');
+        expect(state.snapshot.generateDraft).toEqual(DEFAULT_GENERATE_DRAFT);
     });
 
     it('only runs hydration once across concurrent calls', async () => {
@@ -212,6 +326,70 @@ describe('SessionHydrator.setApiKey', () => {
     });
 });
 
+describe('SessionHydrator.setGenerateDraft', () => {
+    it('updates the snapshot optimistically before the port settles', async () => {
+        let resolveSave: (() => void) | null = null;
+        const port = new InMemoryGenerateDraftPort();
+        port.save = vi.fn(async (draft: GenerateDraft) => {
+            await new Promise<void>((resolve) => {
+                resolveSave = resolve;
+            });
+            port.draft = draft;
+        });
+
+        const hydrator = makeHydrator({ generateDraftPort: port });
+        await hydrator.hydrate();
+
+        const next = makeDraft({ prompt: 'new prompt' });
+        const writePromise = hydrator.setGenerateDraft(next);
+
+        expect(hydrator.getState().snapshot.generateDraft).toEqual(next);
+
+        resolveSave!();
+        await writePromise;
+
+        expect(port.save).toHaveBeenCalledWith(next);
+    });
+
+    it('records a save error without corrupting the optimistic snapshot', async () => {
+        const port = new FlakyGenerateDraftPort('save');
+        const hydrator = makeHydrator({ generateDraftPort: port });
+        await hydrator.hydrate();
+
+        const next = makeDraft({ prompt: 'new prompt' });
+        await hydrator.setGenerateDraft(next);
+
+        const state = hydrator.getState();
+        expect(state.snapshot.generateDraft).toEqual(next);
+        expect(state.lastError?.domain).toBe('generateDraft');
+        expect(state.lastError?.operation).toBe('save');
+        expect(state.lastError?.cause.message).toBe('save draft failed');
+    });
+
+    it('notifies subscribers on draft changes', async () => {
+        const port = new InMemoryGenerateDraftPort();
+        const hydrator = makeHydrator({ generateDraftPort: port });
+
+        const listener = vi.fn();
+        hydrator.subscribe(listener);
+
+        await hydrator.hydrate();
+        const callsAfterHydrate = listener.mock.calls.length;
+
+        await hydrator.setGenerateDraft(makeDraft({ prompt: 'next' }));
+
+        expect(listener.mock.calls.length).toBeGreaterThan(callsAfterHydrate);
+    });
+
+    it('reflects the persisted draft via getDraft()', async () => {
+        const stored = makeDraft({ prompt: 'stored' });
+        const hydrator = makeHydrator({ generateDraftPort: new InMemoryGenerateDraftPort(stored) });
+        await hydrator.hydrate();
+
+        expect(hydrator.getDraft()).toEqual(stored);
+    });
+});
+
 describe('SessionHydrator.refresh', () => {
     it('re-reads the api key from the port after external writes', async () => {
         const port = new InMemoryCredentialsPort();
@@ -222,5 +400,17 @@ describe('SessionHydrator.refresh', () => {
         await hydrator.refresh();
 
         expect(hydrator.getState().snapshot.apiKey).toBe('sk-from-elsewhere');
+    });
+
+    it('re-reads the draft from the port after external writes', async () => {
+        const port = new InMemoryGenerateDraftPort();
+        const hydrator = makeHydrator({ generateDraftPort: port });
+        await hydrator.hydrate();
+
+        const next = makeDraft({ prompt: 'from-elsewhere' });
+        port.draft = next;
+        await hydrator.refresh();
+
+        expect(hydrator.getState().snapshot.generateDraft).toEqual(next);
     });
 });

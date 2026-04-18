@@ -1,4 +1,13 @@
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
+import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import {
+    DEFAULT_GENERATE_DRAFT,
+    GENERATE_DRAFT_KEY,
+    LEGACY_DRAFT_KEYS,
+    sanitizeGenerateDraft,
+    type GenerateDraft,
+    type LegacyDraftField,
+} from '../generate-session/GenerateSession';
 
 export const MIGRATION_DECISION_KEY = 'aura_storage_migration_decision';
 export const API_KEY_PRIMARY_LS_KEY = 'aura_openapi_key';
@@ -12,6 +21,7 @@ export interface MigrationFieldSnapshot {
 
 export interface MigrationSnapshot {
     apiKey: MigrationFieldSnapshot;
+    generateDraft: MigrationFieldSnapshot;
 }
 
 export interface MigrationFieldOutcome {
@@ -22,10 +32,12 @@ export interface MigrationFieldOutcome {
 
 export interface MigrationOutcome {
     apiKey: MigrationFieldOutcome;
+    generateDraft: MigrationFieldOutcome;
 }
 
 export interface CreateLocalStorageMigratorDeps {
     credentialsPort: Pick<CredentialsPort, 'save'>;
+    generateDraftPort: Pick<GenerateDraftPort, 'save'>;
     localStorage?: Storage;
 }
 
@@ -37,6 +49,10 @@ export interface LocalStorageMigrator {
     getDecision(): MigrationDecision | null;
     resetDecision(): void;
 }
+
+const LEGACY_DRAFT_KEY_LIST: Array<[LegacyDraftField, string]> = Object.entries(LEGACY_DRAFT_KEYS) as Array<
+    [LegacyDraftField, string]
+>;
 
 export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps): LocalStorageMigrator {
     const ls = deps.localStorage ?? window.localStorage;
@@ -50,9 +66,45 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         return readStringValue(ls, API_KEY_LEGACY_LS_KEY);
     }
 
+    function readDraftFromLocalStorage(): { draft: GenerateDraft; sourceKeys: string[] } | null {
+        const currentRaw = ls.getItem(GENERATE_DRAFT_KEY);
+        if (currentRaw !== null) {
+            const parsed = tryParseJson(currentRaw);
+            if (parsed && typeof parsed === 'object') {
+                return {
+                    draft: sanitizeGenerateDraft(parsed as Partial<GenerateDraft>),
+                    sourceKeys: [GENERATE_DRAFT_KEY, ...LEGACY_DRAFT_KEY_LIST.map(([, key]) => key)],
+                };
+            }
+        }
+
+        const legacy: Partial<GenerateDraft> = {};
+        const touchedKeys: string[] = [];
+        for (const [field, key] of LEGACY_DRAFT_KEY_LIST) {
+            const raw = ls.getItem(key);
+            if (raw === null) {
+                continue;
+            }
+            touchedKeys.push(key);
+            const parsed = tryParseJson(raw);
+            const value = parsed === undefined ? raw : parsed;
+            (legacy as Record<string, unknown>)[field] = value;
+        }
+
+        if (touchedKeys.length === 0) {
+            return null;
+        }
+
+        return {
+            draft: sanitizeGenerateDraft(legacy),
+            sourceKeys: touchedKeys,
+        };
+    }
+
     function detect(): MigrationSnapshot {
         return {
             apiKey: { present: readApiKeyFromLocalStorage() !== null },
+            generateDraft: { present: readDraftFromLocalStorage() !== null },
         };
     }
 
@@ -60,12 +112,13 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         detect,
         hasMigratableData(): boolean {
             const snapshot = detect();
-            return snapshot.apiKey.present;
+            return snapshot.apiKey.present || snapshot.generateDraft.present;
         },
         async migrate(): Promise<MigrationOutcome> {
             const apiKey = readApiKeyFromLocalStorage();
-            const outcome: MigrationOutcome = {
-                apiKey: { detected: apiKey !== null, migrated: false },
+            const apiKeyOutcome: MigrationFieldOutcome = {
+                detected: apiKey !== null,
+                migrated: false,
             };
 
             if (apiKey !== null) {
@@ -73,14 +126,36 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
                     await deps.credentialsPort.save(apiKey);
                     ls.removeItem(API_KEY_PRIMARY_LS_KEY);
                     ls.removeItem(API_KEY_LEGACY_LS_KEY);
-                    outcome.apiKey.migrated = true;
+                    apiKeyOutcome.migrated = true;
                 } catch (error) {
-                    outcome.apiKey.error = error instanceof Error ? error : new Error(String(error));
+                    apiKeyOutcome.error = error instanceof Error ? error : new Error(String(error));
+                }
+            }
+
+            const draftRead = readDraftFromLocalStorage();
+            const draftOutcome: MigrationFieldOutcome = {
+                detected: draftRead !== null,
+                migrated: false,
+            };
+
+            if (draftRead !== null) {
+                try {
+                    await deps.generateDraftPort.save(draftRead.draft);
+                    for (const key of draftRead.sourceKeys) {
+                        ls.removeItem(key);
+                    }
+                    draftOutcome.migrated = true;
+                } catch (error) {
+                    draftOutcome.error = error instanceof Error ? error : new Error(String(error));
                 }
             }
 
             ls.setItem(MIGRATION_DECISION_KEY, JSON.stringify('migrated'));
-            return outcome;
+
+            return {
+                apiKey: apiKeyOutcome,
+                generateDraft: draftOutcome,
+            };
         },
         decline(): void {
             ls.setItem(MIGRATION_DECISION_KEY, JSON.stringify('declined'));
@@ -118,3 +193,6 @@ function tryParseJson(raw: string): unknown {
         return undefined;
     }
 }
+
+// re-export so tests and callers have a single source of truth
+export { DEFAULT_GENERATE_DRAFT };
