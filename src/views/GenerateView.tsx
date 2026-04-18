@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { useGenerateDraft } from '../generate-session/GenerateSession';
@@ -58,7 +58,114 @@ const PALETTES = [
     "cobalt + vermilion + bone",
     "sage + sand + charcoal",
     "magenta + midnight blue + silver",
+    "emerald + burgundy + gold",
+    "dusty rose + slate + ivory",
+    "burnt orange + navy + warm white",
 ];
+
+const PALETTE_COLORS: Record<string, string[]> = {
+    "copper + teal + cream": ["#b87333", "#009688", "#f5f0e8"],
+    "cobalt + vermilion + bone": ["#0047ab", "#e34234", "#e8dcc8"],
+    "sage + sand + charcoal": ["#9caf88", "#c2b280", "#36454f"],
+    "magenta + midnight blue + silver": ["#cc00cc", "#003366", "#c0c0c0"],
+    "emerald + burgundy + gold": ["#2e8b57", "#800020", "#d4af37"],
+    "dusty rose + slate + ivory": ["#c4a4a4", "#708090", "#fffff0"],
+    "burnt orange + navy + warm white": ["#cc5500", "#002147", "#faf9f0"],
+};
+
+interface CustomSelectOption {
+    value: string;
+    label: string;
+    swatches?: string[];
+}
+
+interface CustomSelectProps {
+    value: string;
+    options: CustomSelectOption[];
+    onChange: (value: string) => void;
+}
+
+const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+    const selected = options.find((o) => o.value === value);
+    return (
+        <div ref={ref} style={{ position: 'relative' }}>
+            <button
+                type="button"
+                className="select-input"
+                onClick={() => setOpen((o) => !o)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', width: '100%', textAlign: 'left' }}
+            >
+                {selected?.swatches && (
+                    <span style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                        {selected.swatches.map((c) => (
+                            <span key={c} style={{ width: '12px', height: '12px', borderRadius: '3px', background: c, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block', flexShrink: 0 }} />
+                        ))}
+                    </span>
+                )}
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected?.label ?? value}</span>
+                <span style={{ fontSize: '10px', opacity: 0.6 }}>▾</span>
+            </button>
+            {open && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 4px)',
+                        left: 0,
+                        right: 0,
+                        zIndex: 200,
+                        padding: '4px 0',
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                        background: 'var(--bg-main)',
+                        border: '1px solid var(--border-glass)',
+                        borderRadius: '10px',
+                        boxShadow: 'var(--glass-shadow)',
+                    }}
+                >
+                    {options.map((opt) => (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => { onChange(opt.value); setOpen(false); }}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                width: '100%',
+                                padding: '7px 12px',
+                                background: value === opt.value ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                border: 'none',
+                                color: 'inherit',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                fontSize: '13px',
+                            }}
+                        >
+                            {opt.swatches && (
+                                <span style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                                    {opt.swatches.map((c) => (
+                                        <span key={c} style={{ width: '14px', height: '14px', borderRadius: '3px', background: c, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block', flexShrink: 0 }} />
+                                    ))}
+                                </span>
+                            )}
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [draft, setDraft] = useGenerateDraft();
@@ -322,16 +429,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
                         <div className="option-group">
                             <label>ASPECT RATIO</label>
-                            <select
+                            <CustomSelect
                                 value={aspectRatio}
-                                onChange={(e) => updateDraft({ aspectRatio: e.target.value })}
-                                className="select-input"
-                            >
-                                <option value="auto">Auto</option>
-                                <option value="1024x1024">Square (1:1)</option>
-                                <option value="1536x1024">Wide (3:2)</option>
-                                <option value="1024x1536">Tall (2:3)</option>
-                            </select>
+                                onChange={(v) => updateDraft({ aspectRatio: v })}
+                                options={[
+                                    { value: 'auto', label: 'Auto' },
+                                    { value: '1024x1024', label: 'Square (1:1)' },
+                                    { value: '1536x1024', label: 'Wide (3:2)' },
+                                    { value: '1024x1536', label: 'Tall (2:3)' },
+                                ]}
+                            />
                         </div>
 
                         <div className="option-group">
@@ -354,44 +461,38 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
                         <div className="option-group">
                             <label>STYLE</label>
-                            <select
+                            <CustomSelect
                                 value={style}
-                                onChange={(e) => updateDraft({ style: e.target.value })}
-                                className="select-input"
-                            >
-                                <option value="none">None</option>
-                                {STYLES.map((s) => (
-                                    <option key={s} value={s}>{s}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => updateDraft({ style: v })}
+                                options={[
+                                    { value: 'none', label: 'None' },
+                                    ...STYLES.map((s) => ({ value: s, label: s })),
+                                ]}
+                            />
                         </div>
 
                         <div className="option-group">
                             <label>LIGHTING</label>
-                            <select
+                            <CustomSelect
                                 value={lighting}
-                                onChange={(e) => updateDraft({ lighting: e.target.value })}
-                                className="select-input"
-                            >
-                                <option value="none">None</option>
-                                {LIGHTING_OPTIONS.map((l) => (
-                                    <option key={l} value={l}>{l}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => updateDraft({ lighting: v })}
+                                options={[
+                                    { value: 'none', label: 'None' },
+                                    ...LIGHTING_OPTIONS.map((l) => ({ value: l, label: l })),
+                                ]}
+                            />
                         </div>
 
                         <div className="option-group">
                             <label>PALETTE</label>
-                            <select
+                            <CustomSelect
                                 value={palette}
-                                onChange={(e) => updateDraft({ palette: e.target.value })}
-                                className="select-input"
-                            >
-                                <option value="none">None</option>
-                                {PALETTES.map((p) => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => updateDraft({ palette: v })}
+                                options={[
+                                    { value: 'none', label: 'None' },
+                                    ...PALETTES.map((p) => ({ value: p, label: p, swatches: PALETTE_COLORS[p] })),
+                                ]}
+                            />
                         </div>
                     </div>
 
