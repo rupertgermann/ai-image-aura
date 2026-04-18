@@ -5,13 +5,14 @@ import { generateSessionStore } from '../generate-session/GenerateSession';
 import { useAppNotifications } from './useAppNotifications';
 import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
-import { initializeAuraPersistence } from '../db/AuraPersistence';
 import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
 import { lineageStore } from '../lineage/LineageStore';
 import { buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
+import { useApiKey } from '../session/useApiKey';
 
 export function useAppController() {
-    const { currentView, apiKey, theme, changeView, updateApiKey, toggleTheme } = useAppPreferences();
+    const { currentView, theme, changeView, toggleTheme } = useAppPreferences();
+    const { apiKey, setApiKey, lastError: apiKeyError } = useApiKey();
     const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
@@ -22,11 +23,14 @@ export function useAppController() {
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
 
     useEffect(() => {
-        initializeAuraPersistence().catch((error) => {
-            const nextError = error instanceof Error ? error : new Error('Failed to initialize local storage');
-            notifyError(nextError, 'Storage initialization failed');
-        });
-    }, [notifyError]);
+        if (apiKeyError) {
+            notifyError(apiKeyError.cause, `API key ${apiKeyError.operation} failed`);
+        }
+    }, [apiKeyError, notifyError]);
+
+    const updateApiKey = useCallback((key: string) => {
+        void setApiKey(key);
+    }, [setApiKey]);
 
     const saveImage = useCallback(async (image: ArchiveImage) => {
         const savedImage = await addImage(image);

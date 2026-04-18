@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, DatabaseZap, RefreshCw } from 'lucide-react';
+import { useMigrationCoordinator } from '../session/migrationContext';
 
 interface SettingsViewProps {
     apiKey: string | null;
@@ -7,6 +8,7 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) => {
+    const { requestRerun } = useMigrationCoordinator();
     const [tempKey, setTempKey] = useState(() => apiKey ?? '');
     const [status, setStatus] = useState<'idle' | 'saved'>('idle');
 
@@ -72,6 +74,27 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) =
                         <span>Key is stored and ready for generation. Masked for security.</span>
                     </div>
                 )}
+            </section>
+
+            <section className="settings-section glass-panel">
+                <div className="section-title">
+                    <DatabaseZap size={20} className="icon-purple" />
+                    <h2>Storage Migration</h2>
+                </div>
+
+                <p className="section-desc">
+                    Move legacy session data from your browser's localStorage into the local SQLite database.
+                    Use this if you previously declined the prompt or want to re-check for migratable data.
+                </p>
+
+                <button
+                    className="aura-btn aura-btn--glass"
+                    onClick={requestRerun}
+                    type="button"
+                >
+                    <RefreshCw size={16} />
+                    Re-run migration
+                </button>
             </section>
         </div>
     );
