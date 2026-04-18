@@ -6,10 +6,13 @@ import {
 import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import type { GenerateLineageSourcePort } from '../generate-session/SQLiteGenerateLineageSourcePort';
 import {
     DEFAULT_GENERATE_DRAFT,
     sanitizeGenerateDraft,
+    sanitizeGenerateLineageSource,
     type GenerateDraft,
+    type GenerateLineageSource,
 } from '../generate-session/GenerateSession';
 import {
     EMPTY_SESSION_SNAPSHOT,
@@ -24,6 +27,7 @@ export interface SessionHydratorDeps {
     credentialsPort: CredentialsPort;
     generateDraftPort: GenerateDraftPort;
     autopilotSettingsPort: AutopilotSettingsPort;
+    generateLineageSourcePort: GenerateLineageSourcePort;
     bootstrap?: () => Promise<void>;
 }
 
@@ -33,10 +37,13 @@ export interface SessionHydrator {
     getState(): SessionState;
     getDraft(): GenerateDraft;
     getAutopilotSettings(): AutopilotSettings;
+    getGenerateLineageSource(): GenerateLineageSource | null;
     subscribe(listener: () => void): () => void;
     setApiKey(value: string): Promise<void>;
     setGenerateDraft(value: GenerateDraft): Promise<void>;
     setAutopilotSettings(value: AutopilotSettings): Promise<void>;
+    setGenerateLineageSource(value: GenerateLineageSource): Promise<void>;
+    clearGenerateLineageSource(): Promise<void>;
 }
 
 export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrator {
@@ -71,7 +78,7 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
     }
 
     async function loadFromPorts(markHydrated: boolean): Promise<void> {
-        const [apiKeyResult, draftResult, autopilotResult] = await Promise.all([
+        const [apiKeyResult, draftResult, autopilotResult, lineageSourceResult] = await Promise.all([
             deps.credentialsPort.load().then(
                 (value) => ({ ok: true as const, value }),
                 (error) => ({ ok: false as const, error }),
@@ -84,6 +91,10 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                 (value) => ({ ok: true as const, value }),
                 (error) => ({ ok: false as const, error }),
             ),
+            deps.generateLineageSourcePort.load().then(
+                (value) => ({ ok: true as const, value }),
+                (error) => ({ ok: false as const, error }),
+            ),
         ]);
 
         const nextApiKey = apiKeyResult.ok ? (apiKeyResult.value ?? '') : state.snapshot.apiKey;
@@ -93,6 +104,9 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
         const nextAutopilot = autopilotResult.ok
             ? (autopilotResult.value ? sanitizeAutopilotSettings(autopilotResult.value) : DEFAULT_AUTOPILOT_SETTINGS)
             : state.snapshot.autopilotSettings;
+        const nextLineageSource = lineageSourceResult.ok
+            ? (lineageSourceResult.value ? sanitizeGenerateLineageSource(lineageSourceResult.value) : null)
+            : state.snapshot.generateLineageSource;
 
         const loadError = !apiKeyResult.ok
             ? makeError('apiKey', 'load', apiKeyResult.error)
@@ -100,7 +114,9 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                 ? makeError('generateDraft', 'load', draftResult.error)
                 : !autopilotResult.ok
                     ? makeError('autopilotSettings', 'load', autopilotResult.error)
-                    : null;
+                    : !lineageSourceResult.ok
+                        ? makeError('generateLineageSource', 'load', lineageSourceResult.error)
+                        : null;
 
         setState({
             snapshot: {
@@ -108,6 +124,7 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                 apiKey: nextApiKey,
                 generateDraft: nextDraft,
                 autopilotSettings: nextAutopilot,
+                generateLineageSource: nextLineageSource,
             },
             isHydrated: markHydrated || state.isHydrated,
             lastError: loadError,
@@ -149,6 +166,9 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
         },
         getAutopilotSettings(): AutopilotSettings {
             return state.snapshot.autopilotSettings;
+        },
+        getGenerateLineageSource(): GenerateLineageSource | null {
+            return state.snapshot.generateLineageSource;
         },
         subscribe(listener: () => void): () => void {
             listeners.add(listener);
@@ -206,5 +226,42 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                 recordError(makeError('autopilotSettings', 'save', error));
             }
         },
+        async setGenerateLineageSource(value: GenerateLineageSource): Promise<void> {
+            const sanitized = sanitizeGenerateLineageSource(value);
+            if (!sanitized) {
+                await clearLineageSource();
+                return;
+            }
+            const previousState = state;
+            setState({
+                ...previousState,
+                snapshot: { ...previousState.snapshot, generateLineageSource: sanitized },
+                lastError: null,
+            });
+
+            try {
+                await deps.generateLineageSourcePort.save(sanitized);
+            } catch (error) {
+                recordError(makeError('generateLineageSource', 'save', error));
+            }
+        },
+        clearGenerateLineageSource(): Promise<void> {
+            return clearLineageSource();
+        },
     };
+
+    async function clearLineageSource(): Promise<void> {
+        const previousState = state;
+        setState({
+            ...previousState,
+            snapshot: { ...previousState.snapshot, generateLineageSource: null },
+            lastError: null,
+        });
+
+        try {
+            await deps.generateLineageSourcePort.clear();
+        } catch (error) {
+            recordError(makeError('generateLineageSource', 'clear', error));
+        }
+    }
 }

@@ -8,7 +8,7 @@ import { useSessionContext } from '../session/sessionContextValue';
 export const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
-const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
+export const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
 const VALID_ASPECT_RATIOS = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
 export const LEGACY_DRAFT_KEYS = {
@@ -58,10 +58,16 @@ export interface SessionDraftHandle {
     setDraft(draft: GenerateDraft): Promise<void> | void;
 }
 
+export interface SessionLineageSourceHandle {
+    getLineageSource(): GenerateLineageSource | null;
+    setLineageSource(source: GenerateLineageSource): Promise<void> | void;
+    clearLineageSource(): Promise<void> | void;
+}
+
 interface CreateGenerateSessionStoreDeps {
     draftHandle: SessionDraftHandle;
+    lineageSourceHandle: SessionLineageSourceHandle;
     blobStorage?: StorageProvider;
-    localStorage?: Storage;
 }
 
 export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
@@ -77,13 +83,13 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
 
 class HandleBackedGenerateSessionStore implements GenerateSessionStore {
     private readonly blobStorage: StorageProvider;
-    private readonly localStorage: Storage;
     private readonly draftHandle: SessionDraftHandle;
+    private readonly lineageSourceHandle: SessionLineageSourceHandle;
 
-    constructor(blobStorage: StorageProvider, localStorage: Storage, draftHandle: SessionDraftHandle) {
+    constructor(blobStorage: StorageProvider, draftHandle: SessionDraftHandle, lineageSourceHandle: SessionLineageSourceHandle) {
         this.blobStorage = blobStorage;
-        this.localStorage = localStorage;
         this.draftHandle = draftHandle;
+        this.lineageSourceHandle = lineageSourceHandle;
     }
 
     readDraft(): GenerateDraft {
@@ -122,15 +128,20 @@ class HandleBackedGenerateSessionStore implements GenerateSessionStore {
     }
 
     loadLineageSource(): GenerateLineageSource | null {
-        return this.readJson<GenerateLineageSource>(GENERATE_LINEAGE_SOURCE_KEY);
+        return this.lineageSourceHandle.getLineageSource();
     }
 
     saveLineageSource(source: GenerateLineageSource): void {
-        this.localStorage.setItem(GENERATE_LINEAGE_SOURCE_KEY, JSON.stringify(source));
+        const sanitized = sanitizeGenerateLineageSource(source);
+        if (!sanitized) {
+            void this.lineageSourceHandle.clearLineageSource();
+            return;
+        }
+        void this.lineageSourceHandle.setLineageSource(sanitized);
     }
 
     clearLineageSource(): void {
-        this.localStorage.removeItem(GENERATE_LINEAGE_SOURCE_KEY);
+        void this.lineageSourceHandle.clearLineageSource();
     }
 
     loadCurrentResult(): Promise<string | null> {
@@ -160,26 +171,13 @@ class HandleBackedGenerateSessionStore implements GenerateSessionStore {
             return [];
         }
     }
-
-    private readJson<T>(key: string): T | null {
-        const rawValue = this.localStorage.getItem(key);
-        if (!rawValue) {
-            return null;
-        }
-
-        try {
-            return JSON.parse(rawValue) as T;
-        } catch {
-            return null;
-        }
-    }
 }
 
 export function createGenerateSessionStore(deps: CreateGenerateSessionStoreDeps): GenerateSessionStore {
     return new HandleBackedGenerateSessionStore(
         deps.blobStorage ?? storage,
-        deps.localStorage ?? window.localStorage,
         deps.draftHandle,
+        deps.lineageSourceHandle,
     );
 }
 
@@ -202,6 +200,21 @@ export function useGenerateDraft(): readonly [GenerateDraft, Dispatch<SetStateAc
     );
     return [draft, setDraft] as const;
 }
+
+export const sanitizeGenerateLineageSource = (
+    source: Partial<Record<keyof GenerateLineageSource, unknown>> | null | undefined,
+): GenerateLineageSource | null => {
+    if (!source || typeof source !== 'object') {
+        return null;
+    }
+    const archiveImageId = typeof source.archiveImageId === 'string' ? source.archiveImageId : '';
+    if (archiveImageId.length === 0) {
+        return null;
+    }
+    const stepIdValue = source.stepId;
+    const stepId = typeof stepIdValue === 'string' && stepIdValue.length > 0 ? stepIdValue : null;
+    return { archiveImageId, stepId };
+};
 
 export const sanitizeGenerateDraft = (draft: Partial<Record<keyof GenerateDraft, unknown>>): GenerateDraft => ({
     prompt: typeof draft.prompt === 'string' ? draft.prompt : DEFAULT_GENERATE_DRAFT.prompt,

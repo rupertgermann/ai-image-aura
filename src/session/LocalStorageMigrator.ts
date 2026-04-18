@@ -7,12 +7,16 @@ import {
 import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import type { GenerateLineageSourcePort } from '../generate-session/SQLiteGenerateLineageSourcePort';
 import {
     DEFAULT_GENERATE_DRAFT,
     GENERATE_DRAFT_KEY,
+    GENERATE_LINEAGE_SOURCE_KEY,
     LEGACY_DRAFT_KEYS,
     sanitizeGenerateDraft,
+    sanitizeGenerateLineageSource,
     type GenerateDraft,
+    type GenerateLineageSource,
     type LegacyDraftField,
 } from '../generate-session/GenerateSession';
 
@@ -30,6 +34,7 @@ export interface MigrationSnapshot {
     apiKey: MigrationFieldSnapshot;
     generateDraft: MigrationFieldSnapshot;
     autopilotSettings: MigrationFieldSnapshot;
+    generateLineageSource: MigrationFieldSnapshot;
 }
 
 export interface MigrationFieldOutcome {
@@ -42,12 +47,14 @@ export interface MigrationOutcome {
     apiKey: MigrationFieldOutcome;
     generateDraft: MigrationFieldOutcome;
     autopilotSettings: MigrationFieldOutcome;
+    generateLineageSource: MigrationFieldOutcome;
 }
 
 export interface CreateLocalStorageMigratorDeps {
     credentialsPort: Pick<CredentialsPort, 'save'>;
     generateDraftPort: Pick<GenerateDraftPort, 'save'>;
     autopilotSettingsPort: Pick<AutopilotSettingsPort, 'save'>;
+    generateLineageSourcePort: Pick<GenerateLineageSourcePort, 'save'>;
     localStorage?: Storage;
 }
 
@@ -103,6 +110,25 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         };
     }
 
+    function readLineageSourceFromLocalStorage(): { source: GenerateLineageSource; sourceKey: string } | null {
+        const raw = ls.getItem(GENERATE_LINEAGE_SOURCE_KEY);
+        if (raw === null) {
+            return null;
+        }
+
+        const parsed = tryParseJson(raw);
+        if (!parsed || typeof parsed !== 'object') {
+            return null;
+        }
+
+        const sanitized = sanitizeGenerateLineageSource(parsed as Partial<GenerateLineageSource>);
+        if (!sanitized) {
+            return null;
+        }
+
+        return { source: sanitized, sourceKey: GENERATE_LINEAGE_SOURCE_KEY };
+    }
+
     function readDraftFromLocalStorage(): { draft: GenerateDraft; sourceKeys: string[] } | null {
         const currentRaw = ls.getItem(GENERATE_DRAFT_KEY);
         if (currentRaw !== null) {
@@ -143,6 +169,7 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
             apiKey: { present: readApiKeyFromLocalStorage() !== null },
             generateDraft: { present: readDraftFromLocalStorage() !== null },
             autopilotSettings: { present: readAutopilotFromLocalStorage() !== null },
+            generateLineageSource: { present: readLineageSourceFromLocalStorage() !== null },
         };
     }
 
@@ -150,7 +177,12 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         detect,
         hasMigratableData(): boolean {
             const snapshot = detect();
-            return snapshot.apiKey.present || snapshot.generateDraft.present || snapshot.autopilotSettings.present;
+            return (
+                snapshot.apiKey.present
+                || snapshot.generateDraft.present
+                || snapshot.autopilotSettings.present
+                || snapshot.generateLineageSource.present
+            );
         },
         async migrate(): Promise<MigrationOutcome> {
             const apiKey = readApiKeyFromLocalStorage();
@@ -206,12 +238,29 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
                 }
             }
 
+            const lineageSourceRead = readLineageSourceFromLocalStorage();
+            const lineageSourceOutcome: MigrationFieldOutcome = {
+                detected: lineageSourceRead !== null,
+                migrated: false,
+            };
+
+            if (lineageSourceRead !== null) {
+                try {
+                    await deps.generateLineageSourcePort.save(lineageSourceRead.source);
+                    ls.removeItem(lineageSourceRead.sourceKey);
+                    lineageSourceOutcome.migrated = true;
+                } catch (error) {
+                    lineageSourceOutcome.error = error instanceof Error ? error : new Error(String(error));
+                }
+            }
+
             ls.setItem(MIGRATION_DECISION_KEY, JSON.stringify('migrated'));
 
             return {
                 apiKey: apiKeyOutcome,
                 generateDraft: draftOutcome,
                 autopilotSettings: autopilotOutcome,
+                generateLineageSource: lineageSourceOutcome,
             };
         },
         decline(): void {

@@ -15,11 +15,14 @@ import {
 } from '../autopilot/AutopilotSettings';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import type { GenerateLineageSourcePort } from '../generate-session/SQLiteGenerateLineageSourcePort';
 import {
     DEFAULT_GENERATE_DRAFT,
     GENERATE_DRAFT_KEY,
+    GENERATE_LINEAGE_SOURCE_KEY,
     LEGACY_DRAFT_KEYS,
     type GenerateDraft,
+    type GenerateLineageSource,
 } from '../generate-session/GenerateSession';
 
 class MemoryStorage implements Storage {
@@ -131,12 +134,40 @@ class FailingAutopilotSettingsPort implements AutopilotSettingsPort {
     async clear(): Promise<void> {}
 }
 
+class InMemoryGenerateLineageSourcePort implements GenerateLineageSourcePort {
+    source: GenerateLineageSource | null = null;
+    saveCount = 0;
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<GenerateLineageSource | null> {
+        return this.source;
+    }
+
+    async save(source: GenerateLineageSource): Promise<void> {
+        this.source = { archiveImageId: source.archiveImageId, stepId: source.stepId ?? null };
+        this.saveCount += 1;
+    }
+
+    async clear(): Promise<void> {
+        this.source = null;
+    }
+}
+
+class FailingGenerateLineageSourcePort implements GenerateLineageSourcePort {
+    async init(): Promise<void> {}
+    async load(): Promise<GenerateLineageSource | null> { return null; }
+    async save(): Promise<void> { throw new Error('lineage source write failed'); }
+    async clear(): Promise<void> {}
+}
+
 interface Harness {
     migrator: LocalStorageMigrator;
     storage: MemoryStorage;
     credentialsPort: InMemoryCredentialsPort;
     draftPort: InMemoryGenerateDraftPort;
     autopilotPort: InMemoryAutopilotSettingsPort;
+    lineageSourcePort: InMemoryGenerateLineageSourcePort;
 }
 
 function createHarness(
@@ -145,6 +176,7 @@ function createHarness(
         credentialsPort?: CredentialsPort;
         generateDraftPort?: GenerateDraftPort;
         autopilotSettingsPort?: AutopilotSettingsPort;
+        generateLineageSourcePort?: GenerateLineageSourcePort;
     } = {},
 ): Harness {
     const storage = new MemoryStorage();
@@ -154,10 +186,12 @@ function createHarness(
     const credentialsPort = overrides.credentialsPort ?? new InMemoryCredentialsPort();
     const draftPort = overrides.generateDraftPort ?? new InMemoryGenerateDraftPort();
     const autopilotPort = overrides.autopilotSettingsPort ?? new InMemoryAutopilotSettingsPort();
+    const lineageSourcePort = overrides.generateLineageSourcePort ?? new InMemoryGenerateLineageSourcePort();
     const migrator = createLocalStorageMigrator({
         credentialsPort,
         generateDraftPort: draftPort,
         autopilotSettingsPort: autopilotPort,
+        generateLineageSourcePort: lineageSourcePort,
         localStorage: storage,
     });
     return {
@@ -166,6 +200,7 @@ function createHarness(
         credentialsPort: credentialsPort as InMemoryCredentialsPort,
         draftPort: draftPort as InMemoryGenerateDraftPort,
         autopilotPort: autopilotPort as InMemoryAutopilotSettingsPort,
+        lineageSourcePort: lineageSourcePort as InMemoryGenerateLineageSourcePort,
     };
 }
 
@@ -189,6 +224,14 @@ function makeStoredAutopilot(overrides: Partial<AutopilotSettings> = {}): Autopi
     };
 }
 
+function makeStoredLineageSource(overrides: Partial<GenerateLineageSource> = {}): GenerateLineageSource {
+    return {
+        archiveImageId: 'stored-archive-image',
+        stepId: 'stored-step',
+        ...overrides,
+    };
+}
+
 describe('LocalStorageMigrator.detect', () => {
     it('reports everything as absent when nothing is stored', () => {
         const { migrator } = createHarness();
@@ -197,6 +240,7 @@ describe('LocalStorageMigrator.detect', () => {
             apiKey: { present: false },
             generateDraft: { present: false },
             autopilotSettings: { present: false },
+            generateLineageSource: { present: false },
         });
         expect(migrator.hasMigratableData()).toBe(false);
     });
@@ -266,6 +310,31 @@ describe('LocalStorageMigrator.detect', () => {
         });
 
         expect(migrator.detect().autopilotSettings.present).toBe(false);
+    });
+
+    it('detects a lineage source stored under the lineage key', () => {
+        const { migrator } = createHarness({
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(makeStoredLineageSource()),
+        });
+
+        expect(migrator.detect().generateLineageSource.present).toBe(true);
+        expect(migrator.hasMigratableData()).toBe(true);
+    });
+
+    it('reports lineage source absent when the stored value is malformed', () => {
+        const { migrator } = createHarness({
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify({ stepId: 'orphan' }),
+        });
+
+        expect(migrator.detect().generateLineageSource.present).toBe(false);
+    });
+
+    it('reports lineage source absent when no lineage key exists', () => {
+        const { migrator } = createHarness({
+            [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
+        });
+
+        expect(migrator.detect().generateLineageSource.present).toBe(false);
     });
 });
 
@@ -543,13 +612,15 @@ describe('LocalStorageMigrator.migrate autopilot branch', () => {
     it('migrates all four domains together in a single pass', async () => {
         const storedDraft = makeStoredDraft();
         const storedAutopilot = makeStoredAutopilot();
-        const { migrator, storage, credentialsPort, draftPort, autopilotPort } = createHarness({
+        const storedLineageSource = makeStoredLineageSource();
+        const { migrator, storage, credentialsPort, draftPort, autopilotPort, lineageSourcePort } = createHarness({
             [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
             [GENERATE_DRAFT_KEY]: JSON.stringify(storedDraft),
             [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify(storedAutopilot.mode),
             [LEGACY_AUTOPILOT_KEYS.goal]: JSON.stringify(storedAutopilot.goal),
             [LEGACY_AUTOPILOT_KEYS.maxIterations]: JSON.stringify(storedAutopilot.maxIterations),
             [LEGACY_AUTOPILOT_KEYS.satisfactionThreshold]: JSON.stringify(storedAutopilot.satisfactionThreshold),
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(storedLineageSource),
         });
 
         const outcome = await migrator.migrate();
@@ -557,23 +628,117 @@ describe('LocalStorageMigrator.migrate autopilot branch', () => {
         expect(outcome.apiKey.migrated).toBe(true);
         expect(outcome.generateDraft.migrated).toBe(true);
         expect(outcome.autopilotSettings.migrated).toBe(true);
+        expect(outcome.generateLineageSource.migrated).toBe(true);
         expect(credentialsPort.apiKey).toBe('sk-current');
         expect(draftPort.draft).toEqual(storedDraft);
         expect(autopilotPort.settings).toEqual(sanitizeAutopilotSettings(storedAutopilot));
+        expect(lineageSourcePort.source).toEqual(storedLineageSource);
         expect(storage.getItem(API_KEY_PRIMARY_LS_KEY)).toBeNull();
         expect(storage.getItem(GENERATE_DRAFT_KEY)).toBeNull();
+        expect(storage.getItem(GENERATE_LINEAGE_SOURCE_KEY)).toBeNull();
         for (const key of Object.values(LEGACY_AUTOPILOT_KEYS)) {
             expect(storage.getItem(key)).toBeNull();
         }
     });
 });
 
+describe('LocalStorageMigrator.migrate lineage source branch', () => {
+    it('writes the stored lineage source through the port and removes the key on success', async () => {
+        const stored = makeStoredLineageSource();
+        const { migrator, storage, lineageSourcePort } = createHarness({
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(stored),
+        });
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.generateLineageSource).toEqual({ detected: true, migrated: true });
+        expect(lineageSourcePort.source).toEqual(stored);
+        expect(storage.getItem(GENERATE_LINEAGE_SOURCE_KEY)).toBeNull();
+    });
+
+    it('migrates a lineage source with a null step id', async () => {
+        const stored = makeStoredLineageSource({ stepId: null });
+        const { migrator, lineageSourcePort } = createHarness({
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(stored),
+        });
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.generateLineageSource.migrated).toBe(true);
+        expect(lineageSourcePort.source).toEqual({ archiveImageId: 'stored-archive-image', stepId: null });
+    });
+
+    it('reports lineage source absence when no lineage key is present', async () => {
+        const { migrator, lineageSourcePort } = createHarness();
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.generateLineageSource).toEqual({ detected: false, migrated: false });
+        expect(lineageSourcePort.source).toBeNull();
+    });
+
+    it('leaves the lineage key intact when the port write fails', async () => {
+        const stored = makeStoredLineageSource();
+        const { migrator, storage } = createHarness(
+            {
+                [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(stored),
+            },
+            { generateLineageSourcePort: new FailingGenerateLineageSourcePort() },
+        );
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.generateLineageSource.migrated).toBe(false);
+        expect(outcome.generateLineageSource.error?.message).toBe('lineage source write failed');
+        expect(storage.getItem(GENERATE_LINEAGE_SOURCE_KEY)).toBe(JSON.stringify(stored));
+    });
+
+    it('isolates lineage source failure from api key and draft success', async () => {
+        const storedDraft = makeStoredDraft();
+        const storedLineageSource = makeStoredLineageSource();
+        const { migrator, storage, credentialsPort, draftPort } = createHarness(
+            {
+                [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
+                [GENERATE_DRAFT_KEY]: JSON.stringify(storedDraft),
+                [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(storedLineageSource),
+            },
+            { generateLineageSourcePort: new FailingGenerateLineageSourcePort() },
+        );
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.apiKey).toEqual({ detected: true, migrated: true });
+        expect(outcome.generateDraft).toEqual({ detected: true, migrated: true });
+        expect(outcome.generateLineageSource.migrated).toBe(false);
+        expect(credentialsPort.apiKey).toBe('sk-current');
+        expect(draftPort.draft).toEqual(storedDraft);
+        expect(storage.getItem(API_KEY_PRIMARY_LS_KEY)).toBeNull();
+        expect(storage.getItem(GENERATE_DRAFT_KEY)).toBeNull();
+        expect(storage.getItem(GENERATE_LINEAGE_SOURCE_KEY)).toBe(JSON.stringify(storedLineageSource));
+    });
+
+    it('is idempotent — second migrate finds no lineage data after success', async () => {
+        const { migrator, lineageSourcePort } = createHarness({
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(makeStoredLineageSource()),
+        });
+
+        await migrator.migrate();
+        const before = lineageSourcePort.saveCount;
+        const outcome = await migrator.migrate();
+
+        expect(outcome.generateLineageSource).toEqual({ detected: false, migrated: false });
+        expect(lineageSourcePort.saveCount).toBe(before);
+    });
+});
+
 describe('LocalStorageMigrator.decline + decision', () => {
     it('preserves source data and flips the flag on decline', () => {
+        const stored = makeStoredLineageSource();
         const { migrator, storage } = createHarness({
             [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
             [GENERATE_DRAFT_KEY]: JSON.stringify(makeStoredDraft()),
             [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
+            [GENERATE_LINEAGE_SOURCE_KEY]: JSON.stringify(stored),
         });
 
         migrator.decline();
@@ -581,6 +746,7 @@ describe('LocalStorageMigrator.decline + decision', () => {
         expect(storage.getItem(API_KEY_PRIMARY_LS_KEY)).toBe(JSON.stringify('sk-current'));
         expect(storage.getItem(GENERATE_DRAFT_KEY)).not.toBeNull();
         expect(storage.getItem(LEGACY_AUTOPILOT_KEYS.mode)).toBe(JSON.stringify('autopilot'));
+        expect(storage.getItem(GENERATE_LINEAGE_SOURCE_KEY)).toBe(JSON.stringify(stored));
         expect(migrator.getDecision()).toBe('declined');
     });
 

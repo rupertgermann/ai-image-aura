@@ -48,7 +48,10 @@ export function MigrationGate({
         }
 
         const next = migrator.detect();
-        const hasAny = next.apiKey.present || next.generateDraft.present || next.autopilotSettings.present;
+        const hasAny = next.apiKey.present
+            || next.generateDraft.present
+            || next.autopilotSettings.present
+            || next.generateLineageSource.present;
         setSnapshot(hasAny ? next : null);
     }, [evaluationToken, migrator]);
 
@@ -66,6 +69,9 @@ export function MigrationGate({
             }
             if (outcome.autopilotSettings.error) {
                 onMigrationError?.(outcome.autopilotSettings.error);
+            }
+            if (outcome.generateLineageSource.error) {
+                onMigrationError?.(outcome.generateLineageSource.error);
             }
         } catch (error) {
             const wrapped = error instanceof Error ? error : new Error(String(error));

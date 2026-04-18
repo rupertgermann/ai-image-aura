@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSessionHydrator, type SessionHydratorDeps } from './SessionHydrator';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import type { GenerateLineageSourcePort } from '../generate-session/SQLiteGenerateLineageSourcePort';
 import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
 import {
     DEFAULT_AUTOPILOT_SETTINGS,
@@ -10,6 +11,7 @@ import {
 import {
     DEFAULT_GENERATE_DRAFT,
     type GenerateDraft,
+    type GenerateLineageSource,
 } from '../generate-session/GenerateSession';
 
 class InMemoryCredentialsPort implements CredentialsPort {
@@ -159,11 +161,61 @@ class FlakyAutopilotSettingsPort implements AutopilotSettingsPort {
     }
 }
 
+class InMemoryGenerateLineageSourcePort implements GenerateLineageSourcePort {
+    source: GenerateLineageSource | null;
+    saveCalls: GenerateLineageSource[] = [];
+    clearCalls = 0;
+
+    constructor(initial: GenerateLineageSource | null = null) {
+        this.source = initial;
+    }
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<GenerateLineageSource | null> {
+        return this.source;
+    }
+
+    async save(source: GenerateLineageSource): Promise<void> {
+        this.saveCalls.push(source);
+        this.source = source;
+    }
+
+    async clear(): Promise<void> {
+        this.clearCalls += 1;
+        this.source = null;
+    }
+}
+
+class FlakyGenerateLineageSourcePort implements GenerateLineageSourcePort {
+    private shouldFail: 'save' | 'load' | 'clear' | null;
+
+    constructor(failOn: 'save' | 'load' | 'clear' | null = null) {
+        this.shouldFail = failOn;
+    }
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<GenerateLineageSource | null> {
+        if (this.shouldFail === 'load') throw new Error('load lineage source failed');
+        return null;
+    }
+
+    async save(): Promise<void> {
+        if (this.shouldFail === 'save') throw new Error('save lineage source failed');
+    }
+
+    async clear(): Promise<void> {
+        if (this.shouldFail === 'clear') throw new Error('clear lineage source failed');
+    }
+}
+
 function makeHydrator(deps: Partial<SessionHydratorDeps> = {}) {
     return createSessionHydrator({
         credentialsPort: deps.credentialsPort ?? new InMemoryCredentialsPort(),
         generateDraftPort: deps.generateDraftPort ?? new InMemoryGenerateDraftPort(),
         autopilotSettingsPort: deps.autopilotSettingsPort ?? new InMemoryAutopilotSettingsPort(),
+        generateLineageSourcePort: deps.generateLineageSourcePort ?? new InMemoryGenerateLineageSourcePort(),
         bootstrap: deps.bootstrap,
     });
 }
@@ -198,6 +250,7 @@ describe('SessionHydrator.hydrate', () => {
             credentialsPort: new InMemoryCredentialsPort(null),
             generateDraftPort: new InMemoryGenerateDraftPort(null),
             autopilotSettingsPort: new InMemoryAutopilotSettingsPort(null),
+            generateLineageSourcePort: new InMemoryGenerateLineageSourcePort(null),
         });
 
         await hydrator.hydrate();
@@ -207,6 +260,7 @@ describe('SessionHydrator.hydrate', () => {
                 apiKey: '',
                 generateDraft: DEFAULT_GENERATE_DRAFT,
                 autopilotSettings: DEFAULT_AUTOPILOT_SETTINGS,
+                generateLineageSource: null,
             },
             isHydrated: true,
             lastError: null,
@@ -327,6 +381,42 @@ describe('SessionHydrator.hydrate', () => {
         expect(state.lastError?.domain).toBe('autopilotSettings');
         expect(state.lastError?.operation).toBe('load');
         expect(state.snapshot.autopilotSettings).toEqual(DEFAULT_AUTOPILOT_SETTINGS);
+    });
+
+    it('hydrates a persisted lineage source alongside other domains', async () => {
+        const stored: GenerateLineageSource = { archiveImageId: 'archive-1', stepId: 'step-1' };
+        const hydrator = makeHydrator({
+            generateLineageSourcePort: new InMemoryGenerateLineageSourcePort(stored),
+        });
+
+        await hydrator.hydrate();
+
+        expect(hydrator.getState().snapshot.generateLineageSource).toEqual(stored);
+        expect(hydrator.getGenerateLineageSource()).toEqual(stored);
+    });
+
+    it('falls back to null lineage source when the port returns null', async () => {
+        const hydrator = makeHydrator({
+            generateLineageSourcePort: new InMemoryGenerateLineageSourcePort(null),
+        });
+
+        await hydrator.hydrate();
+
+        expect(hydrator.getState().snapshot.generateLineageSource).toBeNull();
+    });
+
+    it('records a load error and stays hydrated when the lineage source port fails', async () => {
+        const hydrator = makeHydrator({
+            generateLineageSourcePort: new FlakyGenerateLineageSourcePort('load'),
+        });
+
+        await hydrator.hydrate();
+
+        const state = hydrator.getState();
+        expect(state.isHydrated).toBe(true);
+        expect(state.lastError?.domain).toBe('generateLineageSource');
+        expect(state.lastError?.operation).toBe('load');
+        expect(state.snapshot.generateLineageSource).toBeNull();
     });
 
     it('only runs hydration once across concurrent calls', async () => {
@@ -586,5 +676,111 @@ describe('SessionHydrator.refresh', () => {
         await hydrator.refresh();
 
         expect(hydrator.getState().snapshot.autopilotSettings).toEqual(next);
+    });
+
+    it('re-reads the lineage source from the port after external writes', async () => {
+        const port = new InMemoryGenerateLineageSourcePort();
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+        await hydrator.hydrate();
+
+        const next: GenerateLineageSource = { archiveImageId: 'external-archive', stepId: 'external-step' };
+        port.source = next;
+        await hydrator.refresh();
+
+        expect(hydrator.getState().snapshot.generateLineageSource).toEqual(next);
+    });
+});
+
+describe('SessionHydrator.setGenerateLineageSource', () => {
+    it('updates the snapshot optimistically before the port settles', async () => {
+        let resolveSave: (() => void) | null = null;
+        const port = new InMemoryGenerateLineageSourcePort();
+        port.save = vi.fn(async (source: GenerateLineageSource) => {
+            await new Promise<void>((resolve) => {
+                resolveSave = resolve;
+            });
+            port.source = source;
+        });
+
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+        await hydrator.hydrate();
+
+        const next: GenerateLineageSource = { archiveImageId: 'archive-next', stepId: 'step-next' };
+        const writePromise = hydrator.setGenerateLineageSource(next);
+
+        expect(hydrator.getState().snapshot.generateLineageSource).toEqual(next);
+
+        resolveSave!();
+        await writePromise;
+
+        expect(port.save).toHaveBeenCalledWith(next);
+    });
+
+    it('routes invalid values (no archiveImageId) through clear()', async () => {
+        const port = new InMemoryGenerateLineageSourcePort({ archiveImageId: 'archive-1', stepId: 'step-1' });
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+        await hydrator.hydrate();
+
+        await hydrator.setGenerateLineageSource({ archiveImageId: '', stepId: null } as GenerateLineageSource);
+
+        expect(hydrator.getState().snapshot.generateLineageSource).toBeNull();
+        expect(port.clearCalls).toBe(1);
+    });
+
+    it('records a save error without corrupting the optimistic snapshot', async () => {
+        const port = new FlakyGenerateLineageSourcePort('save');
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+        await hydrator.hydrate();
+
+        const next: GenerateLineageSource = { archiveImageId: 'archive-1', stepId: 'step-1' };
+        await hydrator.setGenerateLineageSource(next);
+
+        const state = hydrator.getState();
+        expect(state.snapshot.generateLineageSource).toEqual(next);
+        expect(state.lastError?.domain).toBe('generateLineageSource');
+        expect(state.lastError?.operation).toBe('save');
+        expect(state.lastError?.cause.message).toBe('save lineage source failed');
+    });
+
+    it('notifies subscribers on lineage source changes', async () => {
+        const port = new InMemoryGenerateLineageSourcePort();
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+
+        const listener = vi.fn();
+        hydrator.subscribe(listener);
+
+        await hydrator.hydrate();
+        const callsAfterHydrate = listener.mock.calls.length;
+
+        await hydrator.setGenerateLineageSource({ archiveImageId: 'archive-next', stepId: null });
+
+        expect(listener.mock.calls.length).toBeGreaterThan(callsAfterHydrate);
+    });
+});
+
+describe('SessionHydrator.clearGenerateLineageSource', () => {
+    it('clears the snapshot and invokes port.clear()', async () => {
+        const port = new InMemoryGenerateLineageSourcePort({ archiveImageId: 'archive-1', stepId: 'step-1' });
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+        await hydrator.hydrate();
+
+        await hydrator.clearGenerateLineageSource();
+
+        expect(hydrator.getState().snapshot.generateLineageSource).toBeNull();
+        expect(port.clearCalls).toBe(1);
+    });
+
+    it('records a clear error without corrupting the optimistic snapshot', async () => {
+        const port = new FlakyGenerateLineageSourcePort('clear');
+        const hydrator = makeHydrator({ generateLineageSourcePort: port });
+        await hydrator.hydrate();
+
+        await hydrator.clearGenerateLineageSource();
+
+        const state = hydrator.getState();
+        expect(state.snapshot.generateLineageSource).toBeNull();
+        expect(state.lastError?.domain).toBe('generateLineageSource');
+        expect(state.lastError?.operation).toBe('clear');
+        expect(state.lastError?.cause.message).toBe('clear lineage source failed');
     });
 });
