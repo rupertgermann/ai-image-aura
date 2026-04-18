@@ -5,9 +5,9 @@ import { useGenerateDraft } from '../generate-session/GenerateSession';
 import { useGenerateController } from '../generate-session/useGenerateController';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
+import { MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { goalPromptTranslator } from '../autopilot/GoalPromptTranslator';
+import { useAutopilotSettings } from '../session/useAutopilotSettings';
 
 interface GenerateViewProps {
     apiKey: string | null;
@@ -169,10 +169,14 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
 
 const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [draft, setDraft] = useGenerateDraft();
-    const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
-    const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
-    const [maxIterations, setMaxIterations] = useLocalStorage('generate_autopilot_max_iterations', DEFAULT_AUTOPILOT_MAX_ITERATIONS);
-    const [satisfactionThreshold, setSatisfactionThreshold] = useLocalStorage('generate_autopilot_threshold', DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD);
+    const {
+        settings: autopilotSettings,
+        setMode,
+        setGoal,
+        setMaxIterations,
+        setSatisfactionThreshold,
+    } = useAutopilotSettings();
+    const { mode, goal, maxIterations, satisfactionThreshold } = autopilotSettings;
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);
@@ -303,11 +307,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="toggle-group">
                             <button
                                 className={!isAutopilotMode ? 'active' : ''}
-                                onClick={() => setMode('single-shot')}
+                                onClick={() => { void setMode('single-shot'); }}
                             >Single Shot</button>
                             <button
                                 className={isAutopilotMode ? 'active' : ''}
-                                onClick={() => setMode('autopilot')}
+                                onClick={() => { void setMode('autopilot'); }}
                             >Autopilot</button>
                         </div>
                     </div>
@@ -328,7 +332,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 <textarea
                                     placeholder="Describe the outcome you want in plain language..."
                                     value={goal}
-                                    onChange={(e) => setGoal(e.target.value)}
+                                    onChange={(e) => { void setGoal(e.target.value); }}
                                     className="prompt-input autopilot-goal-input"
                                 />
                             </div>
@@ -341,7 +345,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                         min={1}
                                         max={MAX_AUTOPILOT_ITERATIONS}
                                         value={maxIterations}
-                                        onChange={(e) => setMaxIterations(Number(e.target.value))}
+                                        onChange={(e) => { void setMaxIterations(Number(e.target.value)); }}
                                         className="range-input"
                                     />
                                     <span className="autopilot-metric">{maxIterations}</span>
@@ -354,7 +358,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                         min={50}
                                         max={100}
                                         value={satisfactionThreshold}
-                                        onChange={(e) => setSatisfactionThreshold(Number(e.target.value))}
+                                        onChange={(e) => { void setSatisfactionThreshold(Number(e.target.value)); }}
                                         className="range-input"
                                     />
                                     <span className="autopilot-metric">{satisfactionThreshold}/100</span>

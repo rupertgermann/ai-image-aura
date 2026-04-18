@@ -6,6 +6,13 @@ import {
     createLocalStorageMigrator,
     type LocalStorageMigrator,
 } from './LocalStorageMigrator';
+import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
+import {
+    DEFAULT_AUTOPILOT_SETTINGS,
+    LEGACY_AUTOPILOT_KEYS,
+    sanitizeAutopilotSettings,
+    type AutopilotSettings,
+} from '../autopilot/AutopilotSettings';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
 import {
@@ -97,11 +104,39 @@ class FailingGenerateDraftPort implements GenerateDraftPort {
     async clear(): Promise<void> {}
 }
 
+class InMemoryAutopilotSettingsPort implements AutopilotSettingsPort {
+    settings: AutopilotSettings | null = null;
+    saveCount = 0;
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<AutopilotSettings | null> {
+        return this.settings;
+    }
+
+    async save(settings: AutopilotSettings): Promise<void> {
+        this.settings = { ...settings };
+        this.saveCount += 1;
+    }
+
+    async clear(): Promise<void> {
+        this.settings = null;
+    }
+}
+
+class FailingAutopilotSettingsPort implements AutopilotSettingsPort {
+    async init(): Promise<void> {}
+    async load(): Promise<AutopilotSettings | null> { return null; }
+    async save(): Promise<void> { throw new Error('autopilot write failed'); }
+    async clear(): Promise<void> {}
+}
+
 interface Harness {
     migrator: LocalStorageMigrator;
     storage: MemoryStorage;
     credentialsPort: InMemoryCredentialsPort;
     draftPort: InMemoryGenerateDraftPort;
+    autopilotPort: InMemoryAutopilotSettingsPort;
 }
 
 function createHarness(
@@ -109,6 +144,7 @@ function createHarness(
     overrides: {
         credentialsPort?: CredentialsPort;
         generateDraftPort?: GenerateDraftPort;
+        autopilotSettingsPort?: AutopilotSettingsPort;
     } = {},
 ): Harness {
     const storage = new MemoryStorage();
@@ -117,9 +153,11 @@ function createHarness(
     }
     const credentialsPort = overrides.credentialsPort ?? new InMemoryCredentialsPort();
     const draftPort = overrides.generateDraftPort ?? new InMemoryGenerateDraftPort();
+    const autopilotPort = overrides.autopilotSettingsPort ?? new InMemoryAutopilotSettingsPort();
     const migrator = createLocalStorageMigrator({
         credentialsPort,
         generateDraftPort: draftPort,
+        autopilotSettingsPort: autopilotPort,
         localStorage: storage,
     });
     return {
@@ -127,6 +165,7 @@ function createHarness(
         storage,
         credentialsPort: credentialsPort as InMemoryCredentialsPort,
         draftPort: draftPort as InMemoryGenerateDraftPort,
+        autopilotPort: autopilotPort as InMemoryAutopilotSettingsPort,
     };
 }
 
@@ -139,6 +178,17 @@ function makeStoredDraft(overrides: Partial<GenerateDraft> = {}): GenerateDraft 
     };
 }
 
+function makeStoredAutopilot(overrides: Partial<AutopilotSettings> = {}): AutopilotSettings {
+    return {
+        ...DEFAULT_AUTOPILOT_SETTINGS,
+        mode: 'autopilot',
+        goal: 'stored goal',
+        maxIterations: 5,
+        satisfactionThreshold: 80,
+        ...overrides,
+    };
+}
+
 describe('LocalStorageMigrator.detect', () => {
     it('reports everything as absent when nothing is stored', () => {
         const { migrator } = createHarness();
@@ -146,6 +196,7 @@ describe('LocalStorageMigrator.detect', () => {
         expect(migrator.detect()).toEqual({
             apiKey: { present: false },
             generateDraft: { present: false },
+            autopilotSettings: { present: false },
         });
         expect(migrator.hasMigratableData()).toBe(false);
     });
@@ -198,6 +249,23 @@ describe('LocalStorageMigrator.detect', () => {
         });
 
         expect(migrator.detect().generateDraft.present).toBe(false);
+    });
+
+    it('detects autopilot settings when any of the four legacy keys is present', () => {
+        const { migrator } = createHarness({
+            [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
+        });
+
+        expect(migrator.detect().autopilotSettings.present).toBe(true);
+        expect(migrator.hasMigratableData()).toBe(true);
+    });
+
+    it('reports autopilot settings absent when no autopilot keys exist', () => {
+        const { migrator } = createHarness({
+            [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
+        });
+
+        expect(migrator.detect().autopilotSettings.present).toBe(false);
     });
 });
 
@@ -375,17 +443,144 @@ describe('LocalStorageMigrator.migrate draft branch', () => {
     });
 });
 
+describe('LocalStorageMigrator.migrate autopilot branch', () => {
+    it('composes settings from all four autopilot keys, migrates them, and removes the source keys', async () => {
+        const { migrator, storage, autopilotPort } = createHarness({
+            [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
+            [LEGACY_AUTOPILOT_KEYS.goal]: JSON.stringify('a cozy scene'),
+            [LEGACY_AUTOPILOT_KEYS.maxIterations]: JSON.stringify(7),
+            [LEGACY_AUTOPILOT_KEYS.satisfactionThreshold]: JSON.stringify(75),
+        });
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.autopilotSettings).toEqual({ detected: true, migrated: true });
+        expect(autopilotPort.settings).toEqual({
+            mode: 'autopilot',
+            goal: 'a cozy scene',
+            maxIterations: 7,
+            satisfactionThreshold: 75,
+        });
+        for (const key of Object.values(LEGACY_AUTOPILOT_KEYS)) {
+            expect(storage.getItem(key)).toBeNull();
+        }
+    });
+
+    it('migrates a partial autopilot record, filling missing fields with defaults', async () => {
+        const { migrator, autopilotPort } = createHarness({
+            [LEGACY_AUTOPILOT_KEYS.goal]: JSON.stringify('only goal set'),
+        });
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.autopilotSettings.migrated).toBe(true);
+        expect(autopilotPort.settings).toEqual({
+            ...DEFAULT_AUTOPILOT_SETTINGS,
+            goal: 'only goal set',
+        });
+    });
+
+    it('reports autopilot absence when no autopilot keys are present', async () => {
+        const { migrator, autopilotPort } = createHarness();
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.autopilotSettings).toEqual({ detected: false, migrated: false });
+        expect(autopilotPort.settings).toBeNull();
+    });
+
+    it('leaves autopilot source keys intact when the autopilot port write fails', async () => {
+        const { migrator, storage } = createHarness(
+            {
+                [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
+                [LEGACY_AUTOPILOT_KEYS.goal]: JSON.stringify('unchanged goal'),
+            },
+            { autopilotSettingsPort: new FailingAutopilotSettingsPort() },
+        );
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.autopilotSettings.migrated).toBe(false);
+        expect(outcome.autopilotSettings.error?.message).toBe('autopilot write failed');
+        expect(storage.getItem(LEGACY_AUTOPILOT_KEYS.mode)).toBe(JSON.stringify('autopilot'));
+        expect(storage.getItem(LEGACY_AUTOPILOT_KEYS.goal)).toBe(JSON.stringify('unchanged goal'));
+    });
+
+    it('isolates autopilot failure from api key and draft success', async () => {
+        const storedDraft = makeStoredDraft();
+        const { migrator, storage, credentialsPort, draftPort } = createHarness(
+            {
+                [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
+                [GENERATE_DRAFT_KEY]: JSON.stringify(storedDraft),
+                [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
+            },
+            { autopilotSettingsPort: new FailingAutopilotSettingsPort() },
+        );
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.apiKey).toEqual({ detected: true, migrated: true });
+        expect(outcome.generateDraft).toEqual({ detected: true, migrated: true });
+        expect(outcome.autopilotSettings.migrated).toBe(false);
+        expect(credentialsPort.apiKey).toBe('sk-current');
+        expect(draftPort.draft).toEqual(storedDraft);
+        expect(storage.getItem(LEGACY_AUTOPILOT_KEYS.mode)).toBe(JSON.stringify('autopilot'));
+    });
+
+    it('is idempotent — second migrate finds no autopilot data after success', async () => {
+        const { migrator, autopilotPort } = createHarness({
+            [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
+        });
+
+        await migrator.migrate();
+        const before = autopilotPort.saveCount;
+        const outcome = await migrator.migrate();
+
+        expect(outcome.autopilotSettings).toEqual({ detected: false, migrated: false });
+        expect(autopilotPort.saveCount).toBe(before);
+    });
+
+    it('migrates all four domains together in a single pass', async () => {
+        const storedDraft = makeStoredDraft();
+        const storedAutopilot = makeStoredAutopilot();
+        const { migrator, storage, credentialsPort, draftPort, autopilotPort } = createHarness({
+            [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
+            [GENERATE_DRAFT_KEY]: JSON.stringify(storedDraft),
+            [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify(storedAutopilot.mode),
+            [LEGACY_AUTOPILOT_KEYS.goal]: JSON.stringify(storedAutopilot.goal),
+            [LEGACY_AUTOPILOT_KEYS.maxIterations]: JSON.stringify(storedAutopilot.maxIterations),
+            [LEGACY_AUTOPILOT_KEYS.satisfactionThreshold]: JSON.stringify(storedAutopilot.satisfactionThreshold),
+        });
+
+        const outcome = await migrator.migrate();
+
+        expect(outcome.apiKey.migrated).toBe(true);
+        expect(outcome.generateDraft.migrated).toBe(true);
+        expect(outcome.autopilotSettings.migrated).toBe(true);
+        expect(credentialsPort.apiKey).toBe('sk-current');
+        expect(draftPort.draft).toEqual(storedDraft);
+        expect(autopilotPort.settings).toEqual(sanitizeAutopilotSettings(storedAutopilot));
+        expect(storage.getItem(API_KEY_PRIMARY_LS_KEY)).toBeNull();
+        expect(storage.getItem(GENERATE_DRAFT_KEY)).toBeNull();
+        for (const key of Object.values(LEGACY_AUTOPILOT_KEYS)) {
+            expect(storage.getItem(key)).toBeNull();
+        }
+    });
+});
+
 describe('LocalStorageMigrator.decline + decision', () => {
     it('preserves source data and flips the flag on decline', () => {
         const { migrator, storage } = createHarness({
             [API_KEY_PRIMARY_LS_KEY]: JSON.stringify('sk-current'),
             [GENERATE_DRAFT_KEY]: JSON.stringify(makeStoredDraft()),
+            [LEGACY_AUTOPILOT_KEYS.mode]: JSON.stringify('autopilot'),
         });
 
         migrator.decline();
 
         expect(storage.getItem(API_KEY_PRIMARY_LS_KEY)).toBe(JSON.stringify('sk-current'));
         expect(storage.getItem(GENERATE_DRAFT_KEY)).not.toBeNull();
+        expect(storage.getItem(LEGACY_AUTOPILOT_KEYS.mode)).toBe(JSON.stringify('autopilot'));
         expect(migrator.getDecision()).toBe('declined');
     });
 

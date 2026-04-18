@@ -27,6 +27,7 @@ export function SessionProvider({ hydrator, children, fallback }: SessionProvide
         state,
         setApiKey: hydrator.setApiKey,
         setGenerateDraft: hydrator.setGenerateDraft,
+        setAutopilotSettings: hydrator.setAutopilotSettings,
     }), [state, hydrator]);
 
     if (!state.isHydrated) {

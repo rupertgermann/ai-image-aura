@@ -1,5 +1,5 @@
 import React from 'react';
-import { DatabaseZap, FileText, KeyRound, ShieldCheck, X } from 'lucide-react';
+import { DatabaseZap, FileText, KeyRound, Rocket, ShieldCheck, X } from 'lucide-react';
 import type { MigrationSnapshot } from '../session/LocalStorageMigrator';
 
 interface MigrationPromptProps {
@@ -43,6 +43,15 @@ const MigrationPrompt: React.FC<MigrationPromptProps> = ({ snapshot, onMigrate, 
                             <span className="migration-prompt__row-label">Generate draft</span>
                             <span className={`migration-prompt__row-status ${snapshot.generateDraft.present ? 'is-present' : 'is-absent'}`}>
                                 {snapshot.generateDraft.present ? 'present' : 'not set'}
+                            </span>
+                        </li>
+                        <li className="migration-prompt__row">
+                            <span className="migration-prompt__row-icon">
+                                <Rocket size={16} />
+                            </span>
+                            <span className="migration-prompt__row-label">Autopilot settings</span>
+                            <span className={`migration-prompt__row-status ${snapshot.autopilotSettings.present ? 'is-present' : 'is-absent'}`}>
+                                {snapshot.autopilotSettings.present ? 'present' : 'not set'}
                             </span>
                         </li>
                     </ul>

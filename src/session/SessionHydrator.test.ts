@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSessionHydrator, type SessionHydratorDeps } from './SessionHydrator';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
+import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
+import {
+    DEFAULT_AUTOPILOT_SETTINGS,
+    type AutopilotSettings,
+} from '../autopilot/AutopilotSettings';
 import {
     DEFAULT_GENERATE_DRAFT,
     type GenerateDraft,
@@ -105,10 +110,60 @@ class FlakyGenerateDraftPort implements GenerateDraftPort {
     }
 }
 
+class InMemoryAutopilotSettingsPort implements AutopilotSettingsPort {
+    settings: AutopilotSettings | null;
+    saveCalls: AutopilotSettings[] = [];
+    clearCalls = 0;
+
+    constructor(initial: AutopilotSettings | null = null) {
+        this.settings = initial;
+    }
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<AutopilotSettings | null> {
+        return this.settings;
+    }
+
+    async save(settings: AutopilotSettings): Promise<void> {
+        this.saveCalls.push(settings);
+        this.settings = settings;
+    }
+
+    async clear(): Promise<void> {
+        this.clearCalls += 1;
+        this.settings = null;
+    }
+}
+
+class FlakyAutopilotSettingsPort implements AutopilotSettingsPort {
+    private shouldFail: 'save' | 'load' | 'clear' | null;
+
+    constructor(failOn: 'save' | 'load' | 'clear' | null = null) {
+        this.shouldFail = failOn;
+    }
+
+    async init(): Promise<void> {}
+
+    async load(): Promise<AutopilotSettings | null> {
+        if (this.shouldFail === 'load') throw new Error('load autopilot failed');
+        return null;
+    }
+
+    async save(): Promise<void> {
+        if (this.shouldFail === 'save') throw new Error('save autopilot failed');
+    }
+
+    async clear(): Promise<void> {
+        if (this.shouldFail === 'clear') throw new Error('clear autopilot failed');
+    }
+}
+
 function makeHydrator(deps: Partial<SessionHydratorDeps> = {}) {
     return createSessionHydrator({
         credentialsPort: deps.credentialsPort ?? new InMemoryCredentialsPort(),
         generateDraftPort: deps.generateDraftPort ?? new InMemoryGenerateDraftPort(),
+        autopilotSettingsPort: deps.autopilotSettingsPort ?? new InMemoryAutopilotSettingsPort(),
         bootstrap: deps.bootstrap,
     });
 }
@@ -127,17 +182,32 @@ function makeDraft(overrides: Partial<GenerateDraft> = {}): GenerateDraft {
     };
 }
 
+function makeAutopilotSettings(overrides: Partial<AutopilotSettings> = {}): AutopilotSettings {
+    return {
+        mode: 'autopilot',
+        goal: 'A rainy Tokyo street at night',
+        maxIterations: 6,
+        satisfactionThreshold: 85,
+        ...overrides,
+    };
+}
+
 describe('SessionHydrator.hydrate', () => {
     it('hydrates an empty store to defaults', async () => {
         const hydrator = makeHydrator({
             credentialsPort: new InMemoryCredentialsPort(null),
             generateDraftPort: new InMemoryGenerateDraftPort(null),
+            autopilotSettingsPort: new InMemoryAutopilotSettingsPort(null),
         });
 
         await hydrator.hydrate();
 
         expect(hydrator.getState()).toEqual({
-            snapshot: { apiKey: '', generateDraft: DEFAULT_GENERATE_DRAFT },
+            snapshot: {
+                apiKey: '',
+                generateDraft: DEFAULT_GENERATE_DRAFT,
+                autopilotSettings: DEFAULT_AUTOPILOT_SETTINGS,
+            },
             isHydrated: true,
             lastError: null,
         });
@@ -155,6 +225,28 @@ describe('SessionHydrator.hydrate', () => {
         expect(hydrator.getState().snapshot.apiKey).toBe('sk-stored');
         expect(hydrator.getState().snapshot.generateDraft).toEqual(storedDraft);
         expect(hydrator.getState().isHydrated).toBe(true);
+    });
+
+    it('hydrates persisted autopilot settings alongside other domains', async () => {
+        const storedSettings = makeAutopilotSettings({ goal: 'stored goal' });
+        const hydrator = makeHydrator({
+            autopilotSettingsPort: new InMemoryAutopilotSettingsPort(storedSettings),
+        });
+
+        await hydrator.hydrate();
+
+        expect(hydrator.getState().snapshot.autopilotSettings).toEqual(storedSettings);
+        expect(hydrator.getAutopilotSettings()).toEqual(storedSettings);
+    });
+
+    it('falls back to default autopilot settings when the port returns null', async () => {
+        const hydrator = makeHydrator({
+            autopilotSettingsPort: new InMemoryAutopilotSettingsPort(null),
+        });
+
+        await hydrator.hydrate();
+
+        expect(hydrator.getState().snapshot.autopilotSettings).toEqual(DEFAULT_AUTOPILOT_SETTINGS);
     });
 
     it('loads api key and draft in parallel', async () => {
@@ -221,6 +313,20 @@ describe('SessionHydrator.hydrate', () => {
         expect(state.lastError?.domain).toBe('generateDraft');
         expect(state.lastError?.operation).toBe('load');
         expect(state.snapshot.generateDraft).toEqual(DEFAULT_GENERATE_DRAFT);
+    });
+
+    it('records a load error and stays hydrated when the autopilot port fails', async () => {
+        const hydrator = makeHydrator({
+            autopilotSettingsPort: new FlakyAutopilotSettingsPort('load'),
+        });
+
+        await hydrator.hydrate();
+
+        const state = hydrator.getState();
+        expect(state.isHydrated).toBe(true);
+        expect(state.lastError?.domain).toBe('autopilotSettings');
+        expect(state.lastError?.operation).toBe('load');
+        expect(state.snapshot.autopilotSettings).toEqual(DEFAULT_AUTOPILOT_SETTINGS);
     });
 
     it('only runs hydration once across concurrent calls', async () => {
@@ -390,6 +496,62 @@ describe('SessionHydrator.setGenerateDraft', () => {
     });
 });
 
+describe('SessionHydrator.setAutopilotSettings', () => {
+    it('updates the snapshot optimistically before the port settles', async () => {
+        let resolveSave: (() => void) | null = null;
+        const port = new InMemoryAutopilotSettingsPort();
+        port.save = vi.fn(async (settings: AutopilotSettings) => {
+            await new Promise<void>((resolve) => {
+                resolveSave = resolve;
+            });
+            port.settings = settings;
+        });
+
+        const hydrator = makeHydrator({ autopilotSettingsPort: port });
+        await hydrator.hydrate();
+
+        const next = makeAutopilotSettings({ goal: 'new goal' });
+        const writePromise = hydrator.setAutopilotSettings(next);
+
+        expect(hydrator.getState().snapshot.autopilotSettings).toEqual(next);
+
+        resolveSave!();
+        await writePromise;
+
+        expect(port.save).toHaveBeenCalledWith(next);
+    });
+
+    it('records a save error without corrupting the optimistic snapshot', async () => {
+        const port = new FlakyAutopilotSettingsPort('save');
+        const hydrator = makeHydrator({ autopilotSettingsPort: port });
+        await hydrator.hydrate();
+
+        const next = makeAutopilotSettings({ goal: 'new goal' });
+        await hydrator.setAutopilotSettings(next);
+
+        const state = hydrator.getState();
+        expect(state.snapshot.autopilotSettings).toEqual(next);
+        expect(state.lastError?.domain).toBe('autopilotSettings');
+        expect(state.lastError?.operation).toBe('save');
+        expect(state.lastError?.cause.message).toBe('save autopilot failed');
+    });
+
+    it('notifies subscribers on autopilot setting changes', async () => {
+        const port = new InMemoryAutopilotSettingsPort();
+        const hydrator = makeHydrator({ autopilotSettingsPort: port });
+
+        const listener = vi.fn();
+        hydrator.subscribe(listener);
+
+        await hydrator.hydrate();
+        const callsAfterHydrate = listener.mock.calls.length;
+
+        await hydrator.setAutopilotSettings(makeAutopilotSettings({ goal: 'next' }));
+
+        expect(listener.mock.calls.length).toBeGreaterThan(callsAfterHydrate);
+    });
+});
+
 describe('SessionHydrator.refresh', () => {
     it('re-reads the api key from the port after external writes', async () => {
         const port = new InMemoryCredentialsPort();
@@ -412,5 +574,17 @@ describe('SessionHydrator.refresh', () => {
         await hydrator.refresh();
 
         expect(hydrator.getState().snapshot.generateDraft).toEqual(next);
+    });
+
+    it('re-reads autopilot settings from the port after external writes', async () => {
+        const port = new InMemoryAutopilotSettingsPort();
+        const hydrator = makeHydrator({ autopilotSettingsPort: port });
+        await hydrator.hydrate();
+
+        const next = makeAutopilotSettings({ goal: 'external write' });
+        port.settings = next;
+        await hydrator.refresh();
+
+        expect(hydrator.getState().snapshot.autopilotSettings).toEqual(next);
     });
 });

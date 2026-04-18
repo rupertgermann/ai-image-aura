@@ -1,3 +1,10 @@
+import {
+    LEGACY_AUTOPILOT_KEYS,
+    sanitizeAutopilotSettings,
+    type AutopilotSettings,
+    type LegacyAutopilotField,
+} from '../autopilot/AutopilotSettings';
+import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
 import {
@@ -22,6 +29,7 @@ export interface MigrationFieldSnapshot {
 export interface MigrationSnapshot {
     apiKey: MigrationFieldSnapshot;
     generateDraft: MigrationFieldSnapshot;
+    autopilotSettings: MigrationFieldSnapshot;
 }
 
 export interface MigrationFieldOutcome {
@@ -33,11 +41,13 @@ export interface MigrationFieldOutcome {
 export interface MigrationOutcome {
     apiKey: MigrationFieldOutcome;
     generateDraft: MigrationFieldOutcome;
+    autopilotSettings: MigrationFieldOutcome;
 }
 
 export interface CreateLocalStorageMigratorDeps {
     credentialsPort: Pick<CredentialsPort, 'save'>;
     generateDraftPort: Pick<GenerateDraftPort, 'save'>;
+    autopilotSettingsPort: Pick<AutopilotSettingsPort, 'save'>;
     localStorage?: Storage;
 }
 
@@ -54,6 +64,10 @@ const LEGACY_DRAFT_KEY_LIST: Array<[LegacyDraftField, string]> = Object.entries(
     [LegacyDraftField, string]
 >;
 
+const LEGACY_AUTOPILOT_KEY_LIST: Array<[LegacyAutopilotField, string]> = Object.entries(LEGACY_AUTOPILOT_KEYS) as Array<
+    [LegacyAutopilotField, string]
+>;
+
 export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps): LocalStorageMigrator {
     const ls = deps.localStorage ?? window.localStorage;
 
@@ -64,6 +78,29 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         }
 
         return readStringValue(ls, API_KEY_LEGACY_LS_KEY);
+    }
+
+    function readAutopilotFromLocalStorage(): { settings: AutopilotSettings; sourceKeys: string[] } | null {
+        const raw: Partial<Record<LegacyAutopilotField, unknown>> = {};
+        const touchedKeys: string[] = [];
+        for (const [field, key] of LEGACY_AUTOPILOT_KEY_LIST) {
+            const rawValue = ls.getItem(key);
+            if (rawValue === null) {
+                continue;
+            }
+            touchedKeys.push(key);
+            const parsed = tryParseJson(rawValue);
+            raw[field] = parsed === undefined ? rawValue : parsed;
+        }
+
+        if (touchedKeys.length === 0) {
+            return null;
+        }
+
+        return {
+            settings: sanitizeAutopilotSettings(raw),
+            sourceKeys: touchedKeys,
+        };
     }
 
     function readDraftFromLocalStorage(): { draft: GenerateDraft; sourceKeys: string[] } | null {
@@ -105,6 +142,7 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         return {
             apiKey: { present: readApiKeyFromLocalStorage() !== null },
             generateDraft: { present: readDraftFromLocalStorage() !== null },
+            autopilotSettings: { present: readAutopilotFromLocalStorage() !== null },
         };
     }
 
@@ -112,7 +150,7 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
         detect,
         hasMigratableData(): boolean {
             const snapshot = detect();
-            return snapshot.apiKey.present || snapshot.generateDraft.present;
+            return snapshot.apiKey.present || snapshot.generateDraft.present || snapshot.autopilotSettings.present;
         },
         async migrate(): Promise<MigrationOutcome> {
             const apiKey = readApiKeyFromLocalStorage();
@@ -150,11 +188,30 @@ export function createLocalStorageMigrator(deps: CreateLocalStorageMigratorDeps)
                 }
             }
 
+            const autopilotRead = readAutopilotFromLocalStorage();
+            const autopilotOutcome: MigrationFieldOutcome = {
+                detected: autopilotRead !== null,
+                migrated: false,
+            };
+
+            if (autopilotRead !== null) {
+                try {
+                    await deps.autopilotSettingsPort.save(autopilotRead.settings);
+                    for (const key of autopilotRead.sourceKeys) {
+                        ls.removeItem(key);
+                    }
+                    autopilotOutcome.migrated = true;
+                } catch (error) {
+                    autopilotOutcome.error = error instanceof Error ? error : new Error(String(error));
+                }
+            }
+
             ls.setItem(MIGRATION_DECISION_KEY, JSON.stringify('migrated'));
 
             return {
                 apiKey: apiKeyOutcome,
                 generateDraft: draftOutcome,
+                autopilotSettings: autopilotOutcome,
             };
         },
         decline(): void {

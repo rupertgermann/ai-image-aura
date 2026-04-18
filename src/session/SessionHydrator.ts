@@ -1,3 +1,9 @@
+import {
+    DEFAULT_AUTOPILOT_SETTINGS,
+    sanitizeAutopilotSettings,
+    type AutopilotSettings,
+} from '../autopilot/AutopilotSettings';
+import type { AutopilotSettingsPort } from '../autopilot/SQLiteAutopilotSettingsPort';
 import type { CredentialsPort } from '../credentials/SQLiteCredentialsPort';
 import type { GenerateDraftPort } from '../generate-session/SQLiteGenerateDraftPort';
 import {
@@ -17,6 +23,7 @@ import {
 export interface SessionHydratorDeps {
     credentialsPort: CredentialsPort;
     generateDraftPort: GenerateDraftPort;
+    autopilotSettingsPort: AutopilotSettingsPort;
     bootstrap?: () => Promise<void>;
 }
 
@@ -25,9 +32,11 @@ export interface SessionHydrator {
     refresh(): Promise<void>;
     getState(): SessionState;
     getDraft(): GenerateDraft;
+    getAutopilotSettings(): AutopilotSettings;
     subscribe(listener: () => void): () => void;
     setApiKey(value: string): Promise<void>;
     setGenerateDraft(value: GenerateDraft): Promise<void>;
+    setAutopilotSettings(value: AutopilotSettings): Promise<void>;
 }
 
 export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrator {
@@ -62,12 +71,16 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
     }
 
     async function loadFromPorts(markHydrated: boolean): Promise<void> {
-        const [apiKeyResult, draftResult] = await Promise.all([
+        const [apiKeyResult, draftResult, autopilotResult] = await Promise.all([
             deps.credentialsPort.load().then(
                 (value) => ({ ok: true as const, value }),
                 (error) => ({ ok: false as const, error }),
             ),
             deps.generateDraftPort.load().then(
+                (value) => ({ ok: true as const, value }),
+                (error) => ({ ok: false as const, error }),
+            ),
+            deps.autopilotSettingsPort.load().then(
                 (value) => ({ ok: true as const, value }),
                 (error) => ({ ok: false as const, error }),
             ),
@@ -77,18 +90,24 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
         const nextDraft = draftResult.ok
             ? (draftResult.value ? sanitizeGenerateDraft(draftResult.value) : DEFAULT_GENERATE_DRAFT)
             : state.snapshot.generateDraft;
+        const nextAutopilot = autopilotResult.ok
+            ? (autopilotResult.value ? sanitizeAutopilotSettings(autopilotResult.value) : DEFAULT_AUTOPILOT_SETTINGS)
+            : state.snapshot.autopilotSettings;
 
         const loadError = !apiKeyResult.ok
             ? makeError('apiKey', 'load', apiKeyResult.error)
             : !draftResult.ok
                 ? makeError('generateDraft', 'load', draftResult.error)
-                : null;
+                : !autopilotResult.ok
+                    ? makeError('autopilotSettings', 'load', autopilotResult.error)
+                    : null;
 
         setState({
             snapshot: {
                 ...EMPTY_SESSION_SNAPSHOT,
                 apiKey: nextApiKey,
                 generateDraft: nextDraft,
+                autopilotSettings: nextAutopilot,
             },
             isHydrated: markHydrated || state.isHydrated,
             lastError: loadError,
@@ -127,6 +146,9 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
         },
         getDraft(): GenerateDraft {
             return state.snapshot.generateDraft;
+        },
+        getAutopilotSettings(): AutopilotSettings {
+            return state.snapshot.autopilotSettings;
         },
         subscribe(listener: () => void): () => void {
             listeners.add(listener);
@@ -167,6 +189,21 @@ export function createSessionHydrator(deps: SessionHydratorDeps): SessionHydrato
                 await deps.generateDraftPort.save(sanitized);
             } catch (error) {
                 recordError(makeError('generateDraft', 'save', error));
+            }
+        },
+        async setAutopilotSettings(value: AutopilotSettings): Promise<void> {
+            const sanitized = sanitizeAutopilotSettings(value);
+            const previousState = state;
+            setState({
+                ...previousState,
+                snapshot: { ...previousState.snapshot, autopilotSettings: sanitized },
+                lastError: null,
+            });
+
+            try {
+                await deps.autopilotSettingsPort.save(sanitized);
+            } catch (error) {
+                recordError(makeError('autopilotSettings', 'save', error));
             }
         },
     };
