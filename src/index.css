@@ -1,56 +1,81 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap');
 
 :root {
-    /* --- Colors: Dark Mode (Default) --- */
-    --bg-deep: #0a0a0c;
-    --bg-main: #121217;
-    --bg-card: rgba(255, 255, 255, 0.03);
-    --border-glass: rgba(255, 255, 255, 0.08);
+    /* Colors */
+    --color-canvas: #e5e7eb;
+    --color-charcoal: #000000;
+    --color-snow: #ffffff;
+    --color-steel: #a3a3a3;
+    --color-ash: #191919;
+    --color-mercury: #c2c2c2;
+    --color-powder: #dddee2;
+    --color-muted-sage: #d7cdb8;
+    --color-amber-glow: #ff6c2f;
 
-    --text-main: #f8fafc;
-    --text-muted: #94a3b8;
-    --text-dim: #64748b;
+    /* Typography — Font Families */
+    --font-suisse-intl: 'Suisse Intl', 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-suisse-intl-mono: 'Suisse Intl Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-    --accent-primary: #A855F7;
-    --accent-secondary: #06B6D4;
-    --accent-gradient: linear-gradient(135deg, #A855F7 0%, #06B6D4 100%);
+    /* Typography — Scale */
+    --text-caption: 12px;
+    --leading-caption: 1.5;
+    --text-body: 16px;
+    --leading-body: 1.5;
+    --text-subheading: 18px;
+    --leading-subheading: 1.4;
+    --text-heading-sm: 20px;
+    --leading-heading-sm: 1.25;
+    --text-heading: 24px;
+    --leading-heading: 1.2;
+    --text-display: 100px;
+    --leading-display: 0.85;
+    --tracking-display: -0.03em;
 
-    /* --- Effects --- */
-    --glass-blur: blur(12px);
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    --transition-fast: all 0.15s ease;
+    /* Typography — Weights */
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
 
-    /* --- Layout & Spacing --- */
+    /* Spacing */
+    --spacing-unit: 8px;
+    --spacing-8: 8px;
+    --spacing-16: 16px;
+    --spacing-24: 24px;
+    --spacing-40: 40px;
+    --spacing-56: 56px;
+    --spacing-64: 64px;
+    --spacing-80: 80px;
+    --spacing-96: 96px;
+
+    /* Layout */
+    --section-gap: 40px;
+    --card-padding: 12px;
+    --element-gap: 8px;
+
+    /* Border Radius */
+    --radius-sm: 2px;
+    --radius-3xl: 24px;
+    --radius-3xl-2: 32px;
+    --radius-full: 64px;
+
+    /* Named Radii */
+    --radius-cards: 0px;
+    --radius-large: 32px;
+    --radius-buttons: 24px;
+    --radius-default: 2px;
+    --radius-circular: 9999px;
+
+    /* Surfaces */
+    --surface-canvas: #e5e7eb;
+    --surface-card-surface: #ffffff;
+    --surface-base-dark-surface: #000000;
+
+    /* Layout — preserved */
     --sidebar-width: 280px;
     --content-max-width: 1400px;
-    --radius-sm: 8px;
-    --radius-md: 12px;
-    --radius-lg: 20px;
-    --radius-xl: 32px;
 
-    --space-xs: 0.5rem;
-    --space-sm: 0.75rem;
-    --space-md: 1rem;
-    --space-lg: 1.5rem;
-    --space-xl: 2.5rem;
-}
-
-[data-theme="light"] {
-    --bg-deep: #f1f5f9;
-    --bg-main: #ffffff;
-    --bg-card: rgba(0, 0, 0, 0.02);
-    --border-glass: rgba(0, 0, 0, 0.08);
-
-    --text-main: #1e293b;
-    --text-muted: #64748b;
-    --text-dim: #94a3b8;
-
-    --accent-primary: #9333ea;
-    --accent-secondary: #0891b2;
-    --accent-gradient: linear-gradient(135deg, #9333ea 0%, #0891b2 100%);
-
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s ease;
 }
 
 /* ==========================================================================
@@ -63,9 +88,9 @@
 }
 
 body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-deep);
-    color: var(--text-main);
+    font-family: var(--font-suisse-intl);
+    background-color: var(--color-canvas);
+    color: var(--color-charcoal);
     overflow: hidden;
     height: 100vh;
     width: 100vw;
