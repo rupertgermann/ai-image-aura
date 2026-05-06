@@ -101,63 +101,21 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
         <div ref={ref} style={{ position: 'relative' }}>
             <button
                 type="button"
-                className="select-input"
+                className="custom-select-trigger"
                 onClick={() => setOpen((o) => !o)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', width: '100%', textAlign: 'left' }}
             >
-                {selected?.swatches && (
-                    <span style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
-                        {selected.swatches.map((c) => (
-                            <span key={c} style={{ width: '12px', height: '12px', borderRadius: '3px', background: c, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block', flexShrink: 0 }} />
-                        ))}
-                    </span>
-                )}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected?.label ?? value}</span>
-                <span style={{ fontSize: '10px', opacity: 0.6 }}>▾</span>
+                <span className="custom-select-value">{selected?.label ?? value}</span>
+                <span className="custom-select-arrow">▾</span>
             </button>
             {open && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: 'calc(100% + 4px)',
-                        left: 0,
-                        right: 0,
-                        zIndex: 200,
-                        padding: '4px 0',
-                        maxHeight: '260px',
-                        overflowY: 'auto',
-                        background: 'var(--bg-main)',
-                        border: '1px solid var(--border-glass)',
-                        borderRadius: '10px',
-                        boxShadow: 'var(--glass-shadow)',
-                    }}
-                >
+                <div className="custom-select-dropdown">
                     {options.map((opt) => (
                         <button
                             key={opt.value}
                             type="button"
+                            className={`custom-select-option${value === opt.value ? ' selected' : ''}`}
                             onClick={() => { onChange(opt.value); setOpen(false); }}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '7px 12px',
-                                background: value === opt.value ? 'rgba(255,255,255,0.08)' : 'transparent',
-                                border: 'none',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                fontSize: '13px',
-                            }}
                         >
-                            {opt.swatches && (
-                                <span style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
-                                    {opt.swatches.map((c) => (
-                                        <span key={c} style={{ width: '14px', height: '14px', borderRadius: '3px', background: c, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block', flexShrink: 0 }} />
-                                    ))}
-                                </span>
-                            )}
                             {opt.label}
                         </button>
                     ))}

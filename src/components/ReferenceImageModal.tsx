@@ -30,7 +30,7 @@ const ReferenceImageModal: React.FC<ReferenceImageModalProps> = ({
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-content glass-panel reference-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content reference-modal" onClick={(e) => e.stopPropagation()}>
                 <button className="modal-close" onClick={onClose}>
                     <X size={20} />
                 </button>
@@ -76,7 +76,7 @@ const ReferenceImageModal: React.FC<ReferenceImageModalProps> = ({
                     max-width: 100%;
                     max-height: 85vh;
                     object-fit: contain;
-                    border-radius: 8px;
+                    border-radius: 0;
                 }
             `}</style>
         </div>

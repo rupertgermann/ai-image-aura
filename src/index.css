@@ -123,14 +123,11 @@ textarea {
    4. COMMON COMPONENTS
    ========================================================================== */
 
-/* Glass Panels */
+/* Glass Panels — legacy class, used by Phase 5 view containers */
 .glass-panel {
-    background: var(--bg-card);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: 1px solid var(--border-glass);
-    box-shadow: var(--glass-shadow);
-    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--color-steel);
+    border-radius: var(--radius-default);
 }
 
 /* Button System */
@@ -739,9 +736,80 @@ textarea {
     padding: 0.75rem;
     border-radius: 10px;
     background: rgba(0, 0, 0, 0.2);
-    border: 1px solid var(--border-glass);
-    color: var(--text-main);
+    border: 1px solid var(--color-steel);
+    color: inherit;
     appearance: none;
+}
+
+/* CustomSelect component */
+.custom-select-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 0 12px;
+    height: 42px;
+    background: transparent;
+    border-bottom: 1px solid var(--color-steel);
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    border-radius: 0;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-body);
+    color: var(--color-charcoal);
+    cursor: pointer;
+    text-align: left;
+}
+
+.custom-select-value {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.custom-select-arrow {
+    font-size: 10px;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.custom-select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 200;
+    padding: 4px 0;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--color-snow);
+    border: 1px solid var(--color-steel);
+    border-radius: 0;
+}
+
+.custom-select-option {
+    display: block;
+    width: 100%;
+    padding: 7px 12px;
+    background: transparent;
+    border: none;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    color: var(--color-charcoal);
+    cursor: pointer;
+    text-align: left;
+    transition: var(--transition-fast);
+}
+
+.custom-select-option:hover {
+    background: var(--color-mercury);
+}
+
+.custom-select-option.selected {
+    background: var(--color-amber-glow);
+    color: var(--color-snow);
 }
 
 .prompt-input:focus {
@@ -912,17 +980,18 @@ textarea {
 
 /* Image Card */
 .image-card {
-    border-radius: var(--radius-md);
+    border-radius: 0;
     overflow: hidden;
     transition: var(--transition-smooth);
     display: flex;
     flex-direction: column;
+    background: transparent;
+    border: none;
+    box-shadow: none;
 }
 
 .image-card:hover {
-    transform: translateY(-8px);
-    border-color: rgba(168, 85, 247, 0.4);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    transform: translateY(-4px);
 }
 
 .card-image-wrapper {
@@ -972,16 +1041,18 @@ textarea {
 }
 
 .card-info {
-    padding: 1.25rem;
+    padding: var(--card-padding);
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: var(--element-gap);
+    font-family: var(--font-suisse-intl-mono);
 }
 
 .card-prompt {
-    font-size: 0.9rem;
-    color: var(--text-main);
-    line-height: 1.4;
+    font-size: var(--text-caption);
+    font-family: var(--font-suisse-intl-mono);
+    color: var(--color-steel);
+    line-height: var(--leading-caption);
     height: 2.8em;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -996,12 +1067,11 @@ textarea {
 }
 
 .card-tag {
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 0.2rem 0.5rem;
-    border-radius: 4px;
-    background: rgba(168, 85, 247, 0.2);
-    color: var(--accent-primary);
+    font-size: var(--text-caption);
+    font-family: var(--font-suisse-intl-mono);
+    color: var(--color-steel);
+    background: transparent;
+    padding: 0;
     text-transform: uppercase;
 }
 
@@ -1009,8 +1079,9 @@ textarea {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    font-size: 0.75rem;
-    color: var(--text-dim);
+    font-size: var(--text-caption);
+    font-family: var(--font-suisse-intl-mono);
+    color: var(--color-steel);
 }
 
 /* Editor Styles */
@@ -1103,8 +1174,7 @@ textarea {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.9);
-    backdrop-filter: blur(12px);
+    background: rgba(229, 231, 235, 0.85);
     z-index: 2000;
     display: flex;
     align-items: center;
@@ -1121,9 +1191,11 @@ textarea {
     position: relative;
     overflow: hidden;
     padding: 0 !important;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5);
-    background: #050505;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    background: var(--color-snow);
+    color: var(--color-charcoal);
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -1164,9 +1236,8 @@ textarea {
 
 .modal-sidebar {
     width: 400px;
-    background: rgba(15, 15, 15, 0.8);
-    backdrop-filter: blur(30px);
-    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--color-snow);
+    border-left: 1px solid var(--color-steel);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -1230,14 +1301,16 @@ textarea {
 
 .sidebar-header h2 {
     font-size: 1.8rem;
-    font-weight: 800;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-charcoal);
 }
 
 .section-label {
     display: block;
     font-size: 0.7rem;
-    font-weight: 800;
-    color: var(--accent-primary);
+    font-family: var(--font-suisse-intl-mono);
+    font-weight: var(--font-weight-regular);
+    color: var(--color-steel);
     letter-spacing: 0.15em;
     margin-bottom: 12px;
 }
@@ -1245,12 +1318,12 @@ textarea {
 .prompt-container {
     position: relative;
     padding: 20px;
-    border-radius: 16px;
+    border-radius: 0;
     line-height: 1.6;
     font-size: 1rem;
-    color: var(--text-muted);
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--color-charcoal);
+    background: var(--color-powder);
+    border: 1px solid var(--color-mercury);
 }
 
 .sidebar-grid {
@@ -1263,23 +1336,27 @@ textarea {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.65rem;
-    color: var(--text-dim);
+    font-size: var(--text-caption);
+    font-family: var(--font-suisse-intl-mono);
+    color: var(--color-steel);
     margin-bottom: 6px;
 }
 
 .info-cell span {
-    font-weight: 600;
+    font-weight: var(--font-weight-medium);
+    font-family: var(--font-suisse-intl-mono);
     font-size: 0.9rem;
+    color: var(--color-charcoal);
 }
 
 .status-badge {
-    background: rgba(168, 85, 247, 0.15);
-    color: var(--accent-primary);
+    background: var(--color-mercury);
+    color: var(--color-charcoal);
     padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 700;
+    border-radius: 0;
+    font-size: var(--text-caption);
+    font-family: var(--font-suisse-intl-mono);
+    font-weight: var(--font-weight-regular);
 }
 
 .sidebar-actions {
@@ -1321,20 +1398,20 @@ textarea {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--color-powder);
+    border: 1px solid var(--color-steel);
 }
 
 .lineage-origin {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--text-muted);
+    color: var(--color-charcoal);
     font-size: 0.9rem;
 }
 
 .lineage-origin.missing {
-    color: var(--text-dim);
+    color: var(--color-steel);
 }
 
 .lineage-list {
@@ -1345,21 +1422,21 @@ textarea {
 
 .lineage-entry {
     padding: 14px;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0;
+    background: var(--color-snow);
+    border: 1px solid var(--color-mercury);
     cursor: pointer;
     transition: var(--transition-smooth);
 }
 
 .lineage-entry.selected {
-    border-color: rgba(168, 85, 247, 0.45);
-    background: rgba(168, 85, 247, 0.08);
+    border-color: var(--color-amber-glow);
+    background: rgba(255, 108, 47, 0.08);
 }
 
 .lineage-entry:hover {
-    border-color: rgba(168, 85, 247, 0.22);
-    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--color-steel);
+    background: var(--color-powder);
 }
 
 .lineage-run-label {
@@ -1388,14 +1465,15 @@ textarea {
 }
 
 .lineage-time {
-    color: var(--text-dim);
-    font-size: 0.8rem;
+    color: var(--color-steel);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
     text-align: right;
 }
 
 .lineage-summary {
     margin: 0;
-    color: var(--text-muted);
+    color: var(--color-charcoal);
     line-height: 1.5;
     font-size: 0.92rem;
 }
@@ -1403,23 +1481,24 @@ textarea {
 .lineage-meta-block {
     margin-top: 0.75rem;
     padding: 0.75rem;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0;
+    background: var(--color-powder);
+    border: 1px solid var(--color-mercury);
 }
 
 .lineage-meta-block strong {
     display: block;
     font-size: 0.72rem;
+    font-family: var(--font-suisse-intl-mono);
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--color-steel);
     margin-bottom: 0.4rem;
 }
 
 .lineage-meta-block p {
     margin: 0;
-    color: var(--text-main);
+    color: var(--color-charcoal);
     line-height: 1.45;
     font-size: 0.88rem;
 }
@@ -1441,9 +1520,9 @@ textarea {
     align-items: center;
     gap: 8px;
     padding: 16px;
-    color: var(--text-dim);
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--color-steel);
+    background: var(--color-powder);
+    border: 1px solid var(--color-mercury);
 }
 
 .comparison-view {
@@ -1515,9 +1594,9 @@ textarea {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    color: white;
+    background: rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--color-steel);
+    color: var(--color-charcoal);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1542,22 +1621,22 @@ textarea {
     transform: translateY(-50%);
     width: 60px;
     height: 60px;
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--color-steel);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--color-charcoal);
     cursor: pointer;
     transition: all 0.3s ease;
     z-index: 10;
 }
 
 .nav-arrow:hover {
-    background: rgba(168, 85, 247, 0.2);
-    border-color: var(--accent-primary);
+    background: var(--color-amber-glow);
+    border-color: var(--color-amber-glow);
+    color: var(--color-snow);
     transform: translateY(-50%) scale(1.1);
 }
 
@@ -1739,13 +1818,14 @@ textarea {
     align-items: center;
     gap: 0.75rem;
     padding: 1rem 1.25rem;
-    border-radius: 12px;
-    font-size: 0.9rem;
-    font-weight: 500;
+    border-radius: var(--radius-buttons);
+    font-size: var(--text-caption);
+    font-family: var(--font-suisse-intl-mono);
+    font-weight: var(--font-weight-regular);
     min-width: 300px;
     animation: toast-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    background: rgba(15, 15, 18, 0.8) !important;
+    background: var(--color-charcoal) !important;
+    color: var(--color-snow);
 }
 
 .toast.success {
@@ -1757,7 +1837,7 @@ textarea {
 }
 
 .toast.info {
-    border-left: 4px solid var(--accent-primary);
+    border-left: 4px solid var(--color-amber-glow);
 }
 
 .toast-close {
@@ -1797,8 +1877,8 @@ textarea {
 }
 
 .modal-icon.info {
-    background: rgba(168, 85, 247, 0.1);
-    color: var(--accent-primary);
+    background: rgba(255, 108, 47, 0.1);
+    color: var(--color-amber-glow);
 }
 
 .danger-bg {
@@ -1830,7 +1910,9 @@ textarea {
     height: auto !important;
     padding: 2.5rem !important;
     flex-direction: column;
-    border-radius: 24px;
+    border-radius: 0;
+    background: var(--color-snow) !important;
+    color: var(--color-charcoal);
 }
 
 .modal-content.confirm-dialog .modal-icon {
@@ -1844,7 +1926,7 @@ textarea {
 /* --- Refined Confirm Dialog --- */
 .dialog-overlay {
     z-index: 4000;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(229, 231, 235, 0.92);
 }
 
 .modal-content.confirm-dialog {
@@ -1898,10 +1980,10 @@ textarea {
     padding-top: 0.25rem;
 }
 
-/* Ensure glassmorphism is consistent on dialogs */
+/* Confirm dialog overrides glass-panel */
 .modal-content.confirm-dialog.glass-panel {
-    background: rgba(15, 15, 18, 0.9) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--color-snow) !important;
+    border: none;
 }
 
 /* --- Bulk Selection Styles --- */
@@ -1933,8 +2015,8 @@ textarea {
 }
 
 .card-selector.active .selector-inner {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
+    background: var(--color-amber-glow);
+    border-color: var(--color-amber-glow);
     transform: scale(1.1);
 }
 
@@ -1947,8 +2029,8 @@ textarea {
 }
 
 .image-card.selected {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+    outline: 2px solid var(--color-amber-glow);
+    outline-offset: -2px;
 }
 
 .bulk-action-bar {

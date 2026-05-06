@@ -26,7 +26,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
     return (
         <div className="modal-overlay dialog-overlay" onClick={onCancel}>
-            <div className="modal-content glass-panel confirm-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-content confirm-dialog" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-icon-container">
                     <div className={`modal-icon ${type}`}>
                         <AlertTriangle size={24} />

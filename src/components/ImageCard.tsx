@@ -23,7 +23,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
     };
 
     return (
-        <div className={`image-card glass-panel ${selected ? 'selected' : ''}`} onClick={onClick}>
+        <div className={`image-card ${selected ? 'selected' : ''}`} onClick={onClick}>
             <div className="card-image-wrapper">
                 {onSelect && (
                     <div

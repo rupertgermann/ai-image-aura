@@ -22,7 +22,7 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
     };
 
     return (
-        <div className={`toast glass-panel ${type}`}>
+        <div className={`toast ${type}`}>
             {icons[type]}
             <span>{message}</span>
             <button onClick={onClose} className="toast-close">

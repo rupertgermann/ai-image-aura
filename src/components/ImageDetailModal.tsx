@@ -95,7 +95,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className={`modal-content glass-panel ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`modal-content ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
                 <button className="modal-close" onClick={onClose}>
                     <X size={20} />
                 </button>
@@ -105,7 +105,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         <span className="comparison-label single-image-label">{displayedImageLabel}</span>
                         <img src={displayedImageUrl} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" />
 
-                        {comparisonError && <div className="comparison-error glass-panel">{comparisonError}</div>}
+                        {comparisonError && <div className="comparison-error">{comparisonError}</div>}
 
                         <div className="floating-actions">
                             <button className="btn-primary" onClick={downloadImage}>
@@ -141,7 +141,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
                         <div className="sidebar-section">
                             <label className="section-label">PROMPT</label>
-                            <div className="prompt-container glass-inset">
+                            <div className="prompt-container">
                                 <p>{image.prompt}</p>
                                 <button className="copy-btn" onClick={copyPrompt}>
                                     {copied ? <Check size={14} className="success-icon" /> : <Copy size={14} />}
@@ -179,7 +179,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 <label className="section-label">REFERENCES</label>
                                 <div className="reference-grid mini">
                                     {image.references.map((dataUrl, idx) => (
-                                        <div key={idx} className="reference-preview mini glass-panel">
+                                        <div key={idx} className="reference-preview mini">
                                             <img src={dataUrl} alt={`Reference ${idx + 1}`} />
                                         </div>
                                     ))}
@@ -205,14 +205,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             </div>
 
                             {lineageCollapsed ? (
-                                <div className="lineage-empty glass-inset">
+                                <div className="lineage-empty">
                                     <History size={16} />
                                     <span>History hidden</span>
                                 </div>
                             ) : timelineLoading ? (
-                                <div className="lineage-empty glass-inset">Loading history...</div>
+                                <div className="lineage-empty">Loading history...</div>
                             ) : timeline && timeline.entries.length > 0 ? (
-                                <div className="lineage-panel glass-inset">
+                                <div className="lineage-panel">
                                     {timeline.parent && (
                                         <div className={`lineage-origin ${timeline.parent.missing ? 'missing' : ''}`}>
                                             <GitBranch size={14} />
@@ -273,7 +273,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="lineage-empty glass-inset">
+                                <div className="lineage-empty">
                                     <History size={16} />
                                     <span>No history recorded</span>
                                 </div>
