@@ -292,7 +292,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     return (
         <div className="generate-container">
             <header className="view-header">
-                <h1 className="gradient-text">Create Magic</h1>
+                <h1>Create Magic</h1>
                 <p>Harness the power of GPT-Image-1.5 to bring your ideas to life.</p>
             </header>
 
@@ -318,7 +318,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 <div className="prompt-header">
                                     <label>GOAL</label>
                                     <button
-                                        className="aura-btn aura-btn--glass autopilot-inline-btn"
+                                        className="btn-ghost autopilot-inline-btn"
                                         onClick={() => { void handleTranslateGoal(); }}
                                         disabled={!goal.trim() || !apiKey || translatingGoal || loading}
                                     >
@@ -370,9 +370,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 <div className="autopilot-confirmation glass-panel">
                                     <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
                                     <div className="autopilot-confirmation-actions">
-                                        <button className="aura-btn aura-btn--glass" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
+                                        <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
                                         <button
-                                            className="aura-btn aura-btn--primary"
+                                            className="btn-amber"
                                             onClick={() => {
                                                 setShowCostDisclosure(false);
                                                 void handleRunAutopilot();
@@ -542,7 +542,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
                     {isAutopilotMode ? (
                         <button
-                            className="aura-btn aura-btn--primary"
+                            className="btn-amber"
                             onClick={() => setShowCostDisclosure(true)}
                             disabled={loading || !prompt.trim() || !goal.trim() || !apiKey}
                             style={{ width: '100%' }}
@@ -552,7 +552,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         </button>
                     ) : (
                         <button
-                            className="aura-btn aura-btn--primary"
+                            className="btn-amber"
                             onClick={() => { void generate(); }}
                             disabled={loading || !prompt.trim() || !apiKey}
                             style={{ width: '100%' }}
@@ -566,7 +566,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="autopilot-live-panel glass-panel">
                             <div className="autopilot-live-header">
                                 <strong>Iteration {autopilot.iterations.length}/{maxIterations}</strong>
-                                <button className="aura-btn aura-btn--danger" onClick={cancelAutopilot}>Pause / Cancel</button>
+                                <button className="btn-ghost" onClick={cancelAutopilot}>Pause / Cancel</button>
                             </div>
                             <p className="autopilot-live-feedback">
                                 {autopilot.iterations.at(-1)?.feedback[0] ?? 'Generating the first candidate...'}
@@ -610,15 +610,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="result-actions">
                                 <button
                                     onClick={() => { void save(); }}
-                                    className={`aura-btn ${isSaved ? 'aura-btn--success' : 'aura-btn--primary'}`}
+                                    className="btn-amber"
                                     disabled={isSaved}
                                 >
                                     <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
-                                <button className="aura-btn aura-btn--glass" onClick={download}>
+                                <button className="btn-ghost" onClick={download}>
                                     <Download size={18} /> Download
                                 </button>
-                                <button onClick={() => { void clear(); }} className="aura-btn aura-btn--danger">
+                                <button onClick={() => { void clear(); }} className="btn-ghost">
                                     <Trash2 size={18} />
                                 </button>
                             </div>

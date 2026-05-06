@@ -38,9 +38,9 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     <p>{message}</p>
 
                     <div className="confirm-actions">
-                        <button className="glass-btn" onClick={onCancel}>{cancelText}</button>
+                        <button className="btn-ghost" onClick={onCancel}>{cancelText}</button>
                         <button
-                            className={`action-button ${type === 'danger' ? 'danger-bg' : 'primary'}`}
+                            className={type === 'danger' ? 'btn-amber' : 'btn-primary'}
                             onClick={onConfirm}
                         >
                             {confirmText}

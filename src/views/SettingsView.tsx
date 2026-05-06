@@ -22,7 +22,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) =
     return (
         <div className="settings-container">
             <header className="view-header">
-                <h1 className="gradient-text">Configuration</h1>
+                <h1>Configuration</h1>
                 <p>Manage your API keys and application preferences.</p>
             </header>
 
@@ -52,7 +52,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) =
                         className="aura-input"
                     />
                     <button
-                        className={`aura-btn ${status === 'saved' ? 'aura-btn--success' : 'aura-btn--primary'}`}
+                        className="btn-amber"
                         onClick={handleSave}
                         disabled={!tempKey.trim()}
                     >

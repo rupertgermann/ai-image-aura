@@ -75,7 +75,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
     return (
         <div className="editor-container">
             <header className="view-header">
-                <h1 className="gradient-text">Image Lab</h1>
+                <h1>Image Lab</h1>
                 <p>Refine your masterpiece with professional controls.</p>
             </header>
 
@@ -168,7 +168,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                                 disabled={aiLoading || !apiKey || !isCanvasReady}
                             />
                             <button
-                                className="aura-btn aura-btn--primary"
+                                className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
                                 disabled={aiLoading || !aiPrompt.trim() || !apiKey || !isCanvasReady}
                                 style={{ width: '100%' }}
@@ -218,13 +218,13 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                     </div>
 
                     <div className="editor-actions">
-                        <button className="aura-btn aura-btn--primary" onClick={() => { void save(false); }} disabled={!isCanvasReady}>
+                        <button className="btn-amber" onClick={() => { void save(false); }} disabled={!isCanvasReady}>
                             <Save size={18} /> Save Changes
                         </button>
-                        <button className="aura-btn aura-btn--glass" onClick={() => { void save(true); }} disabled={!isCanvasReady}>
+                        <button className="btn-ghost" onClick={() => { void save(true); }} disabled={!isCanvasReady}>
                             <Copy size={18} /> Save as Copy
                         </button>
-                        <button className="aura-btn aura-btn--glass" onClick={resetAdjustments}>
+                        <button className="btn-ghost" onClick={resetAdjustments}>
                             <Undo2 size={18} /> Reset
                         </button>
                     </div>

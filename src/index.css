@@ -133,81 +133,123 @@ textarea {
     border-radius: var(--radius-lg);
 }
 
-.gradient-text {
-    background: var(--accent-gradient);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    font-weight: 700;
-}
-
-/* Aura Button System */
-.aura-btn {
+/* Button System */
+.btn-primary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.6rem;
-    padding: 0.75rem 1.25rem;
-    border-radius: var(--radius-md);
-    font-size: 0.9rem;
-    font-weight: 600;
+    background: var(--color-charcoal);
+    color: var(--color-snow);
+    border-radius: var(--radius-buttons);
+    padding: 14px 16px;
+    font-family: var(--font-suisse-intl);
+    font-weight: var(--font-weight-regular);
+    font-size: var(--text-body);
     cursor: pointer;
-    transition: var(--transition-smooth);
-    border: 1px solid transparent;
+    border: none;
+    transition: var(--transition-fast);
     white-space: nowrap;
 }
 
-.aura-btn--primary {
-    background: var(--accent-gradient);
-    color: white;
-    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+.btn-primary:hover:not(:disabled) {
+    opacity: 0.85;
 }
 
-.aura-btn--primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
-    filter: brightness(1.1);
-}
-
-.aura-btn--glass {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: var(--border-glass);
-    color: var(--text-main);
-}
-
-.aura-btn--glass:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
-    transform: translateY(-1px);
-}
-
-.aura-btn--danger {
-    background: rgba(239, 68, 68, 0.1);
-    color: #f87171;
-    border-color: rgba(239, 68, 68, 0.2);
-}
-
-.aura-btn--danger:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: rgba(239, 68, 68, 0.3);
-}
-
-.aura-btn--success {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
-    border-color: rgba(16, 185, 129, 0.2);
-}
-
-.aura-btn--success:hover:not(:disabled) {
-    background: rgba(16, 185, 129, 0.2);
-    border-color: rgba(16, 185, 129, 0.3);
-}
-
-.aura-btn:disabled {
-    opacity: 0.5;
+.btn-primary:disabled {
+    opacity: 0.4;
     cursor: not-allowed;
-    filter: grayscale(1);
-    box-shadow: none;
+}
+
+.btn-amber {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background: var(--color-amber-glow);
+    color: var(--color-snow);
+    border-radius: var(--radius-buttons);
+    padding: 14px 16px;
+    font-family: var(--font-suisse-intl);
+    font-weight: var(--font-weight-regular);
+    font-size: var(--text-body);
+    cursor: pointer;
+    border: none;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+}
+
+.btn-amber:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.btn-amber:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background: transparent;
+    color: var(--color-snow);
+    border-radius: 0px;
+    padding: 8px;
+    font-family: var(--font-suisse-intl-mono);
+    font-weight: var(--font-weight-regular);
+    font-size: var(--text-body);
+    cursor: pointer;
+    border: 1px solid var(--color-steel);
+    transition: var(--transition-fast);
+    white-space: nowrap;
+}
+
+.btn-ghost:hover:not(:disabled) {
+    color: var(--color-mercury);
+    border-color: var(--color-mercury);
+}
+
+.btn-ghost:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.btn-text-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    background: transparent;
+    color: var(--color-charcoal);
+    border-radius: var(--radius-buttons);
+    padding: 0px 16px;
+    font-family: var(--font-suisse-intl);
+    font-weight: var(--font-weight-regular);
+    font-size: var(--text-body);
+    cursor: pointer;
+    border: none;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+}
+
+.btn-text-link:hover:not(:disabled) {
+    text-decoration: underline;
+}
+
+.btn-text-link:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Icon button size modifier — stack with btn-ghost/btn-primary/btn-amber */
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-radius: 50%;
+    border: none;
 }
 
 /* Aura Input System */
@@ -1165,7 +1207,7 @@ textarea {
     transform: translateX(50%);
     width: 32px;
     height: 64px;
-    background: var(--accent-primary);
+    background: var(--color-amber-glow);
     border: none;
     border-radius: 8px 0 0 8px;
     /* Tab shape */
@@ -1837,10 +1879,6 @@ textarea {
     justify-content: flex-end;
 }
 
-.confirm-actions .action-button {
-    width: auto;
-    padding: 10px 24px;
-}
 
 @keyframes dialog-pop {
     from {
@@ -1959,15 +1997,6 @@ textarea {
     border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.glass-btn.info {
-    background: rgba(168, 85, 247, 0.2) !important;
-    border-color: var(--accent-primary) !important;
-}
-
-.glass-btn.info:hover {
-    background: var(--accent-primary) !important;
-    color: white;
-}
 
 .select-all-btn {
     padding: 0 1.25rem;
@@ -2104,51 +2133,6 @@ textarea {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.editor-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    padding: 0.85rem;
-    border-radius: 12px;
-    font-size: 0.9rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    border: 1px solid transparent;
-}
-
-.editor-btn.primary {
-    background: var(--accent-gradient);
-    color: white;
-    box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
-}
-
-.editor-btn.primary:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.4);
-    filter: brightness(1.1);
-}
-
-.editor-btn.glass {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
-}
-
-.editor-btn.glass:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px);
-}
-
-.editor-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    filter: grayscale(1);
-    box-shadow: none;
-}
-
 /* --- Mini Reference Styles for Editor --- */
 .reference-section.mini {
     margin-top: 1rem;
@@ -2187,16 +2171,3 @@ textarea {
     }
 }
 
-/* Additional Button Variants */
-.aura-btn--icon {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border-radius: 50%;
-}
-
-.aura-btn--sm {
-    padding: 0.5rem 1rem;
-    font-size: 0.8rem;
-    border-radius: var(--radius-sm);
-}
