@@ -11,11 +11,9 @@ import { useAppController } from './app/useAppController'
 function App() {
     const {
         currentView,
-        theme,
         toasts,
         archiveController,
         changeView,
-        toggleTheme,
         removeToast,
         generateViewProps,
         archiveViewProps,
@@ -46,8 +44,6 @@ function App() {
             <Sidebar
                 currentView={currentView}
                 onViewChange={changeView}
-                theme={theme}
-                onThemeToggle={toggleTheme}
             />
             <main className="main-content">
                 <div className="view-wrapper">

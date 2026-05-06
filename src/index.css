@@ -116,7 +116,7 @@ textarea {
     font-family: inherit;
     background: transparent;
     color: inherit;
-    border: 1px solid var(--border-glass);
+    border: 1px solid var(--color-steel);
 }
 
 /* ==========================================================================
@@ -241,7 +241,7 @@ textarea {
     display: flex;
     height: 100vh;
     width: 100vw;
-    background: var(--bg-deep);
+    background: var(--color-canvas);
 }
 
 .main-content {
@@ -249,7 +249,7 @@ textarea {
     height: 100%;
     overflow-y: auto;
     position: relative;
-    background: radial-gradient(circle at 50% 0%, rgba(168, 85, 247, 0.05) 0%, transparent 50%);
+    background: var(--color-canvas);
 }
 
 .view-wrapper {
@@ -267,8 +267,9 @@ textarea {
     height: 100vh;
     display: flex;
     flex-direction: column;
-    padding: var(--space-xl) var(--space-lg);
-    border-right: 1px solid var(--border-glass);
+    padding: 2rem 1rem;
+    background: var(--color-charcoal);
+    border-right: none;
     z-index: 100;
     position: relative;
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -276,7 +277,7 @@ textarea {
 
 .sidebar.collapsed {
     width: 80px;
-    padding: var(--space-xl) var(--space-md);
+    padding: 2rem 0.5rem;
 }
 
 .sidebar-collapse-btn {
@@ -285,14 +286,13 @@ textarea {
     right: -12px;
     width: 24px;
     height: 24px;
-    background: var(--accent-primary);
+    background: var(--color-amber-glow);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--color-snow);
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     z-index: 110;
     transition: var(--transition-smooth);
 }
@@ -303,7 +303,7 @@ textarea {
 
 .sidebar.collapsed .nav-item {
     justify-content: center;
-    padding: 0.875rem;
+    padding: 0.75rem;
 }
 
 .sidebar.collapsed .nav-item span {
@@ -319,79 +319,63 @@ textarea {
 }
 
 .logo-icon {
-    color: var(--accent-primary);
+    color: var(--color-snow);
 }
 
 .sidebar-logo span {
-    font-size: 1.5rem;
-    letter-spacing: -0.02em;
+    font-size: 1rem;
+    font-family: var(--font-suisse-intl-mono);
+    color: var(--color-snow);
+    letter-spacing: 0.05em;
+    font-weight: var(--font-weight-regular);
 }
 
 .sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 4px;
     flex: 1;
 }
 
-/* ... existing sidebar styles ... */
 .nav-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.875rem 1rem;
-    border-radius: 12px;
-    color: var(--text-muted);
-    transition: var(--transition-smooth);
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-body);
+    color: var(--color-snow);
+    transition: var(--transition-fast);
+    border: none;
+    text-align: left;
 }
 
 .nav-item:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-main);
+    color: var(--color-steel);
+    background: transparent;
 }
 
 .nav-item.active {
-    background: rgba(168, 85, 247, 0.1);
-    color: var(--accent-primary);
-    border: 1px solid rgba(168, 85, 247, 0.2);
+    color: var(--color-amber-glow);
+    background: transparent;
+    border: none;
 }
 
 .sidebar-footer {
     margin-top: auto;
-    padding-top: 2rem;
-    border-top: 1px solid var(--border-glass);
-}
-
-.theme-toggle {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    width: 100%;
-    padding: 0.875rem 1rem;
-    border-radius: 12px;
-    color: var(--text-muted);
-    transition: var(--transition-smooth);
-    margin-bottom: 0.5rem;
-    cursor: pointer;
-}
-
-.theme-toggle:hover {
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--text-main);
-}
-
-.theme-toggle span {
-    font-size: 0.9rem;
-    font-weight: 500;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-steel);
 }
 
 .status-indicator {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.75rem;
-    color: var(--text-dim);
-    padding-left: 1rem;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    color: var(--color-steel);
+    padding-left: 0.25rem;
 }
 
 .status-dot {
@@ -399,7 +383,6 @@ textarea {
     height: 8px;
     background: #10b981;
     border-radius: 50%;
-    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
 }
 
 /* View Header */

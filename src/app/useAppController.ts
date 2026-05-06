@@ -11,7 +11,7 @@ import { lineageStore } from '../lineage/LineageStore';
 import { buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 
 export function useAppController() {
-    const { currentView, apiKey, theme, changeView, updateApiKey, toggleTheme } = useAppPreferences();
+    const { currentView, apiKey, changeView, updateApiKey } = useAppPreferences();
     const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
@@ -158,12 +158,10 @@ export function useAppController() {
         currentView,
         apiKey,
         editingImage,
-        theme,
         toasts,
         archiveController,
         changeView,
         updateApiKey,
-        toggleTheme,
         removeToast,
         replayGenerateFromLineageStep,
         replayEditorFromLineageStep,
