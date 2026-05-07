@@ -615,6 +615,15 @@ textarea.aura-input {
     text-align: left;
 }
 
+.custom-select-trigger .select-swatches {
+    margin-right: 4px;
+}
+
+.custom-select-trigger .swatch {
+    width: 12px;
+    height: 12px;
+}
+
 .custom-select-value {
     flex: 1;
     overflow: hidden;
@@ -662,6 +671,21 @@ textarea.aura-input {
 .custom-select-option.selected {
     background: var(--color-amber-glow);
     color: var(--color-snow);
+}
+
+.select-swatches {
+    display: flex;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    display: inline-block;
+    flex-shrink: 0;
 }
 
 .preview-panel {

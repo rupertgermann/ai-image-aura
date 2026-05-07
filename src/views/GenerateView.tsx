@@ -63,9 +63,20 @@ const PALETTES = [
     "burnt orange + navy + warm white",
 ];
 
+const PALETTE_COLORS: Record<string, string[]> = {
+    "copper + teal + cream": ["#b87333", "#009688", "#f5f0e8"],
+    "cobalt + vermilion + bone": ["#0047ab", "#e34234", "#e8dcc8"],
+    "sage + sand + charcoal": ["#9caf88", "#c2b280", "#36454f"],
+    "magenta + midnight blue + silver": ["#cc00cc", "#003366", "#c0c0c0"],
+    "emerald + burgundy + gold": ["#2e8b57", "#800020", "#d4af37"],
+    "dusty rose + slate + ivory": ["#c4a4a4", "#708090", "#fffff0"],
+    "burnt orange + navy + warm white": ["#cc5500", "#002147", "#faf9f0"],
+};
+
 interface CustomSelectOption {
     value: string;
     label: string;
+    swatches?: string[];
 }
 
 interface CustomSelectProps {
@@ -93,6 +104,13 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
                 className="custom-select-trigger"
                 onClick={() => setOpen((o) => !o)}
             >
+                {selected?.swatches && (
+                    <span className="select-swatches">
+                        {selected.swatches.map((c) => (
+                            <span key={c} className="swatch" style={{ background: c }} />
+                        ))}
+                    </span>
+                )}
                 <span className="custom-select-value">{selected?.label ?? value}</span>
                 <span className="custom-select-arrow">▾</span>
             </button>
@@ -105,6 +123,13 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
                             className={`custom-select-option${value === opt.value ? ' selected' : ''}`}
                             onClick={() => { onChange(opt.value); setOpen(false); }}
                         >
+                            {opt.swatches && (
+                                <span className="select-swatches">
+                                    {opt.swatches.map((c) => (
+                                        <span key={c} className="swatch" style={{ background: c }} />
+                                    ))}
+                                </span>
+                            )}
                             {opt.label}
                         </button>
                     ))}
@@ -433,7 +458,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 onChange={(v) => updateDraft({ palette: v })}
                                 options={[
                                     { value: 'none', label: 'None' },
-                                    ...PALETTES.map((p) => ({ value: p, label: p })),
+                                    ...PALETTES.map((p) => ({ value: p, label: p, swatches: PALETTE_COLORS[p] })),
                                 ]}
                             />
                         </div>
