@@ -334,18 +334,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                     <div className="input-section">
                         <div className="prompt-header">
                             <label>PROMPT</label>
-                            <select
+                            <CustomSelect
                                 value=""
-                                onChange={(e) => {
-                                    if (e.target.value) updateDraft({ prompt: e.target.value });
-                                }}
-                                className="example-prompt-select"
-                            >
-                                <option value="">Example prompts...</option>
-                                {EXAMPLE_PROMPTS.map((example) => (
-                                    <option key={example} value={example}>{example}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
+                                options={[
+                                    { value: '', label: 'Example prompts...' },
+                                    ...EXAMPLE_PROMPTS.map((e) => ({ value: e, label: e })),
+                                ]}
+                            />
                         </div>
                         <textarea
                             placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"

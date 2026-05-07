@@ -126,8 +126,7 @@ input:not([type="range"]),
 textarea,
 select,
 .aura-input,
-.prompt-input,
-.example-prompt-select {
+.prompt-input {
     width: 100%;
     padding: 0 12px;
     border: 0;
@@ -150,8 +149,7 @@ input:not([type="range"]):focus,
 textarea:focus,
 select:focus,
 .aura-input:focus,
-.prompt-input:focus,
-.example-prompt-select:focus {
+.prompt-input:focus {
     outline: none;
     border-bottom-color: var(--color-charcoal);
 }
