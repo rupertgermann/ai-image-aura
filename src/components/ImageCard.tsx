@@ -23,7 +23,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
     };
 
     return (
-        <div className={`image-card glass-panel ${selected ? 'selected' : ''}`} onClick={onClick}>
+        <div className={`image-card ${selected ? 'selected' : ''}`} onClick={onClick}>
             <div className="card-image-wrapper">
                 {onSelect && (
                     <div
@@ -41,13 +41,13 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <img src={image.url} alt={image.prompt} className="card-image" loading="lazy" />
                 <div className="card-overlay">
                     <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-                        <button className="aura-btn aura-btn--icon aura-btn--glass" onClick={() => onEdit(image)} title="Edit">
+                        <button className="btn-ghost btn-icon" onClick={() => onEdit(image)} title="Edit">
                             <Edit2 size={16} />
                         </button>
-                        <button className="aura-btn aura-btn--icon aura-btn--glass" onClick={handleDownload} title="Download">
+                        <button className="btn-ghost btn-icon" onClick={handleDownload} title="Download">
                             <Download size={16} />
                         </button>
-                        <button className="aura-btn aura-btn--icon aura-btn--danger" onClick={() => onDelete(image.id)} title="Delete">
+                        <button className="btn-amber btn-icon" onClick={() => onDelete(image.id)} title="Delete">
                             <Trash2 size={16} />
                         </button>
                     </div>

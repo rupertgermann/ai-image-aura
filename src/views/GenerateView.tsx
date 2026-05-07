@@ -101,60 +101,32 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
         <div ref={ref} style={{ position: 'relative' }}>
             <button
                 type="button"
-                className="select-input"
+                className="custom-select-trigger"
                 onClick={() => setOpen((o) => !o)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', width: '100%', textAlign: 'left' }}
             >
                 {selected?.swatches && (
-                    <span style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                    <span className="select-swatches">
                         {selected.swatches.map((c) => (
-                            <span key={c} style={{ width: '12px', height: '12px', borderRadius: '3px', background: c, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block', flexShrink: 0 }} />
+                            <span key={c} className="swatch" style={{ background: c }} />
                         ))}
                     </span>
                 )}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected?.label ?? value}</span>
-                <span style={{ fontSize: '10px', opacity: 0.6 }}>▾</span>
+                <span className="custom-select-value">{selected?.label ?? value}</span>
+                <span className="custom-select-arrow">▾</span>
             </button>
             {open && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: 'calc(100% + 4px)',
-                        left: 0,
-                        right: 0,
-                        zIndex: 200,
-                        padding: '4px 0',
-                        maxHeight: '260px',
-                        overflowY: 'auto',
-                        background: 'var(--bg-main)',
-                        border: '1px solid var(--border-glass)',
-                        borderRadius: '10px',
-                        boxShadow: 'var(--glass-shadow)',
-                    }}
-                >
+                <div className="custom-select-dropdown">
                     {options.map((opt) => (
                         <button
                             key={opt.value}
                             type="button"
+                            className={`custom-select-option${value === opt.value ? ' selected' : ''}`}
                             onClick={() => { onChange(opt.value); setOpen(false); }}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                width: '100%',
-                                padding: '7px 12px',
-                                background: value === opt.value ? 'rgba(255,255,255,0.08)' : 'transparent',
-                                border: 'none',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                                fontSize: '13px',
-                            }}
                         >
                             {opt.swatches && (
-                                <span style={{ display: 'flex', gap: '3px', flexShrink: 0 }}>
+                                <span className="select-swatches">
                                     {opt.swatches.map((c) => (
-                                        <span key={c} style={{ width: '14px', height: '14px', borderRadius: '3px', background: c, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block', flexShrink: 0 }} />
+                                        <span key={c} className="swatch" style={{ background: c }} />
                                     ))}
                                 </span>
                             )}
@@ -292,7 +264,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     return (
         <div className="generate-container">
             <header className="view-header">
-                <h1 className="gradient-text">Create Magic</h1>
+                <h1>Create Magic</h1>
                 <p>Harness the power of GPT-Image-1.5 to bring your ideas to life.</p>
             </header>
 
@@ -318,7 +290,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 <div className="prompt-header">
                                     <label>GOAL</label>
                                     <button
-                                        className="aura-btn aura-btn--glass autopilot-inline-btn"
+                                        className="btn-ghost autopilot-inline-btn"
                                         onClick={() => { void handleTranslateGoal(); }}
                                         disabled={!goal.trim() || !apiKey || translatingGoal || loading}
                                     >
@@ -370,9 +342,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                 <div className="autopilot-confirmation glass-panel">
                                     <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
                                     <div className="autopilot-confirmation-actions">
-                                        <button className="aura-btn aura-btn--glass" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
+                                        <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
                                         <button
-                                            className="aura-btn aura-btn--primary"
+                                            className="btn-amber"
                                             onClick={() => {
                                                 setShowCostDisclosure(false);
                                                 void handleRunAutopilot();
@@ -387,18 +359,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                     <div className="input-section">
                         <div className="prompt-header">
                             <label>PROMPT</label>
-                            <select
+                            <CustomSelect
                                 value=""
-                                onChange={(e) => {
-                                    if (e.target.value) updateDraft({ prompt: e.target.value });
-                                }}
-                                className="example-prompt-select"
-                            >
-                                <option value="">Example prompts...</option>
-                                {EXAMPLE_PROMPTS.map((example) => (
-                                    <option key={example} value={example}>{example}</option>
-                                ))}
-                            </select>
+                                onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
+                                options={[
+                                    { value: '', label: 'Example prompts...' },
+                                    ...EXAMPLE_PROMPTS.map((e) => ({ value: e, label: e })),
+                                ]}
+                            />
                         </div>
                         <textarea
                             placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
@@ -542,7 +510,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
                     {isAutopilotMode ? (
                         <button
-                            className="aura-btn aura-btn--primary"
+                            className="btn-amber"
                             onClick={() => setShowCostDisclosure(true)}
                             disabled={loading || !prompt.trim() || !goal.trim() || !apiKey}
                             style={{ width: '100%' }}
@@ -552,7 +520,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         </button>
                     ) : (
                         <button
-                            className="aura-btn aura-btn--primary"
+                            className="btn-amber"
                             onClick={() => { void generate(); }}
                             disabled={loading || !prompt.trim() || !apiKey}
                             style={{ width: '100%' }}
@@ -566,7 +534,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <div className="autopilot-live-panel glass-panel">
                             <div className="autopilot-live-header">
                                 <strong>Iteration {autopilot.iterations.length}/{maxIterations}</strong>
-                                <button className="aura-btn aura-btn--danger" onClick={cancelAutopilot}>Pause / Cancel</button>
+                                <button className="btn-ghost" onClick={cancelAutopilot}>Pause / Cancel</button>
                             </div>
                             <p className="autopilot-live-feedback">
                                 {autopilot.iterations.at(-1)?.feedback[0] ?? 'Generating the first candidate...'}
@@ -610,15 +578,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                             <div className="result-actions">
                                 <button
                                     onClick={() => { void save(); }}
-                                    className={`aura-btn ${isSaved ? 'aura-btn--success' : 'aura-btn--primary'}`}
+                                    className="btn-amber"
                                     disabled={isSaved}
                                 >
                                     <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
-                                <button className="aura-btn aura-btn--glass" onClick={download}>
+                                <button className="btn-ghost" onClick={download}>
                                     <Download size={18} /> Download
                                 </button>
-                                <button onClick={() => { void clear(); }} className="aura-btn aura-btn--danger">
+                                <button onClick={() => { void clear(); }} className="btn-ghost">
                                     <Trash2 size={18} />
                                 </button>
                             </div>

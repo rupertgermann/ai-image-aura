@@ -2,7 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(npm run build:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(gh repo *)",
+      "Bash(gh issue *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(git commit *)"
     ]
   }
 }

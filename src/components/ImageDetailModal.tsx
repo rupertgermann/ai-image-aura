@@ -95,7 +95,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className={`modal-content glass-panel ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
+            <div className={`modal-content ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
                 <button className="modal-close" onClick={onClose}>
                     <X size={20} />
                 </button>
@@ -105,13 +105,13 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         <span className="comparison-label single-image-label">{displayedImageLabel}</span>
                         <img src={displayedImageUrl} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" />
 
-                        {comparisonError && <div className="comparison-error glass-panel">{comparisonError}</div>}
+                        {comparisonError && <div className="comparison-error">{comparisonError}</div>}
 
                         <div className="floating-actions">
-                            <button className="aura-btn aura-btn--primary" onClick={downloadImage}>
+                            <button className="btn-primary" onClick={downloadImage}>
                                 <Download size={18} /> Download
                             </button>
-                            <button className="aura-btn aura-btn--glass" onClick={onEdit}>
+                            <button className="btn-ghost" onClick={onEdit}>
                                 <Edit2 size={18} /> Edit
                             </button>
                         </div>
@@ -136,12 +136,12 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                 <aside className="modal-sidebar">
                     <div className="sidebar-inner">
                         <header className="sidebar-header">
-                            <h2 className="gradient-text">Studio Info</h2>
+                            <h2>Studio Info</h2>
                         </header>
 
                         <div className="sidebar-section">
                             <label className="section-label">PROMPT</label>
-                            <div className="prompt-container glass-inset">
+                            <div className="prompt-container">
                                 <p>{image.prompt}</p>
                                 <button className="copy-btn" onClick={copyPrompt}>
                                     {copied ? <Check size={14} className="success-icon" /> : <Copy size={14} />}
@@ -179,7 +179,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 <label className="section-label">REFERENCES</label>
                                 <div className="reference-grid mini">
                                     {image.references.map((dataUrl, idx) => (
-                                        <div key={idx} className="reference-preview mini glass-panel">
+                                        <div key={idx} className="reference-preview mini">
                                             <img src={dataUrl} alt={`Reference ${idx + 1}`} />
                                         </div>
                                     ))}
@@ -205,14 +205,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             </div>
 
                             {lineageCollapsed ? (
-                                <div className="lineage-empty glass-inset">
+                                <div className="lineage-empty">
                                     <History size={16} />
                                     <span>History hidden</span>
                                 </div>
                             ) : timelineLoading ? (
-                                <div className="lineage-empty glass-inset">Loading history...</div>
+                                <div className="lineage-empty">Loading history...</div>
                             ) : timeline && timeline.entries.length > 0 ? (
-                                <div className="lineage-panel glass-inset">
+                                <div className="lineage-panel">
                                     {timeline.parent && (
                                         <div className={`lineage-origin ${timeline.parent.missing ? 'missing' : ''}`}>
                                             <GitBranch size={14} />
@@ -252,18 +252,18 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                                 )}
                                                 <div className="lineage-actions-row">
                                                     {isGenerateReplayable(entry) && (
-                                                        <button className="aura-btn aura-btn--glass lineage-action-btn" type="button" onClick={(event) => {
+                                                        <button className="btn-ghost lineage-action-btn" type="button" onClick={(event) => {
                                                             event.stopPropagation();
                                                             onReplayGenerate(entry.id);
                                                         }}>Replay into Generate</button>
                                                     )}
                                                     {isEditorReplayable(entry) && (
-                                                        <button className="aura-btn aura-btn--glass lineage-action-btn" type="button" onClick={(event) => {
+                                                        <button className="btn-ghost lineage-action-btn" type="button" onClick={(event) => {
                                                             event.stopPropagation();
                                                             onReplayEditor(entry.id);
                                                         }}>Replay into Editor</button>
                                                     )}
-                                                    <button className="aura-btn aura-btn--glass lineage-action-btn" type="button" onClick={(event) => {
+                                                    <button className="btn-ghost lineage-action-btn" type="button" onClick={(event) => {
                                                         event.stopPropagation();
                                                         onForkFromStep(entry.id);
                                                     }}>Fork from this step</button>
@@ -273,7 +273,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="lineage-empty glass-inset">
+                                <div className="lineage-empty">
                                     <History size={16} />
                                     <span>No history recorded</span>
                                 </div>
@@ -281,14 +281,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         </div>
 
                         <div className="sidebar-actions">
-                            <button className="aura-btn aura-btn--primary" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>
+                            <button className="btn-amber" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>
                                 <Wand2 size={18} /> Create Similar
                             </button>
-                            <button className="aura-btn aura-btn--glass" onClick={copyPrompt} style={{ width: '100%', padding: '1rem' }}>
+                            <button className="btn-ghost" onClick={copyPrompt} style={{ width: '100%', padding: '1rem' }}>
                                 <Copy size={18} /> Copy Prompt
                             </button>
                             <div className="divider" style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
-                            <button className="aura-btn aura-btn--danger" onClick={onDelete} style={{ width: '100%', padding: '1rem' }}>
+                            <button className="btn-amber" onClick={onDelete} style={{ width: '100%', padding: '1rem' }}>
                                 <Trash2 size={18} /> Delete Permanently
                             </button>
                         </div>

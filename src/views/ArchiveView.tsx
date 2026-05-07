@@ -57,12 +57,12 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
             <header className="view-header">
                 <div className="header-flex">
                     <div>
-                        <h1 className="gradient-text">Archive</h1>
+                        <h1>Archive</h1>
                         <p>Your creative collection across time.</p>
                     </div>
                     <div className="header-actions">
                         <button
-                            className={`aura-btn aura-btn--glass ${allFilteredSelected ? 'aura-btn--primary' : ''}`}
+                            className="btn-ghost"
                             onClick={() => onToggleSelectAll(filteredImageIds)}
                             disabled={filteredImages.length === 0}
                         >
@@ -114,18 +114,18 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         <span>Images Selected</span>
                     </div>
                     <div className="bulk-actions">
-                        <button className="aura-btn aura-btn--glass" onClick={onClearSelection}>
+                        <button className="btn-ghost" onClick={onClearSelection}>
                             <X size={18} /> Cancel
                         </button>
                         <button
-                            className="aura-btn aura-btn--primary"
+                            className="btn-primary"
                             onClick={handleBulkDownload}
                             disabled={isZipping}
                         >
                             {isZipping ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
                             {isZipping ? 'Generating ZIP...' : 'Download as ZIP'}
                         </button>
-                        <button className="aura-btn aura-btn--danger" onClick={onDeleteSelected}>
+                        <button className="btn-amber" onClick={onDeleteSelected}>
                             <Trash2 size={18} /> Delete All
                         </button>
                     </div>

@@ -1,15 +1,13 @@
 import React, { useState } from 'react';
-import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight, Sun, Moon } from 'lucide-react';
+import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { AppView } from '../types';
 
 interface SidebarProps {
     currentView: AppView;
     onViewChange: (view: AppView) => void;
-    theme: 'dark' | 'light';
-    onThemeToggle: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, theme, onThemeToggle }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
 
     const navItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
@@ -20,7 +18,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, theme, onT
     ];
 
     return (
-        <aside className={`sidebar glass-panel ${isCollapsed ? 'collapsed' : ''}`}>
+        <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
             <button
                 className="sidebar-collapse-btn"
                 onClick={() => setIsCollapsed(!isCollapsed)}
@@ -31,7 +29,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, theme, onT
 
             <div className="sidebar-logo">
                 <Sparkles className="logo-icon" size={28} />
-                {!isCollapsed && <span className="gradient-text">AURA AI</span>}
+                {!isCollapsed && <span>AURA AI</span>}
             </div>
 
             <nav className="sidebar-nav">
@@ -48,14 +46,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, theme, onT
             </nav>
 
             <div className="sidebar-footer">
-                <button
-                    className="theme-toggle"
-                    onClick={onThemeToggle}
-                    title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-                >
-                    {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-                    {!isCollapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
-                </button>
                 <div className="status-indicator">
                     <div className="status-dot"></div>
                     {!isCollapsed && <span>API Connected</span>}
