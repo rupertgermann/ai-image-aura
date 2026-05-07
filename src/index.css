@@ -780,6 +780,7 @@ textarea.aura-input {
 .header-actions,
 .lineage-actions-row {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--spacing-16);
 }
 
