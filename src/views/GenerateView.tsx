@@ -8,6 +8,7 @@ import ReferenceImageModal from '../components/ReferenceImageModal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { goalPromptTranslator } from '../autopilot/GoalPromptTranslator';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 interface GenerateViewProps {
     apiKey: string | null;
@@ -265,7 +266,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         <div className="generate-container">
             <header className="view-header">
                 <h1>Create Magic</h1>
-                <p>Harness the power of GPT-Image-1.5 to bring your ideas to life.</p>
+                <p>Harness the power of {OPENAI_IMAGE_MODEL} to bring your ideas to life.</p>
             </header>
 
             <div className="generate-grid">

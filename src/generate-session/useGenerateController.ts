@@ -7,6 +7,7 @@ import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { createAutopilotSession, type AutopilotSession } from '../autopilot/AutopilotSession';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -238,7 +239,7 @@ export function useGenerateController({
                 id: crypto.randomUUID(),
                 url: currentResult,
                 prompt: draft.prompt,
-                model: 'gpt-image-1.5',
+                model: OPENAI_IMAGE_MODEL,
                 timestamp: new Date().toISOString(),
                 width,
                 height,

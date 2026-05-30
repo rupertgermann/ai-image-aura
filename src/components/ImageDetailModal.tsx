@@ -6,6 +6,7 @@ import { lineageStore } from '../lineage/LineageStore';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
@@ -156,7 +157,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             </div>
                             <div className="info-cell">
                                 <label><Sparkles size={12} /> MODEL</label>
-                                <span>{image.model || 'gpt-image-1.5'}</span>
+                                <span>{image.model || OPENAI_IMAGE_MODEL}</span>
                             </div>
                             <div className="info-cell">
                                 <label><Layers size={12} /> QUALITY</label>

@@ -3,6 +3,7 @@ import { createLineageStore, type LineageMetadataPort, type LineageStep } from '
 import { saveGeneratedImage } from './saveGeneratedImage';
 import type { ArchiveImage } from '../db/types';
 import type { GenerateLineageSource } from './GenerateSession';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -202,7 +203,7 @@ function createArchiveImage(overrides: Partial<ArchiveImage> = {}): ArchiveImage
         id: 'generated-1',
         url: 'data:image/png;base64,abc123',
         prompt: 'bioluminescent forest',
-        model: 'gpt-image-1.5',
+        model: OPENAI_IMAGE_MODEL,
         timestamp: '2026-04-04T12:00:00.000Z',
         width: 1024,
         height: 1024,

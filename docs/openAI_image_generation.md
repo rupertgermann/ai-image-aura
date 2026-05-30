@@ -4,7 +4,7 @@ This project uses the OpenAI API directly from the browser for image generation,
 
 ## Integration Summary
 
-- Image model: `gpt-image-1.5`
+- Image model: `gpt-image-2`
 - Responses model: `gpt-5.4`
 - Client location: `src/utils/openai.ts`
 - Image workflow boundary: `src/image-workflow/ImageWorkflow.ts`
@@ -22,7 +22,7 @@ Prompt-only generation uses:
 
 - Endpoint: `POST https://api.openai.com/v1/images/generations`
 - Content type: `application/json`
-- Model: `gpt-image-1.5`
+- Model: `gpt-image-2`
 - Output handling: base64 image payload converted to a data URL
 
 This path is used when the Generate view has no uploaded reference images.
@@ -33,7 +33,7 @@ Reference-based generation and editor transforms use:
 
 - Endpoint: `POST https://api.openai.com/v1/images/edits`
 - Content type: `multipart/form-data`
-- Model: `gpt-image-1.5`
+- Model: `gpt-image-2`
 - Input images: browser `File` objects appended as `image[]`
 - Output handling: base64 image payload converted to a data URL
 

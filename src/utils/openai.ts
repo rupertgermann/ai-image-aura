@@ -1,3 +1,5 @@
+import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from './openaiModels';
+
 export type ImageQuality = 'low' | 'medium' | 'high';
 
 export type ImageBackground = 'transparent' | 'opaque' | 'auto';
@@ -48,7 +50,7 @@ export const openAiImageClient: OpenAiImageClient = {
 
         if (isEdit) {
             const formData = new FormData();
-            formData.append('model', 'gpt-image-1.5');
+            formData.append('model', OPENAI_IMAGE_MODEL);
             formData.append('prompt', request.prompt);
             formData.append('n', '1');
 
@@ -71,7 +73,7 @@ export const openAiImageClient: OpenAiImageClient = {
                 quality?: ImageQuality;
                 background?: 'transparent' | 'opaque';
             } = {
-                model: 'gpt-image-1.5',
+                model: OPENAI_IMAGE_MODEL,
                 prompt: request.prompt,
                 n: 1,
             };
@@ -112,7 +114,7 @@ export const openAiResponsesClient: OpenAiResponsesClient = {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'gpt-5.4',
+                model: OPENAI_RESPONSES_MODEL,
                 input: [
                     {
                         role: 'system',

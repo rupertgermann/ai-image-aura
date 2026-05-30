@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -236,7 +237,7 @@ function createArchiveImage(overrides: Partial<ArchiveImage> = {}): ArchiveImage
         id: 'source-image',
         url: 'data:image/png;base64,source',
         prompt: 'cosmic koi pond',
-        model: 'gpt-image-1.5',
+        model: OPENAI_IMAGE_MODEL,
         timestamp: '2026-04-04T08:00:00.000Z',
         width: 1024,
         height: 1024,

@@ -87,7 +87,7 @@ The product shift is from **user as prompt engineer** to **user as creative dire
 - A cost disclosure panel is shown before each autopilot run starts, stating the configured max iterations and the resulting maximum number of API calls. The user must confirm before the run begins.
 - The existing generation settings (quality, aspect ratio, background, style, lighting, palette) apply to every iteration within a run. They are not changed between iterations.
 - GPT-5.4 is used for both evaluation and prompt refinement. The same API key the user already configured for image generation is used. No additional credentials are required.
-- Generation in Autopilot mode uses `gpt-image-1.5` via the existing `imageWorkflow.generate()` path. No new image model is introduced.
+- Generation in Autopilot mode uses `gpt-image-2` via the existing `imageWorkflow.generate()` path. No new image model is introduced.
 - Goal text and the last-used autopilot settings (max iterations, threshold) are persisted in the existing local storage layer between sessions.
 - Errors during generation or evaluation stop the current run at the failed iteration. All successfully completed iteration lineage nodes are retained. The error is surfaced in the UI with a clear message.
 
@@ -106,7 +106,7 @@ The product shift is from **user as prompt engineer** to **user as creative dire
 
 ## Out of Scope
 
-- Support for image generation models other than `gpt-image-1.5` in the autopilot loop.
+- Support for image generation models other than `gpt-image-2` in the autopilot loop.
 - Support for evaluation models other than GPT-5.4.
 - Multi-user collaboration, cloud sync, or cross-device history sharing.
 - Batch autopilot: running an autopilot session across multiple goals or prompts simultaneously.

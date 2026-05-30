@@ -4,6 +4,7 @@ import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage } from '../db/types';
 import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE } from './ArchiveTransfer';
 import { createLineageStore, type LineageMetadataPort, type LineageStep, type LineageStore } from '../lineage/LineageStore';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -159,7 +160,7 @@ function createImages(): ArchiveImage[] {
             aspectRatio: '1024x1024',
             background: 'transparent',
             timestamp: '2026-04-04T09:00:00.000Z',
-            model: 'gpt-image-1.5',
+            model: OPENAI_IMAGE_MODEL,
             width: 1024,
             height: 1024,
             references: ['data:image/png;base64,ref1'],
@@ -172,7 +173,7 @@ function createImages(): ArchiveImage[] {
             aspectRatio: '1024x1024',
             background: 'transparent',
             timestamp: '2026-04-04T10:00:00.000Z',
-            model: 'gpt-image-1.5',
+            model: OPENAI_IMAGE_MODEL,
             width: 1024,
             height: 1024,
             references: [],
@@ -185,7 +186,7 @@ function createImages(): ArchiveImage[] {
             aspectRatio: '1024x1024',
             background: 'transparent',
             timestamp: '2026-04-04T11:00:00.000Z',
-            model: 'gpt-image-1.5',
+            model: OPENAI_IMAGE_MODEL,
             width: 1024,
             height: 1024,
             references: [],

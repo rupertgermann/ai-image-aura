@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 interface SettingsViewProps {
     apiKey: string | null;
@@ -39,7 +40,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ apiKey, onApiKeyChange }) =
                 </div>
 
                 <p className="section-desc">
-                    Your API key is required to generate images using GPT-Image-1.5.
+                    Your API key is required to generate images using {OPENAI_IMAGE_MODEL}.
                     It is stored locally in your browser and never sent to our servers.
                 </p>
 

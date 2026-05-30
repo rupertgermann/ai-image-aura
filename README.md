@@ -16,7 +16,7 @@ The app runs entirely in the browser. API keys, generated images, reference imag
 
 ## Highlights
 
-- Prompt-based image generation with `gpt-image-1.5`
+- Prompt-based image generation with `gpt-image-2`
 - `Single Shot` and `Autopilot` generation modes
 - Goal-to-prompt translation, iterative scoring, and prompt refinement powered by `gpt-5.4`
 - Prompt enhancement controls for style, lighting, palette, quality, aspect ratio, and background
@@ -184,7 +184,7 @@ The app calls the OpenAI API directly from the browser.
 - Prompt-only generations use `POST /v1/images/generations`
 - Reference-based generations and editor transforms use `POST /v1/images/edits`
 - Autopilot goal translation, evaluation, and prompt refinement use `POST /v1/responses`
-- The image generation model is `gpt-image-1.5`
+- The image generation model is `gpt-image-2`
 - Autopilot reasoning uses `gpt-5.4`
 - The app requests a single image per generation or edit operation
 - Image responses are consumed as base64 payloads and converted into browser-safe data URLs for preview and persistence

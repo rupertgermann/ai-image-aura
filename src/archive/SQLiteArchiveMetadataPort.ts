@@ -1,5 +1,6 @@
 import { SQLocal } from 'sqlocal';
 import type { ArchiveImage } from '../db/types';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 type ArchiveImageRow = ArchiveImage & { ref_ids?: string };
 
@@ -57,7 +58,7 @@ export class SQLiteArchiveMetadataPort {
                 ${record.aspectRatio},
                 ${record.background},
                 ${record.timestamp},
-                ${record.model || 'gpt-image-1.5'},
+                ${record.model || OPENAI_IMAGE_MODEL},
                 ${record.width || 1024},
                 ${record.height || 1024},
                 ${JSON.stringify(record.referenceIds)},
