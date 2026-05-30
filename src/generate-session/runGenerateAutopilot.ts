@@ -20,7 +20,7 @@ interface RunGenerateAutopilotInput {
     maxIterations?: number;
     satisfactionThreshold?: number;
     onSessionCreated?: (session: ReturnType<typeof createAutopilotSession>) => void;
-    onIterationComplete?: (iteration: AutopilotSessionResult['iterations'][number]) => void;
+    onIterationComplete?: (iteration: AutopilotSessionResult['iterations'][number], runningBest: AutopilotSessionResult['iterations'][number]) => void;
     onError?: (error: Error, iterationNumber: number) => void;
 }
 

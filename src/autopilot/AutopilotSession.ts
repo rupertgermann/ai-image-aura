@@ -26,7 +26,7 @@ export interface AutopilotSessionResult {
 }
 
 interface ProgressCallbacks {
-    onIterationComplete?: (iteration: AutopilotIteration) => void;
+    onIterationComplete?: (iteration: AutopilotIteration, runningBest: AutopilotIteration) => void;
     onError?: (error: Error, iterationNumber: number) => void;
 }
 
@@ -73,6 +73,7 @@ class DefaultAutopilotSession implements AutopilotSession {
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
         let currentPrompt = this.input.initialPrompt;
         let parentStepId = this.input.initialParentStepId ?? null;
+        let runningBest: AutopilotIteration | null = null;
 
         for (let iterationNumber = 1; iterationNumber <= maxIterations; iterationNumber += 1) {
             try {
@@ -121,7 +122,8 @@ class DefaultAutopilotSession implements AutopilotSession {
                 };
 
                 iterations.push(completedIteration);
-                this.input.callbacks?.onIterationComplete?.(completedIteration);
+                runningBest = pickBetterIteration(runningBest, completedIteration);
+                this.input.callbacks?.onIterationComplete?.(completedIteration, runningBest);
                 parentStepId = step.id;
 
                 if (evaluation.score >= satisfactionThreshold) {
@@ -162,22 +164,25 @@ function buildResult(status: AutopilotSessionResult['status'], iterations: Autop
     };
 }
 
-function getBestIteration(iterations: AutopilotIteration[]) {
-    return iterations.reduce<AutopilotIteration | null>((best, iteration) => {
-        if (!best) {
-            return iteration;
-        }
+function getBestIteration(iterations: AutopilotIteration[]): AutopilotIteration | null {
+    return iterations.reduce<AutopilotIteration | null>(pickBetterIteration, null);
+}
 
-        if (iteration.score > best.score) {
-            return iteration;
-        }
+// Single source of truth for "what counts as best": highest score, ties broken by earliest iteration.
+function pickBetterIteration(best: AutopilotIteration | null, candidate: AutopilotIteration): AutopilotIteration {
+    if (!best) {
+        return candidate;
+    }
 
-        if (iteration.score === best.score && iteration.iterationNumber < best.iterationNumber) {
-            return iteration;
-        }
+    if (candidate.score > best.score) {
+        return candidate;
+    }
 
-        return best;
-    }, null);
+    if (candidate.score === best.score && candidate.iterationNumber < best.iterationNumber) {
+        return candidate;
+    }
+
+    return best;
 }
 
 export function createAutopilotSession(input: CreateAutopilotSessionInput): AutopilotSession {

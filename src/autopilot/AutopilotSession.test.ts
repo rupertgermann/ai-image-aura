@@ -67,12 +67,39 @@ describe('AutopilotSession', () => {
         expect(generate).toHaveBeenCalledTimes(3);
         expect(refine).toHaveBeenCalledTimes(2);
         expect(callbacks.onIterationComplete).toHaveBeenCalledTimes(3);
+        expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 2, 2]);
         await expect(lineage.getChildren('step-1')).resolves.toEqual([
             expect.objectContaining({ id: 'step-2', parentStepId: 'step-1' }),
         ]);
         await expect(lineage.getChildren('step-2')).resolves.toEqual([
             expect.objectContaining({ id: 'step-3', parentStepId: 'step-2' }),
         ]);
+    });
+
+    it('exposes a running best that breaks score ties by earliest iteration', async () => {
+        const lineage = createStore();
+        const callbacks = { onIterationComplete: vi.fn(), onError: vi.fn() };
+
+        const result = await createAutopilotSession({
+            goal: 'A cinematic portrait',
+            initialPrompt: 'prompt 1',
+            settings: createSettings(),
+            apiKey: 'key',
+            maxIterations: 2,
+            satisfactionThreshold: 90,
+            generate: vi.fn()
+                .mockResolvedValueOnce('data:image/png;base64,one')
+                .mockResolvedValueOnce('data:image/png;base64,two'),
+            evaluate: vi.fn()
+                .mockResolvedValueOnce({ score: 80, feedback: ['Good.'] })
+                .mockResolvedValueOnce({ score: 80, feedback: ['Also good.'] }),
+            refine: vi.fn().mockResolvedValueOnce('prompt 2'),
+            lineageStore: lineage,
+            callbacks,
+        }).run();
+
+        expect(result.bestIteration).toEqual(expect.objectContaining({ iterationNumber: 1 }));
+        expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 1]);
     });
 
     it('stops early when the satisfaction threshold is met', async () => {

@@ -165,27 +165,12 @@ export function useGenerateController({
                 },
                 maxIterations: input.maxIterations,
                 satisfactionThreshold: input.satisfactionThreshold,
-                onIterationComplete: (iteration) => {
-                    setAutopilot((current) => {
-                        const iterations = [...current.iterations, iteration];
-                        const bestIteration = iterations.reduce<typeof iteration | null>((best, candidate) => {
-                            if (!best || candidate.score > best.score) {
-                                return candidate;
-                            }
-
-                            if (candidate.score === best.score && candidate.iterationNumber < best.iterationNumber) {
-                                return candidate;
-                            }
-
-                            return best;
-                        }, null);
-
-                        return {
-                            ...current,
-                            iterations,
-                            bestIterationNumber: bestIteration?.iterationNumber ?? null,
-                        };
-                    });
+                onIterationComplete: (iteration, runningBest) => {
+                    setAutopilot((current) => ({
+                        ...current,
+                        iterations: [...current.iterations, iteration],
+                        bestIterationNumber: runningBest.iterationNumber,
+                    }));
                     setCurrentResult(iteration.imageDataUrl);
                 },
                 onError: (error, iterationNumber) => {
