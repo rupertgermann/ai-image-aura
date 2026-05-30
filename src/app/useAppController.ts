@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useArchiveController } from '../archive/useArchiveController';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore } from '../generate-session/GenerateSession';
@@ -8,7 +8,7 @@ import { useImageArchive } from '../hooks/useImageArchive';
 import { initializeAuraPersistence } from '../db/AuraPersistence';
 import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
 import { lineageStore } from '../lineage/LineageStore';
-import { buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
+import { createLineageNavigator } from '../lineage/LineageNavigator';
 
 export function useAppController() {
     const { currentView, apiKey, changeView, updateApiKey } = useAppPreferences();
@@ -80,72 +80,53 @@ export function useAppController() {
         }
     }, [addToast, changeView, notifyError]);
 
+    const lineageNavigator = useMemo(() => createLineageNavigator({
+        lineageStore,
+        sessionStore: generateSessionStore,
+        findImage: (archiveImageId) => images.find((entry) => entry.id === archiveImageId) ?? null,
+    }), [images]);
+
     const replayGenerateFromLineageStep = useCallback(async (stepId: string) => {
         try {
-            const step = await lineageStore.getById(stepId);
-            if (!step || !isGenerateReplayable(step)) {
-                notifyError(new Error('This step cannot be replayed into Generate'), 'Replay unavailable');
+            const outcome = await lineageNavigator.replayIntoGenerate(stepId);
+            if (outcome.status === 'unavailable') {
+                notifyError(new Error(outcome.reason), 'Replay unavailable');
                 return;
-            }
-
-            const image = images.find((entry) => entry.id === step.archiveImageId) ?? null;
-            const replay = buildGenerateReplay(image, step);
-            if (image) {
-                await generateSessionStore.transferFromArchive(image, replay.lineageSource, replay.draft);
-            } else {
-                generateSessionStore.writeDraft(replay.draft);
-                generateSessionStore.saveLineageSource(replay.lineageSource);
             }
             changeView('generate');
             addToast('Lineage step loaded into Generate', 'info');
         } catch (error) {
             notifyError(error, 'Failed to replay lineage step');
         }
-    }, [addToast, changeView, images, notifyError]);
+    }, [addToast, changeView, lineageNavigator, notifyError]);
 
     const replayEditorFromLineageStep = useCallback(async (stepId: string) => {
         try {
-            const step = await lineageStore.getById(stepId);
-            if (!step || !isEditorReplayable(step)) {
-                notifyError(new Error('This step cannot be replayed into Editor'), 'Replay unavailable');
+            const outcome = await lineageNavigator.replayIntoEditor(stepId);
+            if (outcome.status === 'unavailable') {
+                notifyError(new Error(outcome.reason), 'Replay unavailable');
                 return;
             }
-
-            const image = images.find((entry) => entry.id === step.archiveImageId);
-            if (!image) {
-                notifyError(new Error('Selected step image is missing from the local archive'), 'Replay unavailable');
-                return;
-            }
-
-            generateSessionStore.saveLineageSource({
-                archiveImageId: step.archiveImageId,
-                stepId: step.id,
-            });
-            setEditingImage(image);
+            setEditingImage(outcome.image);
             changeView('editor');
             addToast('Lineage step loaded into Editor', 'info');
         } catch (error) {
             notifyError(error, 'Failed to replay lineage step');
         }
-    }, [addToast, changeView, images, notifyError]);
+    }, [addToast, changeView, lineageNavigator, notifyError]);
 
     const forkFromLineageStep = useCallback(async (stepId: string) => {
         try {
-            const step = await lineageStore.getById(stepId);
-            if (!step) {
-                notifyError(new Error('Selected lineage step no longer exists'), 'Fork unavailable');
+            const outcome = await lineageNavigator.fork(stepId);
+            if (outcome.status === 'unavailable') {
+                notifyError(new Error(outcome.reason), 'Fork unavailable');
                 return;
             }
-
-            generateSessionStore.saveLineageSource({
-                archiveImageId: step.archiveImageId,
-                stepId: step.id,
-            });
             addToast('Next save will branch from this lineage step', 'info');
         } catch (error) {
             notifyError(error, 'Failed to fork from lineage step');
         }
-    }, [addToast, notifyError]);
+    }, [addToast, lineageNavigator, notifyError]);
 
     const archiveController = useArchiveController({
         images,

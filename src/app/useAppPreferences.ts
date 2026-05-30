@@ -1,6 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import type { AppView } from '../types';
+import type { AppView } from './types';
 
 export function useAppPreferences() {
     const [currentView, setCurrentView] = useLocalStorage<AppView>('aura_current_view', 'generate');

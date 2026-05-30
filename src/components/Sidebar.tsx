@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { AppView } from '../types';
+import type { AppView } from '../app/types';
 
 interface SidebarProps {
     currentView: AppView;
