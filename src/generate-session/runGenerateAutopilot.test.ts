@@ -37,13 +37,20 @@ describe('runGenerateAutopilot', () => {
             goal: 'A cinematic portrait',
             apiKey: 'key',
             draft: {
+                model: 'gpt-image-2',
                 prompt: 'prompt 1',
-                quality: 'high',
-                aspectRatio: '1024x1024',
-                background: 'transparent',
                 style: 'risograph poster',
                 lighting: 'golden hour',
                 palette: 'copper + teal + cream',
+                gptImage2: {
+                    quality: 'high',
+                    size: '1024x1024',
+                    background: 'transparent',
+                },
+                nanoBananaPro: {
+                    aspectRatio: '1:1',
+                    imageSize: '1K',
+                },
                 isSaved: false,
             },
             referenceImages: [],

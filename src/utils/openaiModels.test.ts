@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
     DEFAULT_IMAGE_MODEL,
     IMAGE_MODEL_REGISTRY,
+    NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
     resolveImageModelConfig,
 } from './openaiModels';
@@ -25,6 +26,22 @@ describe('openaiModels image registry', () => {
                 size: 'size',
                 quality: 'quality',
                 background: 'background',
+            },
+        });
+    });
+
+    it('maps nano-banana-pro to the Google image provider contract', () => {
+        expect(IMAGE_MODEL_REGISTRY[NANO_BANANA_PRO_IMAGE_MODEL]).toMatchObject({
+            slug: NANO_BANANA_PRO_IMAGE_MODEL,
+            provider: 'google',
+            apiModel: 'gemini-3-pro-image-preview',
+            endpoints: {
+                generate: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+                edit: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
+            },
+            parameters: {
+                aspectRatio: 'generationConfig.imageConfig.aspectRatio',
+                imageSize: 'generationConfig.imageConfig.imageSize',
             },
         });
     });

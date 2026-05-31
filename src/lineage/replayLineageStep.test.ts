@@ -24,13 +24,20 @@ describe('replayLineageStep', () => {
 
         expect(buildGenerateReplay(image, step)).toEqual({
             draft: {
+                model: 'gpt-image-2',
                 prompt: 'cathedral-sized jellyfish drifting over a neon harbor',
-                quality: 'high',
-                aspectRatio: '1536x1024',
-                background: 'transparent',
                 style: 'editorial sci-fi',
                 lighting: 'storm glow',
                 palette: 'violet + amber',
+                gptImage2: {
+                    quality: 'high',
+                    size: '1536x1024',
+                    background: 'transparent',
+                },
+                nanoBananaPro: {
+                    aspectRatio: '1:1',
+                    imageSize: '1K',
+                },
                 isSaved: false,
             },
             lineageSource: {
@@ -67,19 +74,52 @@ describe('replayLineageStep', () => {
 
         expect(buildGenerateReplay(null, step)).toEqual({
             draft: {
+                model: 'gpt-image-2',
                 prompt: 'editorial portrait, deep blue haze, dramatic rim light',
-                quality: 'high',
-                aspectRatio: '1536x1024',
-                background: 'transparent',
                 style: '35mm film still',
                 lighting: 'neon rim light',
                 palette: 'cobalt + vermilion + bone',
+                gptImage2: {
+                    quality: 'high',
+                    size: '1536x1024',
+                    background: 'transparent',
+                },
+                nanoBananaPro: {
+                    aspectRatio: '1:1',
+                    imageSize: '1K',
+                },
                 isSaved: false,
             },
             lineageSource: {
                 archiveImageId: 'autopilot:run:iteration:2',
                 stepId: 'step-9',
             },
+        });
+    });
+
+    it('restores nano model controls from lineage metadata', () => {
+        const step = createStep({
+            id: 'step-nano',
+            archiveImageId: 'image-nano',
+            stepType: 'generation',
+            timestamp: '2026-04-04T10:00:00.000Z',
+            metadata: {
+                model: 'nano-banana-pro',
+                prompt: 'crystal observatory over a kelp forest',
+                aspectRatio: '16:9',
+                imageSize: '4K',
+                style: 'isometric diorama',
+            },
+        });
+
+        expect(buildGenerateReplay(null, step).draft).toMatchObject({
+            model: 'nano-banana-pro',
+            prompt: 'crystal observatory over a kelp forest',
+            nanoBananaPro: {
+                aspectRatio: '16:9',
+                imageSize: '4K',
+            },
+            style: 'isometric diorama',
         });
     });
 });

@@ -8,10 +8,18 @@ import ReferenceImageModal from '../components/ReferenceImageModal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { goalPromptTranslator } from '../autopilot/GoalPromptTranslator';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import {
+    IMAGE_MODEL_REGISTRY,
+    NANO_BANANA_PRO_IMAGE_MODEL,
+    OPENAI_IMAGE_MODEL,
+    resolveImageModelConfig,
+    type ImageModelSlug,
+    type Provider,
+} from '../utils/openaiModels';
 
 interface GenerateViewProps {
     apiKey: string | null;
+    getProviderKey: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
 }
 
@@ -140,7 +148,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
     );
 };
 
-const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
+const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onSaveImage }) => {
     const [draft, setDraft] = useGenerateDraft();
     const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
@@ -151,9 +159,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);
     const [autopilotNotice, setAutopilotNotice] = useState<string | null>(null);
     const [translatingGoal, setTranslatingGoal] = useState(false);
-    const { prompt, quality, aspectRatio, background, style, lighting, palette, isSaved } = draft;
+    const { prompt, model, style, lighting, palette, isSaved } = draft;
+    const activeModel = resolveImageModelConfig(model);
+    const activeImageApiKey = getProviderKey(activeModel.provider);
+    const gptControls = draft.gptImage2;
+    const nanoControls = draft.nanoBananaPro;
     const referenceCollection = useReferenceImageCollection();
     const referenceImages = referenceCollection.files;
+    const activeReferenceImages = model === NANO_BANANA_PRO_IMAGE_MODEL
+        ? referenceImages.slice(0, 14)
+        : referenceImages;
     const referencePreviews = referenceCollection.previews;
     const addReferenceFiles = referenceCollection.addFiles;
     const removeReferenceAt = referenceCollection.removeAt;
@@ -170,10 +185,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         download,
         clear,
     } = useGenerateController({
-        apiKey,
+        apiKey: activeImageApiKey,
         draft,
         setDraft,
-        referenceImages,
+        referenceImages: activeReferenceImages,
         replaceReferences: referenceCollection.replaceWithDataUrls,
         serializeReferences: referenceCollection.serialize,
         onSaveImage,
@@ -259,6 +274,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
 
     const maxApiCalls = maxIterations * 3;
     const isAutopilotMode = mode === 'autopilot';
+    const nanoReferenceWarning = model === NANO_BANANA_PRO_IMAGE_MODEL && referenceImages.length > 14
+        ? 'Nano Banana Pro uses the first 14 reference images for generation.'
+        : null;
 
 
 
@@ -266,11 +284,32 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
         <div className="generate-container">
             <header className="view-header">
                 <h1>Create Magic</h1>
-                <p>Harness the power of {OPENAI_IMAGE_MODEL} to bring your ideas to life.</p>
+                <p>Harness the power of {activeModel.label} to bring your ideas to life.</p>
             </header>
 
             <div className="generate-grid">
                 <section className="controls-panel glass-panel">
+                    <div className="input-section">
+                        <label>IMAGE MODEL</label>
+                        <div className="toggle-group">
+                            {(Object.keys(IMAGE_MODEL_REGISTRY) as ImageModelSlug[]).map((modelSlug) => {
+                                const config = resolveImageModelConfig(modelSlug);
+                                const hasKey = !!getProviderKey(config.provider);
+                                return (
+                                    <button
+                                        key={modelSlug}
+                                        className={model === modelSlug ? 'active' : ''}
+                                        onClick={() => updateDraft({ model: modelSlug })}
+                                        disabled={!hasKey}
+                                        title={hasKey ? config.label : `Add a ${config.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
+                                    >
+                                        {config.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
                     <div className="input-section">
                         <label>MODE</label>
                         <div className="toggle-group">
@@ -293,7 +332,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                                     <button
                                         className="btn-ghost autopilot-inline-btn"
                                         onClick={() => { void handleTranslateGoal(); }}
-                                        disabled={!goal.trim() || !apiKey || translatingGoal || loading}
+                                    disabled={!goal.trim() || !apiKey || translatingGoal || loading}
                                     >
                                         {translatingGoal ? 'Translating...' : 'Translate to Prompt'}
                                     </button>
@@ -378,55 +417,94 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                     </div>
 
                     <div className="options-grid">
-                        <div className="option-group">
-                            <label>QUALITY</label>
-                            <div className="toggle-group">
-                                <button
-                                    className={quality === 'low' ? 'active' : ''}
-                                    onClick={() => updateDraft({ quality: 'low' })}
-                                >Low</button>
-                                <button
-                                    className={quality === 'medium' ? 'active' : ''}
-                                    onClick={() => updateDraft({ quality: 'medium' })}
-                                >Medium</button>
-                                <button
-                                    className={quality === 'high' ? 'active' : ''}
-                                    onClick={() => updateDraft({ quality: 'high' })}
-                                >High</button>
-                            </div>
-                        </div>
+                        {model === OPENAI_IMAGE_MODEL ? (
+                            <>
+                                <div className="option-group">
+                                    <label>QUALITY</label>
+                                    <div className="toggle-group">
+                                        <button
+                                            className={gptControls.quality === 'low' ? 'active' : ''}
+                                            onClick={() => updateDraft({ gptImage2: { ...gptControls, quality: 'low' } })}
+                                        >Low</button>
+                                        <button
+                                            className={gptControls.quality === 'medium' ? 'active' : ''}
+                                            onClick={() => updateDraft({ gptImage2: { ...gptControls, quality: 'medium' } })}
+                                        >Medium</button>
+                                        <button
+                                            className={gptControls.quality === 'high' ? 'active' : ''}
+                                            onClick={() => updateDraft({ gptImage2: { ...gptControls, quality: 'high' } })}
+                                        >High</button>
+                                    </div>
+                                </div>
 
-                        <div className="option-group">
-                            <label>ASPECT RATIO</label>
-                            <CustomSelect
-                                value={aspectRatio}
-                                onChange={(v) => updateDraft({ aspectRatio: v })}
-                                options={[
-                                    { value: 'auto', label: 'Auto' },
-                                    { value: '1024x1024', label: 'Square (1:1)' },
-                                    { value: '1536x1024', label: 'Wide (3:2)' },
-                                    { value: '1024x1536', label: 'Tall (2:3)' },
-                                ]}
-                            />
-                        </div>
+                                <div className="option-group">
+                                    <label>SIZE</label>
+                                    <CustomSelect
+                                        value={gptControls.size}
+                                        onChange={(v) => updateDraft({ gptImage2: { ...gptControls, size: v } })}
+                                        options={[
+                                            { value: 'auto', label: 'Auto' },
+                                            { value: '1024x1024', label: 'Square (1:1)' },
+                                            { value: '1536x1024', label: 'Wide (3:2)' },
+                                            { value: '1024x1536', label: 'Tall (2:3)' },
+                                        ]}
+                                    />
+                                </div>
 
-                        <div className="option-group">
-                            <label>BACKGROUND</label>
-                            <div className="toggle-group">
-                                <button
-                                    className={background === 'auto' ? 'active' : ''}
-                                    onClick={() => updateDraft({ background: 'auto' })}
-                                >Auto</button>
-                                <button
-                                    className={background === 'opaque' ? 'active' : ''}
-                                    onClick={() => updateDraft({ background: 'opaque' })}
-                                >Opaque</button>
-                                <button
-                                    className={background === 'transparent' ? 'active' : ''}
-                                    onClick={() => updateDraft({ background: 'transparent' })}
-                                >Transparent</button>
-                            </div>
-                        </div>
+                                <div className="option-group">
+                                    <label>BACKGROUND</label>
+                                    <div className="toggle-group">
+                                        <button
+                                            className={gptControls.background === 'auto' ? 'active' : ''}
+                                            onClick={() => updateDraft({ gptImage2: { ...gptControls, background: 'auto' } })}
+                                        >Auto</button>
+                                        <button
+                                            className={gptControls.background === 'opaque' ? 'active' : ''}
+                                            onClick={() => updateDraft({ gptImage2: { ...gptControls, background: 'opaque' } })}
+                                        >Opaque</button>
+                                        <button
+                                            className={gptControls.background === 'transparent' ? 'active' : ''}
+                                            onClick={() => updateDraft({ gptImage2: { ...gptControls, background: 'transparent' } })}
+                                        >Transparent</button>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <div className="option-group">
+                                    <label>ASPECT RATIO</label>
+                                    <CustomSelect
+                                        value={nanoControls.aspectRatio}
+                                        onChange={(v) => updateDraft({ nanoBananaPro: { ...nanoControls, aspectRatio: v as typeof nanoControls.aspectRatio } })}
+                                        options={[
+                                            { value: '1:1', label: 'Square (1:1)' },
+                                            { value: '2:3', label: 'Portrait (2:3)' },
+                                            { value: '3:2', label: 'Landscape (3:2)' },
+                                            { value: '3:4', label: 'Portrait (3:4)' },
+                                            { value: '4:3', label: 'Landscape (4:3)' },
+                                            { value: '4:5', label: 'Portrait (4:5)' },
+                                            { value: '5:4', label: 'Landscape (5:4)' },
+                                            { value: '9:16', label: 'Story (9:16)' },
+                                            { value: '16:9', label: 'Widescreen (16:9)' },
+                                            { value: '21:9', label: 'Cinema (21:9)' },
+                                        ]}
+                                    />
+                                </div>
+
+                                <div className="option-group">
+                                    <label>RESOLUTION</label>
+                                    <div className="toggle-group">
+                                        {(['1K', '2K', '4K'] as const).map((imageSize) => (
+                                            <button
+                                                key={imageSize}
+                                                className={nanoControls.imageSize === imageSize ? 'active' : ''}
+                                                onClick={() => updateDraft({ nanoBananaPro: { ...nanoControls, imageSize } })}
+                                            >{imageSize}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
                         <div className="option-group">
                             <label>STYLE</label>
@@ -513,7 +591,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <button
                             className="btn-amber"
                             onClick={() => setShowCostDisclosure(true)}
-                            disabled={loading || !prompt.trim() || !goal.trim() || !apiKey}
+                            disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey}
                             style={{ width: '100%' }}
                         >
                             {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -523,7 +601,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         <button
                             className="btn-amber"
                             onClick={() => { void generate(); }}
-                            disabled={loading || !prompt.trim() || !apiKey}
+                            disabled={loading || !prompt.trim() || !activeImageApiKey}
                             style={{ width: '100%' }}
                         >
                             {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -551,9 +629,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, onSaveImage }) => {
                         </div>
                     )}
 
-                    {!apiKey && (
-                        <div className="error-message">API Key missing. Go to Settings to configure.</div>
+                    {!activeImageApiKey && (
+                        <div className="error-message">{activeModel.label} API key missing. Go to Settings to configure.</div>
                     )}
+                    {nanoReferenceWarning && <div className="info-message">{nanoReferenceWarning}</div>}
                     {error && <div className="error-message">{error}</div>}
                     {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>

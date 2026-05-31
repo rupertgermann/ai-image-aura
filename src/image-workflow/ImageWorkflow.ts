@@ -3,7 +3,7 @@ import {
     type ImageBackground,
     type ImageQuality,
 } from '../utils/openai';
-import { DEFAULT_IMAGE_MODEL, resolveImageModelConfig, type ImageModelSlug } from '../utils/openaiModels';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
 import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, type ImageProviderResponse } from './ImageProvider';
 
 export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
@@ -17,6 +17,7 @@ export interface GenerateImageInput {
     quality: ImageQuality;
     aspectRatio: string;
     background: ImageBackground;
+    imageSize?: NanoBananaImageSize;
     style: string;
     lighting: string;
     palette: string;
@@ -30,6 +31,8 @@ export interface EditImageInput {
     sourceImage: Blob;
     referenceImages: File[];
     quality?: ImageQuality;
+    aspectRatio?: NanoBananaAspectRatio;
+    imageSize?: NanoBananaImageSize;
 }
 
 export interface ImageWorkflow {
@@ -51,6 +54,8 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
                 quality: input.quality,
                 size: sanitizeGenerationSize(input.aspectRatio),
                 background: input.background,
+                aspectRatio: normalizeNanoAspectRatio(input.aspectRatio),
+                imageSize: input.imageSize,
                 referenceImages: input.referenceImages,
             }));
         },
@@ -63,6 +68,9 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
                 model,
                 prompt: input.prompt,
                 quality: input.quality ?? 'medium',
+                aspectRatio: input.aspectRatio,
+                imageSize: input.imageSize,
+                preserveSourceDimensions: model.slug === NANO_BANANA_PRO_IMAGE_MODEL,
                 referenceImages: [createEditSourceFile(input.sourceImage), ...input.referenceImages],
             }));
         },
@@ -93,6 +101,13 @@ const buildGenerationPrompt = (input: GenerateImageInput) => {
 
 const sanitizeGenerationSize = (size: string) => {
     return VALID_GENERATION_SIZES.has(size) ? size : '1024x1024';
+};
+
+const normalizeNanoAspectRatio = (size: string): NanoBananaAspectRatio => {
+    if (size === '1536x1024') return '3:2';
+    if (size === '1024x1536') return '2:3';
+    if (size === 'auto' || size === '1024x1024') return '1:1';
+    return size as NanoBananaAspectRatio;
 };
 
 const createEditSourceFile = (sourceImage: Blob) => {

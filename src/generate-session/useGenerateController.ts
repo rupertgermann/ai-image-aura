@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
+import { generateSessionStore, getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { createAutopilotSession, type AutopilotSession } from '../autopilot/AutopilotSession';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -38,8 +37,6 @@ interface UseGenerateControllerOptions {
     workflow?: Pick<ImageWorkflow, 'generate'>;
     createAutopilot?: typeof createAutopilotSession;
 }
-
-const VALID_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
 export function useGenerateController({
     apiKey,
@@ -84,12 +81,6 @@ export function useGenerateController({
         });
     }, [replaceReferences, session]);
 
-    useEffect(() => {
-        if (!VALID_SIZES.has(draft.aspectRatio)) {
-            setDraft((currentDraft) => ({ ...currentDraft, aspectRatio: '1024x1024' }));
-        }
-    }, [draft.aspectRatio, setDraft]);
-
     const generate = useCallback(async () => {
         if (!apiKey) {
             setError('Please set your OpenAI API Key in Settings first.');
@@ -108,12 +99,15 @@ export function useGenerateController({
         }));
 
         try {
+            const controls = getActiveGenerateControls(draft);
             const imageUrl = await workflow.generate({
                 apiKey,
+                model: draft.model,
                 prompt: draft.prompt,
-                quality: draft.quality,
-                aspectRatio: draft.aspectRatio,
-                background: draft.background,
+                quality: controls.quality,
+                aspectRatio: controls.aspectRatio,
+                background: controls.background,
+                imageSize: controls.imageSize,
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
@@ -219,18 +213,19 @@ export function useGenerateController({
 
         try {
             const references = await serializeReferences();
-            const { width, height } = getImageDimensions(draft.aspectRatio);
+            const controls = getActiveGenerateControls(draft);
+            const { width, height } = getImageDimensions(controls.aspectRatio, controls.imageSize);
             await saveGeneratedImage({
                 id: crypto.randomUUID(),
                 url: currentResult,
                 prompt: draft.prompt,
-                model: OPENAI_IMAGE_MODEL,
+                model: draft.model,
                 timestamp: new Date().toISOString(),
                 width,
                 height,
-                quality: draft.quality,
-                aspectRatio: draft.aspectRatio,
-                background: draft.background,
+                quality: controls.imageSize ?? controls.quality,
+                aspectRatio: controls.aspectRatio,
+                background: controls.background,
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
@@ -274,7 +269,25 @@ export function useGenerateController({
     };
 }
 
-function getImageDimensions(aspectRatio: string) {
+function getImageDimensions(aspectRatio: string, imageSize?: string) {
+    if (imageSize) {
+        const longEdge = imageSize === '4K' ? 4096 : imageSize === '2K' ? 2048 : 1024;
+        const [widthRatio, heightRatio] = aspectRatio.split(':').map(Number);
+        if (widthRatio && heightRatio) {
+            if (widthRatio >= heightRatio) {
+                return {
+                    width: longEdge,
+                    height: Math.round(longEdge * (heightRatio / widthRatio)),
+                };
+            }
+
+            return {
+                width: Math.round(longEdge * (widthRatio / heightRatio)),
+                height: longEdge,
+            };
+        }
+    }
+
     if (aspectRatio === 'auto') {
         return { width: 1024, height: 1024 };
     }

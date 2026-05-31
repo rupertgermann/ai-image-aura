@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { createImageWorkflow, type ImageProviderRegistry } from './ImageWorkflow';
+import { createGoogleImageProvider, extractGoogleImageData } from './ImageProvider';
 
 describe('ImageWorkflow', () => {
     it('routes generate requests through the configured provider for the selected model', async () => {
@@ -70,5 +71,102 @@ describe('ImageWorkflow', () => {
             prompt: 'make it cinematic',
             quality: 'medium',
         }));
+    });
+});
+
+describe('googleImageProvider', () => {
+    it('builds a Gemini image request with prompt, references, and image config', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'gemini-image' } }],
+                },
+            }],
+        })));
+        const provider = createGoogleImageProvider(fetchImpl);
+        const reference = new File(['reference'], 'reference.png', { type: 'image/png' });
+
+        const result = await provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+            },
+            prompt: 'a luminous teapot city',
+            aspectRatio: '16:9',
+            imageSize: '2K',
+            referenceImages: [reference],
+        });
+
+        expect(result).toEqual({ b64_json: 'gemini-image' });
+        expect(fetchImpl).toHaveBeenCalledWith('https://example.test/generate', expect.objectContaining({
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': 'google-key',
+            },
+        }));
+
+        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+        const body = JSON.parse(String(requestInit.body));
+        expect(body.contents[0].parts[0]).toEqual({ text: 'a luminous teapot city' });
+        expect(body.contents[0].parts[1].inline_data).toMatchObject({
+            mime_type: 'image/png',
+        });
+        expect(body.generationConfig.imageConfig).toEqual({
+            aspectRatio: '16:9',
+            imageSize: '2K',
+        });
+    });
+
+    it('omits imageConfig for preserve-source-dimensions edits', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'edited-image' } }],
+                },
+            }],
+        })));
+        const provider = createGoogleImageProvider(fetchImpl);
+
+        await provider.edit({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+            },
+            prompt: 'make it cinematic',
+            preserveSourceDimensions: true,
+            referenceImages: [new File(['source'], 'source.png', { type: 'image/png' })],
+        });
+
+        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+        const body = JSON.parse(String(requestInit.body));
+        expect(body.generationConfig.imageConfig).toBeUndefined();
+    });
+
+    it('extracts image bytes from Gemini response parts', () => {
+        expect(extractGoogleImageData({
+            candidates: [{
+                content: {
+                    parts: [{ text: 'ok' }, { inlineData: { data: 'abc123' } }],
+                },
+            }],
+        })).toBe('abc123');
+        expect(extractGoogleImageData({ candidates: [{ content: { parts: [{ text: 'blocked' }] } }] })).toBeNull();
     });
 });
