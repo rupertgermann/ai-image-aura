@@ -1,10 +1,17 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import type { Provider } from '../utils/openaiModels';
+import { PROVIDER_API_KEY_STORAGE_KEYS, createProviderKeyResolver } from './providerKeys';
 import type { AppView } from './types';
 
 export function useAppPreferences() {
     const [currentView, setCurrentView] = useLocalStorage<AppView>('aura_current_view', 'generate');
-    const [apiKey, setApiKey] = useLocalStorage<string>('aura_openapi_key', '');
+    const [apiKey, setApiKey] = useLocalStorage<string>(PROVIDER_API_KEY_STORAGE_KEYS.openai, '');
+    const [googleApiKey, setGoogleApiKey] = useLocalStorage<string>(PROVIDER_API_KEY_STORAGE_KEYS.google, '');
+    const providerKeyResolver = useMemo(() => createProviderKeyResolver({
+        openai: apiKey,
+        google: googleApiKey,
+    }), [apiKey, googleApiKey]);
 
     useEffect(() => {
         if (!apiKey) {
@@ -23,10 +30,23 @@ export function useAppPreferences() {
         setApiKey(key);
     }, [setApiKey]);
 
+    const updateGoogleApiKey = useCallback((key: string) => {
+        setGoogleApiKey(key);
+    }, [setGoogleApiKey]);
+
+    const getKey = useCallback((provider: Provider) => {
+        return providerKeyResolver.getKey(provider);
+    }, [providerKeyResolver]);
+
     return {
         currentView,
         apiKey,
+        openAiApiKey: apiKey,
+        googleApiKey,
         changeView,
+        getKey,
         updateApiKey,
+        updateOpenAiApiKey: updateApiKey,
+        updateGoogleApiKey,
     };
 }
