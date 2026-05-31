@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { useGenerateDraft } from '../generate-session/GenerateSession';
@@ -7,18 +7,24 @@ import { useReferenceImageCollection } from '../references/useReferenceImageColl
 import ReferenceImageModal from '../components/ReferenceImageModal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
-import { goalPromptTranslator } from '../autopilot/GoalPromptTranslator';
+import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
+import { createPromptRefiner } from '../autopilot/PromptRefiner';
+import { createSatisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
+import { resolveReasoningClient } from '../autopilot/ReasoningClient';
 import {
     IMAGE_MODEL_REGISTRY,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    OPENAI_RESPONSES_MODEL,
+    REASONING_MODEL_REGISTRY,
     resolveImageModelConfig,
+    resolveReasoningModelConfig,
     type ImageModelSlug,
     type Provider,
+    type ReasoningModelSlug,
 } from '../utils/openaiModels';
 
 interface GenerateViewProps {
-    apiKey: string | null;
     getProviderKey: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
 }
@@ -148,12 +154,13 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
     );
 };
 
-const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onSaveImage }) => {
+const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage }) => {
     const [draft, setDraft] = useGenerateDraft();
     const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
     const [maxIterations, setMaxIterations] = useLocalStorage('generate_autopilot_max_iterations', DEFAULT_AUTOPILOT_MAX_ITERATIONS);
     const [satisfactionThreshold, setSatisfactionThreshold] = useLocalStorage('generate_autopilot_threshold', DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD);
+    const [reasoningModel, setReasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);
@@ -162,6 +169,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
     const { prompt, model, style, lighting, palette, isSaved } = draft;
     const activeModel = resolveImageModelConfig(model);
     const activeImageApiKey = getProviderKey(activeModel.provider);
+    const activeReasoningModel = resolveReasoningModelConfig(reasoningModel);
+    const reasoningApiKey = getProviderKey(activeReasoningModel.provider);
+    const reasoningClient = useMemo(() => resolveReasoningClient(reasoningModel), [reasoningModel]);
+    const goalPromptTranslator = useMemo(() => createGoalPromptTranslator(reasoningClient), [reasoningClient]);
+    const satisfactionEvaluator = useMemo(() => createSatisfactionEvaluator(reasoningClient), [reasoningClient]);
+    const promptRefiner = useMemo(() => createPromptRefiner(reasoningClient), [reasoningClient]);
     const gptControls = draft.gptImage2;
     const nanoControls = draft.nanoBananaPro;
     const referenceCollection = useReferenceImageCollection();
@@ -186,12 +199,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
         clear,
     } = useGenerateController({
         apiKey: activeImageApiKey,
+        reasoningApiKey,
+        reasoningModel,
         draft,
         setDraft,
         referenceImages: activeReferenceImages,
         replaceReferences: referenceCollection.replaceWithDataUrls,
         serializeReferences: referenceCollection.serialize,
         onSaveImage,
+        evaluate: satisfactionEvaluator.evaluate,
+        refine: promptRefiner.refine,
     });
 
     const handleNextReference = () => {
@@ -229,14 +246,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
     };
 
     const handleTranslateGoal = async () => {
-        if (!apiKey || !goal.trim()) {
+        if (!reasoningApiKey || !goal.trim()) {
             return;
         }
 
         setTranslatingGoal(true);
         setAutopilotNotice(null);
         try {
-            const nextPrompt = await goalPromptTranslator.translate({ goal, apiKey });
+            const nextPrompt = await goalPromptTranslator.translate({ goal, apiKey: reasoningApiKey });
             updateDraft({ prompt: nextPrompt, isSaved: false });
         } catch (translationError) {
             setAutopilotNotice(translationError instanceof Error ? translationError.message : 'Failed to translate goal');
@@ -327,12 +344,33 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
                     {isAutopilotMode && (
                         <div className="autopilot-panel glass-panel">
                             <div className="input-section">
+                                <label>REASONING MODEL</label>
+                                <div className="toggle-group">
+                                    {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((modelSlug) => {
+                                        const config = resolveReasoningModelConfig(modelSlug);
+                                        const hasKey = !!getProviderKey(config.provider);
+                                        return (
+                                            <button
+                                                key={modelSlug}
+                                                className={reasoningModel === modelSlug ? 'active' : ''}
+                                                onClick={() => setReasoningModel(modelSlug)}
+                                                disabled={!hasKey}
+                                                title={hasKey ? config.label : `Add a ${config.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
+                                            >
+                                                {config.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="input-section">
                                 <div className="prompt-header">
                                     <label>GOAL</label>
                                     <button
                                         className="btn-ghost autopilot-inline-btn"
                                         onClick={() => { void handleTranslateGoal(); }}
-                                    disabled={!goal.trim() || !apiKey || translatingGoal || loading}
+                                        disabled={!goal.trim() || !reasoningApiKey || translatingGoal || loading}
                                     >
                                         {translatingGoal ? 'Translating...' : 'Translate to Prompt'}
                                     </button>
@@ -375,7 +413,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
 
                             <div className="autopilot-disclosure glass-panel">
                                 <strong>Cost disclosure</strong>
-                                <p>Up to {maxIterations} iterations and roughly {maxApiCalls} API calls per run.</p>
+                                <p>Up to {maxIterations} iterations and roughly {maxApiCalls} API calls using {activeModel.label} for images and {activeReasoningModel.label} for reasoning.</p>
                             </div>
 
                             {showCostDisclosure && (
@@ -591,7 +629,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
                         <button
                             className="btn-amber"
                             onClick={() => setShowCostDisclosure(true)}
-                            disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey}
+                            disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey || !reasoningApiKey}
                             style={{ width: '100%' }}
                         >
                             {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -631,6 +669,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ apiKey, getProviderKey, onS
 
                     {!activeImageApiKey && (
                         <div className="error-message">{activeModel.label} API key missing. Go to Settings to configure.</div>
+                    )}
+                    {isAutopilotMode && !reasoningApiKey && (
+                        <div className="error-message">{activeReasoningModel.label} API key missing. Go to Settings to configure.</div>
                     )}
                     {nanoReferenceWarning && <div className="info-message">{nanoReferenceWarning}</div>}
                     {error && <div className="error-message">{error}</div>}

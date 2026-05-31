@@ -1,4 +1,4 @@
-import { openAiResponsesClient, type OpenAiResponsesClient } from '../utils/openai';
+import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
 
 export const SATISFACTION_EVALUATOR_PROMPT_VERSION = 'satisfaction-evaluator.v1';
 
@@ -28,7 +28,7 @@ export interface SatisfactionEvaluator {
     evaluate(input: { imageDataUrl: string; goal: string; apiKey: string }): Promise<SatisfactionEvaluation>;
 }
 
-export function createSatisfactionEvaluator(client: OpenAiResponsesClient = openAiResponsesClient): SatisfactionEvaluator {
+export function createSatisfactionEvaluator(client: ReasoningClient = openAiReasoningClient): SatisfactionEvaluator {
     return {
         async evaluate(input) {
             const response = await client.createResponse({
@@ -36,6 +36,17 @@ export function createSatisfactionEvaluator(client: OpenAiResponsesClient = open
                 systemPrompt: SATISFACTION_EVALUATOR_SYSTEM_PROMPT,
                 userText: `Goal:\n${input.goal.trim()}\n\nEvaluate how well the image satisfies this goal.`,
                 imageDataUrl: input.imageDataUrl,
+                responseSchema: {
+                    type: 'object',
+                    properties: {
+                        score: { type: 'number' },
+                        feedback: {
+                            type: 'array',
+                            items: { type: 'string' },
+                        },
+                    },
+                    required: ['score', 'feedback'],
+                },
             });
 
             return parseEvaluation(response.outputText);
@@ -43,7 +54,7 @@ export function createSatisfactionEvaluator(client: OpenAiResponsesClient = open
     };
 }
 
-function parseEvaluation(outputText: string): SatisfactionEvaluation {
+export function parseEvaluation(outputText: string): SatisfactionEvaluation {
     try {
         const parsed = JSON.parse(outputText) as unknown;
         if (!parsed || typeof parsed !== 'object') {

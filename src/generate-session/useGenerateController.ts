@@ -7,6 +7,8 @@ import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { createAutopilotSession, type AutopilotSession } from '../autopilot/AutopilotSession';
+import { promptRefiner } from '../autopilot/PromptRefiner';
+import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -26,6 +28,8 @@ interface AutopilotProgressState {
 
 interface UseGenerateControllerOptions {
     apiKey: string | null;
+    reasoningApiKey?: string | null;
+    reasoningModel?: string;
     draft: GenerateDraft;
     setDraft: Dispatch<SetStateAction<GenerateDraft>>;
     referenceImages: File[];
@@ -36,10 +40,14 @@ interface UseGenerateControllerOptions {
     session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate'>;
     createAutopilot?: typeof createAutopilotSession;
+    evaluate?: typeof satisfactionEvaluator.evaluate;
+    refine?: typeof promptRefiner.refine;
 }
 
 export function useGenerateController({
     apiKey,
+    reasoningApiKey,
+    reasoningModel,
     draft,
     setDraft,
     referenceImages,
@@ -50,6 +58,8 @@ export function useGenerateController({
     session = generateSessionStore,
     workflow = imageWorkflow,
     createAutopilot = createAutopilotSession,
+    evaluate,
+    refine,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -83,7 +93,7 @@ export function useGenerateController({
 
     const generate = useCallback(async () => {
         if (!apiKey) {
-            setError('Please set your OpenAI API Key in Settings first.');
+            setError('Please set the selected image model API key in Settings first.');
             return;
         }
 
@@ -126,7 +136,12 @@ export function useGenerateController({
 
     const runAutopilot = useCallback(async (input: { goal: string; maxIterations?: number; satisfactionThreshold?: number }) => {
         if (!apiKey) {
-            setError('Please set your OpenAI API Key in Settings first.');
+            setError('Please set the selected image model API key in Settings first.');
+            return null;
+        }
+
+        if (!reasoningApiKey) {
+            setError('Please set the selected reasoning model API key in Settings first.');
             return null;
         }
 
@@ -148,12 +163,16 @@ export function useGenerateController({
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
                 apiKey,
+                reasoningApiKey,
+                reasoningModel,
                 draft,
                 referenceImages,
                 sessionStore: session,
                 lineageStore: lineage,
                 workflow,
                 createSession: createAutopilot,
+                evaluate,
+                refine,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
                 },
@@ -200,7 +219,7 @@ export function useGenerateController({
             autopilotSessionRef.current = null;
             setLoading(false);
         }
-    }, [apiKey, createAutopilot, draft, lineage, referenceImages, session, updateDraft, workflow]);
+    }, [apiKey, createAutopilot, draft, evaluate, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();

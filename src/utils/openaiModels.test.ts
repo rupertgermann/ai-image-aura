@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
     DEFAULT_IMAGE_MODEL,
+    GEMINI_FLASH_REASONING_MODEL,
     IMAGE_MODEL_REGISTRY,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    OPENAI_RESPONSES_MODEL,
+    REASONING_MODEL_REGISTRY,
     resolveImageModelConfig,
+    resolveReasoningModelConfig,
 } from './openaiModels';
 
 describe('openaiModels image registry', () => {
@@ -48,5 +52,18 @@ describe('openaiModels image registry', () => {
 
     it('rejects unknown image model slugs', () => {
         expect(() => resolveImageModelConfig('unknown-model')).toThrow('Unknown image model: unknown-model');
+    });
+
+    it('maps reasoning models to independent providers', () => {
+        expect(resolveReasoningModelConfig(OPENAI_RESPONSES_MODEL)).toEqual(REASONING_MODEL_REGISTRY[OPENAI_RESPONSES_MODEL]);
+        expect(REASONING_MODEL_REGISTRY[OPENAI_RESPONSES_MODEL]).toMatchObject({
+            provider: 'openai',
+            apiModel: OPENAI_RESPONSES_MODEL,
+        });
+        expect(REASONING_MODEL_REGISTRY[GEMINI_FLASH_REASONING_MODEL]).toMatchObject({
+            provider: 'google',
+            apiModel: GEMINI_FLASH_REASONING_MODEL,
+            endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+        });
     });
 });

@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import type { EditorAdjustments, EditorSaveContext } from './saveEditedImage';
+import type { ImageModelSlug } from '../utils/openaiModels';
 
 interface UseEditorControllerOptions {
     apiKey: string | null;
+    model: ImageModelSlug;
     isCanvasReady: boolean;
     currentImageUrl: string | null;
     setCurrentImageUrl: (url: string) => void;
@@ -18,6 +20,7 @@ interface UseEditorControllerOptions {
 
 export function useEditorController({
     apiKey,
+    model,
     isCanvasReady,
     currentImageUrl,
     setCurrentImageUrl,
@@ -34,6 +37,7 @@ export function useEditorController({
     const [aiError, setAiError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [lastAiEditPrompt, setLastAiEditPrompt] = useState<string | null>(null);
+    const [lastAiEditModel, setLastAiEditModel] = useState<ImageModelSlug | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
         if (!isCanvasReady) {
@@ -48,11 +52,12 @@ export function useEditorController({
                 references,
                 adjustments,
                 aiEditPrompt: lastAiEditPrompt,
+                aiEditModel: lastAiEditModel,
             }));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [adjustments, exportDataUrl, isCanvasReady, lastAiEditPrompt, onSave, serializeReferences]);
+    }, [adjustments, exportDataUrl, isCanvasReady, lastAiEditModel, lastAiEditPrompt, onSave, serializeReferences]);
 
     const applyAiEdit = useCallback(async () => {
         if (!apiKey || !aiPrompt.trim() || !currentImageUrl || !isCanvasReady) {
@@ -66,6 +71,7 @@ export function useEditorController({
             const blob = await exportBlob();
             const newUrl = await imageWorkflow.edit({
                 apiKey,
+                model,
                 prompt: aiPrompt,
                 sourceImage: blob,
                 referenceImages,
@@ -74,13 +80,14 @@ export function useEditorController({
 
             setCurrentImageUrl(newUrl);
             setLastAiEditPrompt(aiPrompt.trim());
+            setLastAiEditModel(model);
             setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {
             setAiLoading(false);
         }
-    }, [aiPrompt, apiKey, currentImageUrl, exportBlob, isCanvasReady, referenceImages, setCurrentImageUrl]);
+    }, [aiPrompt, apiKey, currentImageUrl, exportBlob, isCanvasReady, model, referenceImages, setCurrentImageUrl]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSatisfactionEvaluator } from './SatisfactionEvaluator';
+import { createSatisfactionEvaluator, parseEvaluation } from './SatisfactionEvaluator';
 
 describe('SatisfactionEvaluator', () => {
     it('returns score and feedback from a valid GPT response', async () => {
@@ -49,5 +49,15 @@ describe('SatisfactionEvaluator', () => {
             goal: 'A brutalist lobby with soft daylight',
             imageDataUrl: 'data:image/png;base64,abc',
         })).rejects.toThrow('rate limited');
+    });
+
+    it('parses and clamps valid JSON evaluations', () => {
+        expect(parseEvaluation(JSON.stringify({
+            score: 104.4,
+            feedback: [' crisp ', ''],
+        }))).toEqual({
+            score: 100,
+            feedback: ['crisp'],
+        });
     });
 });

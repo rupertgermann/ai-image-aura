@@ -36,6 +36,8 @@ describe('runGenerateAutopilot', () => {
         const outcome = await runGenerateAutopilot({
             goal: 'A cinematic portrait',
             apiKey: 'key',
+            reasoningApiKey: 'reasoning-key',
+            reasoningModel: 'gemini-2.5-flash',
             draft: {
                 model: 'gpt-image-2',
                 prompt: 'prompt 1',
@@ -69,6 +71,8 @@ describe('runGenerateAutopilot', () => {
         expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
+            reasoningApiKey: 'reasoning-key',
+            reasoningModel: 'gemini-2.5-flash',
             initialParentStepId: 'step-parent',
         }));
         expect(run).toHaveBeenCalledOnce();

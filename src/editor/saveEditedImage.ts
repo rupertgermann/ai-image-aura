@@ -13,6 +13,7 @@ export interface EditorSaveContext {
     references?: string[];
     adjustments: EditorAdjustments;
     aiEditPrompt?: string | null;
+    aiEditModel?: string | null;
 }
 
 export interface SaveEditedImageDeps {
@@ -58,6 +59,7 @@ function buildSavedImage(
             url: updatedUrl,
             timestamp,
             references: context.references ?? sourceImage.references,
+            model: context.aiEditModel ?? sourceImage.model,
         };
     }
 
@@ -65,6 +67,7 @@ function buildSavedImage(
         ...sourceImage,
         url: updatedUrl,
         references: context.references ?? sourceImage.references,
+        model: context.aiEditModel ?? sourceImage.model,
     };
 }
 
@@ -90,6 +93,7 @@ function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, cont
         outputArchiveImageId: savedImage.id,
         overwrite: !context.isCopy,
         editPrompt: context.aiEditPrompt?.trim() || null,
+        model: context.aiEditModel ?? sourceImage.model ?? null,
         referenceCount: savedImage.references?.length ?? 0,
         editorAdjustments: {
             brightness: context.adjustments.brightness,

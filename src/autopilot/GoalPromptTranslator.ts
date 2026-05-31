@@ -1,4 +1,4 @@
-import { openAiResponsesClient, type OpenAiResponsesClient } from '../utils/openai';
+import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
 
 export const GOAL_PROMPT_TRANSLATOR_PROMPT_VERSION = 'goal-prompt-translator.v1';
 
@@ -13,7 +13,7 @@ export interface GoalPromptTranslator {
     translate(input: { goal: string; apiKey: string }): Promise<string>;
 }
 
-export function createGoalPromptTranslator(client: OpenAiResponsesClient = openAiResponsesClient): GoalPromptTranslator {
+export function createGoalPromptTranslator(client: ReasoningClient = openAiReasoningClient): GoalPromptTranslator {
     return {
         async translate(input) {
             const response = await client.createResponse({

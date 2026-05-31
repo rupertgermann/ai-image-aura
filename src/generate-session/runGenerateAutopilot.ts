@@ -9,6 +9,8 @@ import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 interface RunGenerateAutopilotInput {
     goal: string;
     apiKey: string;
+    reasoningApiKey?: string;
+    reasoningModel?: string;
     draft: GenerateDraft;
     referenceImages: File[];
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'saveCurrentResult' | 'saveLineageSource'>;
@@ -47,6 +49,8 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
             referenceImages: input.referenceImages,
         },
         apiKey: input.apiKey,
+        reasoningApiKey: input.reasoningApiKey,
+        reasoningModel: input.reasoningModel,
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
         maxIterations: input.maxIterations,
         satisfactionThreshold: input.satisfactionThreshold,

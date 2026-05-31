@@ -1,4 +1,4 @@
-import { openAiResponsesClient, type OpenAiResponsesClient } from '../utils/openai';
+import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
 
 export const PROMPT_REFINER_PROMPT_VERSION = 'prompt-refiner.v1';
 
@@ -13,7 +13,7 @@ export interface PromptRefiner {
     refine(input: { goal: string; currentPrompt: string; feedback: string[]; apiKey: string }): Promise<string>;
 }
 
-export function createPromptRefiner(client: OpenAiResponsesClient = openAiResponsesClient): PromptRefiner {
+export function createPromptRefiner(client: ReasoningClient = openAiReasoningClient): PromptRefiner {
     return {
         async refine(input) {
             const response = await client.createResponse({

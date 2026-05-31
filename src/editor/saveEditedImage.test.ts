@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -159,6 +159,30 @@ describe('saveEditedImage', () => {
             }),
         }));
     });
+
+    it('records the model used for an AI edit on the saved image and lineage step', async () => {
+        const lineage = createStore();
+        await seedSourceLineage(lineage);
+
+        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,nano-edit', {
+            ...createSaveContext(),
+            isCopy: true,
+            aiEditPrompt: 'preserve the source composition but make it cinematic',
+            aiEditModel: NANO_BANANA_PRO_IMAGE_MODEL,
+        }, {
+            saveImage: vi.fn(async (image) => image),
+            lineageStore: lineage,
+            clock: () => '2026-04-04T15:00:00.000Z',
+            makeId: () => 'nano-edit-copy',
+        });
+
+        expect(savedImage.model).toBe(NANO_BANANA_PRO_IMAGE_MODEL);
+        const steps = await lineage.getByArchiveImageId('nano-edit-copy');
+        expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+        }));
+    });
+
 
     it('uses an explicit parent step id when forking from an older lineage step', async () => {
         const lineage = createStore();
