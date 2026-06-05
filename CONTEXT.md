@@ -42,3 +42,93 @@ Current values: `gpt-5.4` (OpenAI), a Gemini text model (Google).
 An optional input image supplied alongside the prompt to guide generation or
 editing. Distinct from the **source image** in the Editor (the canvas being
 transformed), which is always the first image sent on an edit.
+
+## Image layer
+
+A user-controlled image element that participates in the Editor composition as
+part of the visible artwork and has stable identity within a layer stack.
+Distinct from a **reference image**, which guides generation or editing without
+becoming part of the visible composition, and from a **lineage step**, which
+records creative history.
+
+## Raster image layer
+
+An image layer whose content is bitmap artwork. This is the only kind of image
+layer in the first layered Editor experience.
+
+## AI result layer
+
+A raster image layer created from the result of an AI transform in the Editor.
+It is added to the layer stack without destroying the AI transform target.
+Distinct from an **AI edit** lineage step, which records creative history.
+
+## AI transform target
+
+The layer selection sent to an AI transform as the image content to change.
+Distinct from **reference images** and composition context, which guide the AI
+transform without defining the target layer content.
+
+## Uploaded layer
+
+A raster image layer created from an image file the user adds to the visible
+Editor composition. Distinct from a **reference image**, which guides generation
+or editing without becoming part of the visible artwork.
+
+## Layer selection
+
+The image layer or layers currently targeted by Editor layer operations. A layer
+selection may include multiple layers for shared actions, while direct transform
+handles target one primary non-base layer.
+
+## Layer transform
+
+The position, scale, and rotation of a non-base image layer within the Editor
+composition. Distinct from a **composition adjustment**, which changes the
+combined visual output.
+
+## Base layer
+
+The raster image layer created from the archive image opened in the Editor. It
+anchors the layer stack, defines the composition bounds, and remains part of
+every Editor composition.
+
+## Layer stack
+
+The ordered set of image layers that make up an editable Editor composition.
+Distinct from the flattened image saved for browsing, sharing, and lineage
+preview.
+
+## Editor composition
+
+The visible artwork produced by combining the layer stack and composition
+adjustments. Its real pixel bounds are defined by the base layer, even when the
+Editor displays it at a scaled screen size.
+
+## Layered image
+
+An archive image that has an editable layer stack in addition to its flattened
+image. Its layer stack and composition adjustments are durable archive data, so
+it can be reopened as editable artwork rather than only as a single flat source
+image.
+
+## Editor draft
+
+Unsaved Editor work for an archive image. An Editor draft may include a layer
+stack, but it is distinct from a **layered image** until the user saves it.
+
+## Dirty draft
+
+An Editor draft whose layer stack or composition adjustments differ from the
+last saved state of the archive image.
+
+## Edit history
+
+The undoable and redoable sequence of changes inside an active Editor draft.
+Distinct from an **Editor draft**, which may persist across reloads, and from
+**lineage**, which records saved creative history across archive images.
+
+## Composition adjustment
+
+A visual adjustment applied to the Editor composition as a whole after the layer
+stack is combined. It remains editable on a layered image and is distinct from
+image-layer properties such as visibility, opacity, order, and transform.

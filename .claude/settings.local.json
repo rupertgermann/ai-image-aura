@@ -14,7 +14,20 @@
       "Bash(gh auth *)",
       "Bash(gh label *)",
       "Bash(cat)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx vitest *)",
+      "Bash(git checkout *)",
+      "Bash(gh pr create --base main --head extract-lineage-navigator --title 'refactor: extract Lineage Navigator from app controller' --body ' *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('scripts:'\\); [print\\(' ',k,'=',v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]; print\\('deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\); print\\('devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(gh pr *)",
+      "Bash(cd *)",
+      "Bash(ls /Users/rupertgermann/AI/ai-image-aura)",
+      "Read(//tmp/**)",
+      "Bash(/bin/ls -1 src)",
+      "Bash(/bin/ls -1 docs/adr)",
+      "Bash(/bin/ls CONTEXT.md)",
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(sort -t'#' -k2 -n)"
     ]
   }
 }
