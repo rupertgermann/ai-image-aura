@@ -6,12 +6,14 @@ import { fileToDataURL } from '../utils/file';
 import {
     addUploadedLayer,
     createEditorDraft,
+    addDraftReferences,
     deleteLayers,
     duplicateLayers,
     hasDurableLayerStack,
     moveLayer,
     pushHistory,
     redoHistory,
+    removeDraftReferenceAt,
     undoHistory,
     updateLayer,
     type EditorDraft,
@@ -35,6 +37,7 @@ export function useEditorSession(image: ArchiveImage | null) {
     } : null);
     const draft = history?.present ?? savedDraft;
     const referenceCollection = useReferenceImageCollection({ initialDataUrls: draft?.references ?? image?.references });
+    const replaceReferenceDataUrls = referenceCollection.replaceWithDataUrls;
     const makeId = useCallback(() => crypto.randomUUID(), []);
     const isDirty = useMemo(() => {
         return !!draft && !!savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft);
@@ -77,7 +80,7 @@ export function useEditorSession(image: ArchiveImage | null) {
     };
 
     const serializeReferences = () => {
-        return referenceCollection.serialize();
+        return Promise.resolve(draft?.references ?? []);
     };
 
     const addLayerFiles = useCallback(async (files: File[]) => {
@@ -156,9 +159,13 @@ export function useEditorSession(image: ArchiveImage | null) {
             return;
         }
 
+        if (isDirty && !window.confirm('Discard the current editor draft and restore the last saved archive state?')) {
+            return;
+        }
+
         setHistory({ past: [], present: savedDraft, future: [] });
         setPersistedDraft(savedDraft);
-    }, [savedDraft, setPersistedDraft]);
+    }, [isDirty, savedDraft, setPersistedDraft]);
 
     useEffect(() => {
         if (!isDirty) {
@@ -174,9 +181,38 @@ export function useEditorSession(image: ArchiveImage | null) {
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }, [isDirty]);
 
-    const addReferenceFiles = useCallback((files: File[]) => {
-        referenceCollection.addFiles(files);
-    }, [referenceCollection]);
+    useEffect(() => {
+        replaceReferenceDataUrls(draft?.references ?? []);
+    }, [draft?.references, replaceReferenceDataUrls]);
+
+    const addReferenceFiles = useCallback(async (files: File[]) => {
+        if (!draft || files.length === 0) {
+            return;
+        }
+
+        const dataUrls = await Promise.all(files.map((file) => fileToDataURL(file)));
+        commitDraft(addDraftReferences(draft, dataUrls));
+    }, [commitDraft, draft]);
+
+    const removeReferenceAt = useCallback((index: number) => {
+        if (!draft) {
+            return;
+        }
+
+        commitDraft(removeDraftReferenceAt(draft, index));
+    }, [commitDraft, draft]);
+
+    const clearSelection = useCallback(() => {
+        if (!draft) {
+            return;
+        }
+
+        commitDraft({
+            ...draft,
+            selectedLayerIds: [],
+            primarySelectedLayerId: null,
+        }, false);
+    }, [commitDraft, draft]);
 
     return {
         draft,
@@ -202,9 +238,10 @@ export function useEditorSession(image: ArchiveImage | null) {
         referenceImages: referenceCollection.files,
         referencePreviews: referenceCollection.previews,
         addReferenceFiles,
-        removeReferenceAt: referenceCollection.removeAt,
+        removeReferenceAt,
         addLayerFiles,
         selectLayer,
+        clearSelection,
         renameLayer: (layerId: string, name: string) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { name })),
         setLayerVisible: (layerId: string, visible: boolean) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { visible })),
         setLayerOpacity: (layerId: string, opacity: number) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { opacity })),

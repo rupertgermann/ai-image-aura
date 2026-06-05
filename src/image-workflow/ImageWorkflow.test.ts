@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
-import { createImageWorkflow, type ImageProviderRegistry } from './ImageWorkflow';
+import { createImageWorkflow, type ImageProvider, type ImageProviderRegistry } from './ImageWorkflow';
 import { createGoogleImageProvider, extractGoogleImageData } from './ImageProvider';
 
 describe('ImageWorkflow', () => {
@@ -71,6 +71,37 @@ describe('ImageWorkflow', () => {
             prompt: 'make it cinematic',
             quality: 'medium',
         }));
+    });
+
+    it('sends the editable source before composition context and user references', async () => {
+        let seenReferenceImages: File[] = [];
+        const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
+            seenReferenceImages = input.referenceImages ?? [];
+            return { b64_json: 'edited' };
+        });
+        const providers: ImageProviderRegistry = {
+            openai: {
+                generate: vi.fn(),
+                edit,
+            },
+        };
+        const workflow = createImageWorkflow(providers);
+        const sourceImage = new Blob(['selected-layer'], { type: 'image/png' });
+        const compositionContext = new File(['composition'], 'composition-context.png', { type: 'image/png' });
+        const userReference = new File(['reference'], 'user-reference.png', { type: 'image/png' });
+
+        await workflow.edit({
+            apiKey: 'sk-test',
+            prompt: 'replace the sky',
+            sourceImage,
+            referenceImages: [compositionContext, userReference],
+        });
+
+        expect(seenReferenceImages.map((file) => file.name)).toEqual([
+            'edit-input.png',
+            'composition-context.png',
+            'user-reference.png',
+        ]);
     });
 });
 

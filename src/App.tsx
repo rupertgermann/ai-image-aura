@@ -31,7 +31,7 @@ function App() {
             case 'archive':
                 return <ArchiveView {...archiveViewProps} />;
             case 'editor':
-                return <EditorView {...editorViewProps} />;
+                return <EditorView key={editorViewProps.image?.id ?? 'empty-editor'} {...editorViewProps} />;
             case 'settings':
                 return <SettingsView {...settingsViewProps} />;
             default:

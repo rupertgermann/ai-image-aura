@@ -165,9 +165,7 @@ export function useAppController() {
             onBulkDownloadError: (error: Error) => notifyError(error, 'Failed to export archive ZIP'),
         },
         editorViewProps: {
-            key: editingImage?.id ?? 'empty-editor',
             image: editingImage,
-            apiKey,
             getProviderKey: getKey,
             onSave: handleSaveEditedImage,
         },

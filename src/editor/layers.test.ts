@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import {
     addUploadedLayer,
+    addDraftReferences,
     createBaseLayerStack,
     deleteLayers,
     duplicateLayers,
@@ -10,6 +11,7 @@ import {
     moveLayer,
     pushHistory,
     redoHistory,
+    removeDraftReferenceAt,
     undoHistory,
     updateLayer,
 } from './layers';
@@ -99,6 +101,25 @@ describe('layer editor helpers', () => {
         expect(second.past).toHaveLength(1);
         expect(undoHistory(second).present.primarySelectedLayerId).toBe('layer-1');
         expect(redoHistory(undoHistory(second)).present.primarySelectedLayerId).toBe('layer-2');
+    });
+
+    it('tracks reference add and remove operations through snapshot history', () => {
+        const draft = {
+            layerStack: createStack(),
+            adjustments: { brightness: 100, contrast: 100, saturation: 100, filter: 'none' },
+            references: ['data:image/png;base64,ref1'],
+            selectedLayerIds: ['base'],
+            primarySelectedLayerId: 'base',
+        };
+        const added = pushHistory({ past: [], present: draft, future: [] }, addDraftReferences(draft, ['data:image/png;base64,ref2']));
+        const removed = pushHistory(added, removeDraftReferenceAt(added.present, 0));
+
+        expect(removed.present.references).toEqual(['data:image/png;base64,ref2']);
+        expect(undoHistory(removed).present.references).toEqual([
+            'data:image/png;base64,ref1',
+            'data:image/png;base64,ref2',
+        ]);
+        expect(redoHistory(undoHistory(removed)).present.references).toEqual(['data:image/png;base64,ref2']);
     });
 
     it('computes selected visible layer bounds', () => {

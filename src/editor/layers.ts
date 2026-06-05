@@ -125,6 +125,20 @@ export function addUploadedLayer(
     };
 }
 
+export function addDraftReferences(draft: EditorDraft, references: string[]): EditorDraft {
+    return {
+        ...draft,
+        references: [...draft.references, ...references],
+    };
+}
+
+export function removeDraftReferenceAt(draft: EditorDraft, index: number): EditorDraft {
+    return {
+        ...draft,
+        references: draft.references.filter((_, currentIndex) => currentIndex !== index),
+    };
+}
+
 export function insertAiResultLayer(
     layerStack: ArchiveLayerStack,
     targetLayerIds: string[],

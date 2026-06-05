@@ -3,6 +3,7 @@ import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2
 import type { ArchiveImage } from '../db/types';
 import { EditorCanvas, type EditorCanvasHandle } from '../editor/EditorCanvas';
 import { LayerPanel } from '../editor/LayerPanel';
+import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
@@ -40,6 +41,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         removeReferenceAt,
         addLayerFiles,
         selectLayer,
+        clearSelection,
         renameLayer,
         setLayerVisible,
         setLayerOpacity,
@@ -99,50 +101,36 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
             return !!element?.closest('input, textarea, select, [contenteditable="true"]');
         };
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (isTextInput(event.target)) {
+            const shortcut = resolveEditorShortcut({
+                key: event.key,
+                metaKey: event.metaKey,
+                ctrlKey: event.ctrlKey,
+                shiftKey: event.shiftKey,
+                isTextInput: isTextInput(event.target),
+            });
+            if (!shortcut) {
                 return;
             }
 
-            const modifier = event.metaKey || event.ctrlKey;
-            if (modifier && event.key.toLowerCase() === 's') {
-                event.preventDefault();
+            event.preventDefault();
+            if (shortcut === 'save') {
                 void save(false);
-                return;
-            }
-            if (modifier && event.key.toLowerCase() === 'z' && event.shiftKey) {
-                event.preventDefault();
-                redo();
-                return;
-            }
-            if (modifier && event.key.toLowerCase() === 'z') {
-                event.preventDefault();
+            } else if (shortcut === 'undo') {
                 undo();
-                return;
-            }
-            if (modifier && event.key.toLowerCase() === 'y') {
-                event.preventDefault();
+            } else if (shortcut === 'redo') {
                 redo();
-                return;
-            }
-            if (modifier && event.key.toLowerCase() === 'd') {
-                event.preventDefault();
+            } else if (shortcut === 'duplicate') {
                 duplicateSelectedLayers();
-                return;
-            }
-            if (event.key === 'Delete' || event.key === 'Backspace') {
-                event.preventDefault();
+            } else if (shortcut === 'delete') {
                 deleteSelectedLayers();
-                return;
-            }
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                selectLayer('base');
+            } else if (shortcut === 'clear-selection') {
+                clearSelection();
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [deleteSelectedLayers, duplicateSelectedLayers, redo, save, selectLayer, undo]);
+    }, [clearSelection, deleteSelectedLayers, duplicateSelectedLayers, redo, save, undo]);
 
     if (!image) {
         return (
