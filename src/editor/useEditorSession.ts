@@ -9,6 +9,7 @@ import {
     addDraftReferences,
     deleteLayers,
     duplicateLayers,
+    getEditableLayerIds,
     hasDurableLayerStack,
     moveLayer,
     pushHistory,
@@ -91,7 +92,8 @@ export function useEditorSession(image: ArchiveImage | null) {
         let nextDraft = draft;
         for (const file of files) {
             const dataUrl = await fileToDataURL(file);
-            const result = addUploadedLayer(nextDraft.layerStack, dataUrl, makeId, file.name || 'Uploaded layer');
+            const imageSize = await readImageSize(dataUrl);
+            const result = addUploadedLayer(nextDraft.layerStack, dataUrl, makeId, file.name || 'Uploaded layer', imageSize);
             nextDraft = {
                 ...nextDraft,
                 layerStack: result.layerStack,
@@ -108,13 +110,22 @@ export function useEditorSession(image: ArchiveImage | null) {
             return;
         }
 
+        const alreadySelected = draft.selectedLayerIds.includes(layerId);
         const selectedLayerIds = additive
-            ? Array.from(new Set([...draft.selectedLayerIds, layerId]))
+            ? alreadySelected
+                ? draft.selectedLayerIds.filter((id) => id !== layerId)
+                : [...draft.selectedLayerIds, layerId]
             : [layerId];
+        const primarySelectedLayerId = alreadySelected && additive
+            ? selectedLayerIds.includes(draft.primarySelectedLayerId ?? '')
+                ? draft.primarySelectedLayerId
+                : selectedLayerIds.at(-1) ?? null
+            : layerId;
+
         commitDraft({
             ...draft,
             selectedLayerIds,
-            primarySelectedLayerId: layerId,
+            primarySelectedLayerId,
         }, false);
     }, [commitDraft, draft]);
 
@@ -124,11 +135,17 @@ export function useEditorSession(image: ArchiveImage | null) {
         }
 
         const selectedLayerIds = nextSelection ?? draft.selectedLayerIds.filter((id) => nextLayerStack.layers.some((layer) => layer.id === id));
+        const primarySelectedLayerId = nextSelection
+            ? selectedLayerIds[0] ?? null
+            : selectedLayerIds.includes(draft.primarySelectedLayerId ?? '')
+                ? draft.primarySelectedLayerId
+                : selectedLayerIds[0] ?? null;
+
         commitDraft({
             ...draft,
             layerStack: nextLayerStack,
             selectedLayerIds,
-            primarySelectedLayerId: selectedLayerIds[0] ?? 'base',
+            primarySelectedLayerId,
         });
     }, [commitDraft, draft]);
 
@@ -248,13 +265,22 @@ export function useEditorSession(image: ArchiveImage | null) {
         updateLayerTransform: (layerId: string, patch: { x?: number; y?: number; width?: number; height?: number; rotation?: number }) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, patch)),
         duplicateSelectedLayers: () => {
             if (!draft) return;
-            const result = duplicateLayers(draft.layerStack, draft.selectedLayerIds, makeId);
+            const editableLayerIds = getEditableLayerIds(draft.layerStack, draft.selectedLayerIds);
+            if (!editableLayerIds.length) return;
+            const result = duplicateLayers(draft.layerStack, editableLayerIds, makeId);
             mutateLayerStack(result.layerStack, result.duplicatedIds);
         },
-        deleteSelectedLayers: () => draft && mutateLayerStack(deleteLayers(draft.layerStack, draft.selectedLayerIds)),
+        deleteSelectedLayers: () => {
+            if (!draft) return;
+            const editableLayerIds = getEditableLayerIds(draft.layerStack, draft.selectedLayerIds);
+            if (!editableLayerIds.length) return;
+            mutateLayerStack(deleteLayers(draft.layerStack, editableLayerIds));
+        },
         moveSelectedLayer: (direction: -1 | 1) => {
             if (!draft?.primarySelectedLayerId) return;
-            mutateLayerStack(moveLayer(draft.layerStack, draft.primarySelectedLayerId, direction));
+            const nextLayerStack = moveLayer(draft.layerStack, draft.primarySelectedLayerId, direction);
+            if (nextLayerStack === draft.layerStack) return;
+            mutateLayerStack(nextLayerStack);
         },
         commitDraft,
         undo,
@@ -266,4 +292,16 @@ export function useEditorSession(image: ArchiveImage | null) {
         resetAdjustments,
         serializeReferences,
     };
+}
+
+function readImageSize(source: string): Promise<{ width: number; height: number } | undefined> {
+    return new Promise((resolve) => {
+        const image = new Image();
+        image.onload = () => resolve({
+            width: image.naturalWidth || image.width,
+            height: image.naturalHeight || image.height,
+        });
+        image.onerror = () => resolve(undefined);
+        image.src = source;
+    });
 }

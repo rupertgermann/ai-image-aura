@@ -6,6 +6,7 @@ import {
     createBaseLayerStack,
     deleteLayers,
     duplicateLayers,
+    getEditableLayerIds,
     getCombinedLayerBounds,
     insertAiResultLayer,
     moveLayer,
@@ -54,6 +55,36 @@ describe('layer editor helpers', () => {
         }));
     });
 
+    it('fits uploaded layers to the canvas without distorting their source aspect ratio', () => {
+        const landscape = addUploadedLayer(
+            createStack(),
+            'data:image/png;base64,landscape',
+            () => 'landscape-layer',
+            'landscape.png',
+            { width: 1600, height: 800 },
+        ).layerStack.layers.at(-1);
+        const portrait = addUploadedLayer(
+            createStack(),
+            'data:image/png;base64,portrait',
+            () => 'portrait-layer',
+            'portrait.png',
+            { width: 800, height: 1600 },
+        ).layerStack.layers.at(-1);
+
+        expect(landscape).toEqual(expect.objectContaining({
+            width: 614.4,
+            height: 307.2,
+            x: 204.8,
+            y: 358.4,
+        }));
+        expect(portrait).toEqual(expect.objectContaining({
+            width: 307.2,
+            height: 614.4,
+            x: 358.4,
+            y: 204.8,
+        }));
+    });
+
     it('applies stack operations while preserving base-layer guardrails', () => {
         const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
         const renamed = updateLayer(stack, 'layer-1', { name: 'Glow', opacity: 0.4, visible: false });
@@ -65,6 +96,22 @@ describe('layer editor helpers', () => {
         expect(duplicated.duplicatedIds).toEqual(['layer-2']);
         expect(moved.layers.map((layer) => layer.id)).toEqual(['base', 'layer-2', 'layer-1']);
         expect(deleted.layers.map((layer) => layer.id)).toEqual(['base', 'layer-2']);
+    });
+
+    it('filters shared layer actions to editable non-base layers', () => {
+        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+        const lockedStack = updateLayer(stack, 'layer-1', { locked: true });
+
+        expect(getEditableLayerIds(stack, ['base', 'layer-1', 'missing'])).toEqual(['layer-1']);
+        expect(getEditableLayerIds(lockedStack, ['base', 'layer-1'])).toEqual([]);
+    });
+
+    it('does not create a new stack for invalid layer reorders', () => {
+        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+
+        expect(moveLayer(stack, 'base', 1)).toBe(stack);
+        expect(moveLayer(stack, 'layer-1', 1)).toBe(stack);
+        expect(moveLayer(stack, 'layer-1', -1)).toBe(stack);
     });
 
     it('inserts AI results above targets and hides non-base targets', () => {

@@ -98,8 +98,9 @@ export function addUploadedLayer(
     assetUrl: string,
     makeId: () => string,
     name = 'Uploaded layer',
+    sourceSize?: { width: number; height: number },
 ): { layerStack: ArchiveLayerStack; layerId: string } {
-    const { width, height } = fitLayerToCanvas(layerStack.canvasWidth, layerStack.canvasHeight);
+    const { width, height } = fitLayerToCanvas(layerStack.canvasWidth, layerStack.canvasHeight, sourceSize);
     const layerId = makeId();
     const layer: ArchiveLayer = {
         id: layerId,
@@ -204,6 +205,13 @@ export function moveLayer(layerStack: ArchiveLayerStack, layerId: string, direct
     const [removed] = layers.splice(index, 1);
     layers.splice(nextIndex, 0, removed);
     return { ...layerStack, layers };
+}
+
+export function getEditableLayerIds(layerStack: ArchiveLayerStack, layerIds: string[]): string[] {
+    const selected = new Set(layerIds);
+    return layerStack.layers
+        .filter((layer) => selected.has(layer.id) && layer.kind !== 'base' && !layer.locked)
+        .map((layer) => layer.id);
 }
 
 export function updateLayer(layerStack: ArchiveLayerStack, layerId: string, patch: Partial<ArchiveLayer>): ArchiveLayerStack {
@@ -340,11 +348,17 @@ export function redoHistory(history: LayerHistoryState): LayerHistoryState {
     };
 }
 
-function fitLayerToCanvas(canvasWidth: number, canvasHeight: number) {
+function fitLayerToCanvas(canvasWidth: number, canvasHeight: number, sourceSize?: { width: number; height: number }) {
     const maxWidth = canvasWidth * 0.6;
     const maxHeight = canvasHeight * 0.6;
-    const size = Math.max(1, Math.min(maxWidth, maxHeight));
-    return { width: size, height: size };
+    const sourceWidth = Math.max(1, sourceSize?.width ?? 1);
+    const sourceHeight = Math.max(1, sourceSize?.height ?? 1);
+    const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+
+    return {
+        width: sourceWidth * scale,
+        height: sourceHeight * scale,
+    };
 }
 
 function clampOpacity(opacity: number) {

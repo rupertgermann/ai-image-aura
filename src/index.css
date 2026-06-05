@@ -1052,16 +1052,29 @@ textarea.aura-input {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.layer-selection-summary {
+    color: var(--color-steel);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+}
+
 .layer-row {
     display: grid;
     grid-template-columns: 32px minmax(0, 1fr);
     gap: var(--element-gap);
     padding: var(--spacing-8);
     border: 1px solid color-mix(in srgb, var(--color-steel) 40%, transparent);
+    background: color-mix(in srgb, var(--color-snow) 70%, transparent);
+    transition: var(--transition-smooth);
 }
 
 .layer-row.selected {
     border-color: var(--color-amber-glow);
+    background: color-mix(in srgb, var(--color-amber-glow) 10%, var(--color-snow));
+}
+
+.layer-row.hidden {
+    opacity: 0.64;
 }
 
 .layer-name {
@@ -1074,9 +1087,18 @@ textarea.aura-input {
 }
 
 .layer-name span {
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.layer-name small {
+    flex: 0 0 auto;
+    color: var(--color-steel);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: 0.65rem;
+    text-transform: uppercase;
 }
 
 .layer-row input[type="text"],
@@ -1084,8 +1106,19 @@ textarea.aura-input {
     grid-column: 1 / -1;
 }
 
-.layer-row input[type="range"] {
+.layer-opacity-control {
     grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 42px;
+    align-items: center;
+    gap: var(--element-gap);
+}
+
+.layer-opacity-control span {
+    color: var(--color-steel);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    text-align: right;
 }
 
 .slider-group {
