@@ -9,6 +9,8 @@ import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, 
 export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
 
 const VALID_GENERATION_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
+const VALID_NANO_ASPECT_RATIOS = new Set<NanoBananaAspectRatio>(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']);
+export const NANO_REFERENCE_LIMIT = 14;
 
 export interface GenerateImageInput {
     apiKey: string;
@@ -54,9 +56,9 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
                 quality: input.quality,
                 size: sanitizeGenerationSize(input.aspectRatio),
                 background: input.background,
-                aspectRatio: normalizeNanoAspectRatio(input.aspectRatio),
+                aspectRatio: model.slug === NANO_BANANA_PRO_IMAGE_MODEL ? normalizeNanoAspectRatio(input.aspectRatio) : undefined,
                 imageSize: input.imageSize,
-                referenceImages: input.referenceImages,
+                referenceImages: trimNanoReferences(model.slug, input.referenceImages),
             }));
         },
 
@@ -85,6 +87,28 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
     };
 }
 
+const trimNanoReferences = (modelSlug: ImageModelSlug, referenceImages: File[]) => {
+    return modelSlug === NANO_BANANA_PRO_IMAGE_MODEL
+        ? referenceImages.slice(0, NANO_REFERENCE_LIMIT)
+        : referenceImages;
+};
+
+function isNanoAspectRatio(value: string): value is NanoBananaAspectRatio {
+    return VALID_NANO_ASPECT_RATIOS.has(value as NanoBananaAspectRatio);
+}
+
+const normalizeNanoAspectRatio = (size: string): NanoBananaAspectRatio => {
+    const normalizedSize = size.trim();
+    const mapped = (
+        normalizedSize === '1536x1024' ? '3:2' :
+            normalizedSize === '1024x1536' ? '2:3' :
+                normalizedSize === 'auto' || normalizedSize === '1024x1024' ? '1:1' :
+                    normalizedSize
+    );
+
+    return isNanoAspectRatio(mapped) ? mapped : '1:1';
+};
+
 export const imageWorkflow = createImageWorkflow();
 
 const buildGenerationPrompt = (input: GenerateImageInput) => {
@@ -100,14 +124,8 @@ const buildGenerationPrompt = (input: GenerateImageInput) => {
 };
 
 const sanitizeGenerationSize = (size: string) => {
-    return VALID_GENERATION_SIZES.has(size) ? size : '1024x1024';
-};
-
-const normalizeNanoAspectRatio = (size: string): NanoBananaAspectRatio => {
-    if (size === '1536x1024') return '3:2';
-    if (size === '1024x1536') return '2:3';
-    if (size === 'auto' || size === '1024x1024') return '1:1';
-    return size as NanoBananaAspectRatio;
+    const normalizedSize = size.trim();
+    return VALID_GENERATION_SIZES.has(normalizedSize) ? normalizedSize : '1024x1024';
 };
 
 const createEditSourceFile = (sourceImage: Blob) => {
@@ -134,7 +152,7 @@ const requestImageDataUrl = async (request: Promise<ImageProviderResponse>) => {
     const result = await request;
 
     if (!result.b64_json) {
-        throw new Error('No image data returned from OpenAI');
+        throw new Error('No image data returned from image provider');
     }
 
     return `data:image/png;base64,${result.b64_json}`;

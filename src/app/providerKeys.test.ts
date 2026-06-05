@@ -22,6 +22,26 @@ describe('providerKeys', () => {
         expect(readProviderApiKey('google', storage)).toBe('gemini-key');
     });
 
+    it('returns null for non-string JSON values in provider storage', () => {
+        const storage = createStorage({
+            aura_openapi_key: JSON.stringify({ key: 'sk-openai' }),
+            aura_google_api_key: JSON.stringify(['not-a-key']),
+        });
+
+        expect(readProviderApiKey('openai', storage)).toBeNull();
+        expect(readProviderApiKey('google', storage)).toBeNull();
+    });
+
+    it('normalizes whitespace-only strings to null', () => {
+        const storage = createStorage({
+            aura_openapi_key: '   ',
+            aura_google_api_key: '\t\n',
+        });
+
+        expect(readProviderApiKey('openai', storage)).toBeNull();
+        expect(readProviderApiKey('google', storage)).toBeNull();
+    });
+
     it('resolves empty strings as null', () => {
         const resolver = createProviderKeyResolver({
             openai: '   ',

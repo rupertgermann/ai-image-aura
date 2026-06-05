@@ -9,7 +9,7 @@ interface UseImageArchiveOptions {
     onError?: (error: Error, operation: ArchiveOperation) => void;
 }
 
-const sortImagesByTimestamp = (images: ArchiveImage[]) => {
+export const sortImagesByTimestamp = (images: ArchiveImage[]) => {
     return [...images].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
 };
 
@@ -24,7 +24,8 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
         try {
             setLoading(true);
             const data = await store.list();
-            setImages(data);
+            setError(null);
+            setImages(sortImagesByTimestamp(data));
         } catch (err) {
             const nextError = err instanceof Error ? err : new Error('Failed to load images');
             setError(nextError);
@@ -36,6 +37,7 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
 
     const addImage = async (image: ArchiveImage): Promise<ArchiveImage> => {
         try {
+            setError(null);
             const savedImage = await store.save(image);
             setImages((current) => sortImagesByTimestamp([
                 savedImage,
@@ -52,6 +54,7 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
 
     const deleteImage = async (id: string) => {
         try {
+            setError(null);
             await store.remove(id);
             setImages((current) => current.filter((entry) => entry.id !== id));
         } catch (err) {

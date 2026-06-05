@@ -1,0 +1,248 @@
+import { describe, expect, it, vi } from 'vitest';
+import { openAiImageClient } from './openai';
+import { openAiResponsesClient } from './openai';
+import { OPENAI_IMAGE_MODEL } from './openaiModels';
+import { OPENAI_RESPONSES_MODEL } from './openaiModels';
+
+describe('openAiImageClient', () => {
+    it('posts image generation requests to the OpenAI image generation endpoint', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            data: [{ b64_json: 'generated' }],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat in a hat',
+                size: '1024x1024',
+                quality: 'high',
+                background: 'transparent',
+            });
+
+            expect(result).toEqual({ b64_json: 'generated' });
+
+            const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            expect(url).toBe('https://api.openai.com/v1/images/generations');
+            expect(request.method).toBe('POST');
+
+            const headers = request.headers as Record<string, string>;
+            expect(headers.Authorization).toBe('Bearer sk-test');
+            expect(headers['Content-Type']).toBe('application/json');
+
+            const body = JSON.parse(String(request.body));
+            expect(body).toEqual({
+                model: OPENAI_IMAGE_MODEL,
+                prompt: 'a cat in a hat',
+                n: 1,
+                size: '1024x1024',
+                quality: 'high',
+                background: 'transparent',
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('posts image edit requests with multipart form data to the edit endpoint', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            data: [{ b64_json: 'edited' }],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const referenceImage = new File(['source image'], 'source.png', { type: 'image/png' });
+            const result = await openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'replace the cat',
+                referenceImages: [referenceImage],
+                model: OPENAI_IMAGE_MODEL,
+                quality: 'low',
+                size: '1024x1024',
+                background: 'opaque',
+            });
+
+            expect(result).toEqual({ b64_json: 'edited' });
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            expect(url).toBe('https://api.openai.com/v1/images/edits');
+            expect(request.method).toBe('POST');
+
+            const headers = request.headers as Record<string, string>;
+            expect(headers.Authorization).toBe('Bearer sk-test');
+            expect(headers['Content-Type']).toBeUndefined();
+
+            const form = request.body as FormData;
+            const formEntries = Array.from(form.entries());
+            const fileValues = formEntries.filter(([name]) => name === 'image[]');
+
+            expect(form.get('model')).toBe(OPENAI_IMAGE_MODEL);
+            expect(form.get('prompt')).toBe('replace the cat');
+            expect(form.get('n')).toBe('1');
+            expect(form.get('quality')).toBe('low');
+            expect(form.get('background')).toBe('opaque');
+            expect(form.get('size')).toBe('1024x1024');
+            expect(fileValues).toHaveLength(1);
+            expect(fileValues[0]?.[1]).toBeInstanceOf(File);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('throws a formatted error when OpenAI responds with an error payload', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            error: { message: 'rate limit exceeded' },
+        }), { status: 429 }));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await expect(openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat in a hat',
+            })).rejects.toThrow('rate limit exceeded');
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('throws when OpenAI returns no image payload', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({})));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await expect(openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat in a hat',
+            })).rejects.toThrow('No image data returned from OpenAI');
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});
+
+describe('openAiResponsesClient', () => {
+    it('posts image reasoning requests to the responses endpoint', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            output_text: 'summary of image',
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiResponsesClient.createResponse({
+                apiKey: 'res-key',
+                systemPrompt: 'act as a concise critic',
+                userText: 'what is in this image?',
+                imageDataUrl: 'data:image/png;base64,abc123',
+            });
+
+            expect(result).toEqual({ outputText: 'summary of image' });
+
+            const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            expect(url).toBe('https://api.openai.com/v1/responses');
+            expect(request.method).toBe('POST');
+
+            const headers = request.headers as Record<string, string>;
+            expect(headers.Authorization).toBe('Bearer res-key');
+            expect(headers['Content-Type']).toBe('application/json');
+
+            const body = JSON.parse(String(request.body));
+            expect(body).toEqual({
+                model: OPENAI_RESPONSES_MODEL,
+                input: [
+                    {
+                        role: 'system',
+                        content: [{ type: 'input_text', text: 'act as a concise critic' }],
+                    },
+                    {
+                        role: 'user',
+                        content: [
+                            { type: 'input_text', text: 'what is in this image?' },
+                            { type: 'input_image', image_url: 'data:image/png;base64,abc123' },
+                        ],
+                    },
+                ],
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('falls back to output content extraction when output_text is missing', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            output: [{ content: [{ type: 'output_text', text: 'fallback text' }] }],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiResponsesClient.createResponse({
+                apiKey: 'res-key',
+                systemPrompt: 'analyze this',
+                userText: 'describe',
+            });
+
+            expect(result).toEqual({ outputText: 'fallback text' });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('throws a formatted error when responses endpoint returns an error payload', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            error: { message: 'invalid schema' },
+        }), { status: 400 }));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await expect(openAiResponsesClient.createResponse({
+                apiKey: 'res-key',
+                systemPrompt: 'act',
+                userText: 'broken',
+            })).rejects.toThrow('invalid schema');
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('throws when responses payload has no text output', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            output: [{ content: [{ type: 'text', text: 'none' }] }],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await expect(openAiResponsesClient.createResponse({
+                apiKey: 'res-key',
+                systemPrompt: 'act',
+                userText: 'none',
+            })).rejects.toThrow('No text response returned from OpenAI');
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('omits the image input when imageDataUrl is not provided', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            output_text: 'no image',
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await openAiResponsesClient.createResponse({
+                apiKey: 'res-key',
+                systemPrompt: 'act',
+                userText: 'just text please',
+            });
+
+            const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            const body = JSON.parse(String(request.body));
+            const userContent = body.input[1].content;
+
+            expect(userContent).toEqual([
+                { type: 'input_text', text: 'just text please' },
+            ]);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});

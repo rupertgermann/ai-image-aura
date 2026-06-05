@@ -8,7 +8,9 @@ import {
     OPENAI_RESPONSES_MODEL,
     REASONING_MODEL_REGISTRY,
     resolveImageModelConfig,
+    isImageModelSlug,
     resolveReasoningModelConfig,
+    isReasoningModelSlug,
 } from './openaiModels';
 
 describe('openaiModels image registry', () => {
@@ -50,8 +52,28 @@ describe('openaiModels image registry', () => {
         });
     });
 
+    it('defaults image model config to OpenAI image model when no slug is provided', () => {
+        expect(resolveImageModelConfig()).toEqual(IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL]);
+    });
+
     it('rejects unknown image model slugs', () => {
         expect(() => resolveImageModelConfig('unknown-model')).toThrow('Unknown image model: unknown-model');
+    });
+
+    it('rejects inherited image model keys', () => {
+        expect(() => resolveImageModelConfig('toString')).toThrow('Unknown image model: toString');
+        expect(isImageModelSlug('toString')).toBe(false);
+    });
+
+    it('correctly validates image model slugs', () => {
+        expect(isImageModelSlug(OPENAI_IMAGE_MODEL)).toBe(true);
+        expect(isImageModelSlug('unknown-model')).toBe(false);
+    });
+
+    it('only accepts strings for image model slugs', () => {
+        expect(isImageModelSlug(null)).toBe(false);
+        expect(isImageModelSlug(123)).toBe(false);
+        expect(isImageModelSlug({})).toBe(false);
     });
 
     it('maps reasoning models to independent providers', () => {
@@ -65,5 +87,29 @@ describe('openaiModels image registry', () => {
             apiModel: GEMINI_FLASH_REASONING_MODEL,
             endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         });
+    });
+
+    it('defaults reasoning model config to OpenAI response model when no slug is provided', () => {
+        expect(resolveReasoningModelConfig()).toEqual(REASONING_MODEL_REGISTRY[OPENAI_RESPONSES_MODEL]);
+    });
+
+    it('rejects unknown reasoning model slugs', () => {
+        expect(() => resolveReasoningModelConfig('unknown-model')).toThrow('Unknown reasoning model: unknown-model');
+    });
+
+    it('rejects inherited reasoning model keys', () => {
+        expect(() => resolveReasoningModelConfig('toString')).toThrow('Unknown reasoning model: toString');
+        expect(isReasoningModelSlug('toString')).toBe(false);
+    });
+
+    it('correctly validates reasoning model slugs', () => {
+        expect(isReasoningModelSlug(OPENAI_RESPONSES_MODEL)).toBe(true);
+        expect(isReasoningModelSlug('unknown-model')).toBe(false);
+    });
+
+    it('only accepts strings for reasoning model slugs', () => {
+        expect(isReasoningModelSlug(null)).toBe(false);
+        expect(isReasoningModelSlug(456)).toBe(false);
+        expect(isReasoningModelSlug([])).toBe(false);
     });
 });

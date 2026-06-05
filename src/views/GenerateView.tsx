@@ -11,6 +11,7 @@ import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
 import { createSatisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { resolveReasoningClient } from '../autopilot/ReasoningClient';
+import { NANO_REFERENCE_LIMIT } from '../image-workflow/ImageWorkflow';
 import {
     IMAGE_MODEL_REGISTRY,
     NANO_BANANA_PRO_IMAGE_MODEL,
@@ -180,7 +181,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
     const referenceCollection = useReferenceImageCollection();
     const referenceImages = referenceCollection.files;
     const activeReferenceImages = model === NANO_BANANA_PRO_IMAGE_MODEL
-        ? referenceImages.slice(0, 14)
+        ? referenceImages.slice(0, NANO_REFERENCE_LIMIT)
         : referenceImages;
     const referencePreviews = referenceCollection.previews;
     const addReferenceFiles = referenceCollection.addFiles;
@@ -291,8 +292,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
 
     const maxApiCalls = maxIterations * 3;
     const isAutopilotMode = mode === 'autopilot';
-    const nanoReferenceWarning = model === NANO_BANANA_PRO_IMAGE_MODEL && referenceImages.length > 14
-        ? 'Nano Banana Pro uses the first 14 reference images for generation.'
+    const nanoReferenceWarning = model === NANO_BANANA_PRO_IMAGE_MODEL && referenceImages.length > NANO_REFERENCE_LIMIT
+        ? `Nano Banana Pro uses the first ${NANO_REFERENCE_LIMIT} reference images for generation.`
         : null;
 
 

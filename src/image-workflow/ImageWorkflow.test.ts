@@ -73,6 +73,150 @@ describe('ImageWorkflow', () => {
         }));
     });
 
+    it('falls back to the default generation size when aspect ratio value is unsupported', async () => {
+        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+            google: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: 'unsupported-size',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            size: '1024x1024',
+        }));
+    });
+
+    it('trims generation dimensions before validating size', async () => {
+        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+            google: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: ' 1536x1024 ',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            size: '1536x1024',
+        }));
+    });
+
+    it('maps landscape generation dimensions to supported Nano Banana aspect ratio', async () => {
+        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'teapot city',
+            quality: 'high',
+            aspectRatio: '1536x1024',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            aspectRatio: '3:2',
+        }));
+    });
+
+    it('trims Nano Banana generation dimensions before mapping aspect ratio', async () => {
+        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'teapot city',
+            quality: 'high',
+            aspectRatio: ' 1024x1536 ',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            aspectRatio: '2:3',
+        }));
+    });
+
+    it('surfaces a provider-agnostic error when generation returns no image data', async () => {
+        const generate = vi.fn(async () => ({}));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await expect(workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        })).rejects.toThrow('No image data returned from image provider');
+    });
+
     it('sends the editable source before composition context and user references', async () => {
         let seenReferenceImages: File[] = [];
         const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
@@ -157,6 +301,86 @@ describe('googleImageProvider', () => {
         });
     });
 
+    it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
+        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'teapot city',
+            quality: 'high',
+            aspectRatio: 'bad-ratio',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            aspectRatio: '1:1',
+        }));
+    });
+
+    it('uses only the first 14 references for Nano Banana generation requests', async () => {
+        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+        const references = Array.from({ length: 15 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
+        );
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'teapot city',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: references,
+        });
+
+        const calledWith = generate.mock.calls[0]?.[0] as { referenceImages: File[] };
+        expect(calledWith.referenceImages).toHaveLength(14);
+        expect(calledWith.referenceImages.map((file) => file.name)).toEqual([
+            'ref-0.png',
+            'ref-1.png',
+            'ref-2.png',
+            'ref-3.png',
+            'ref-4.png',
+            'ref-5.png',
+            'ref-6.png',
+            'ref-7.png',
+            'ref-8.png',
+            'ref-9.png',
+            'ref-10.png',
+            'ref-11.png',
+            'ref-12.png',
+            'ref-13.png',
+        ]);
+    });
+
     it('omits imageConfig for preserve-source-dimensions edits', async () => {
         const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
             candidates: [{
@@ -199,5 +423,50 @@ describe('googleImageProvider', () => {
             }],
         })).toBe('abc123');
         expect(extractGoogleImageData({ candidates: [{ content: { parts: [{ text: 'blocked' }] } }] })).toBeNull();
+    });
+
+    it('extracts image bytes from snake_case Gemini inline data when inlineData is absent', () => {
+        expect(extractGoogleImageData({
+            candidates: [{
+                content: {
+                    parts: [{ text: 'ok' }, { inline_data: { data: 'snake123' } }],
+                },
+            }],
+        })).toBe('snake123');
+    });
+
+    it('uses default Gemini imageConfig values when values are not provided', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'gemini-image' } }],
+                },
+            }],
+        })));
+        const provider = createGoogleImageProvider(fetchImpl);
+
+        await provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+            },
+            prompt: 'a luminous teapot city',
+            referenceImages: [],
+        });
+
+        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+        const body = JSON.parse(String(requestInit.body));
+        expect(body.generationConfig.imageConfig).toEqual({
+            aspectRatio: '1:1',
+            imageSize: '1K',
+        });
     });
 });

@@ -86,29 +86,25 @@ export const REASONING_MODEL_REGISTRY = {
 export type ReasoningModelSlug = keyof typeof REASONING_MODEL_REGISTRY;
 
 export function resolveImageModelConfig(slug: string = DEFAULT_IMAGE_MODEL): ImageModelConfig {
-    const config = IMAGE_MODEL_REGISTRY[slug as ImageModelSlug];
-
-    if (!config) {
+    if (!isImageModelSlug(slug)) {
         throw new Error(`Unknown image model: ${slug}`);
     }
 
-    return config;
+    return IMAGE_MODEL_REGISTRY[slug];
 }
 
 export function isImageModelSlug(value: unknown): value is ImageModelSlug {
-    return typeof value === 'string' && value in IMAGE_MODEL_REGISTRY;
+    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(IMAGE_MODEL_REGISTRY, value);
 }
 
 export function resolveReasoningModelConfig(slug: string = OPENAI_RESPONSES_MODEL): ReasoningModelConfig {
-    const config = REASONING_MODEL_REGISTRY[slug as ReasoningModelSlug];
-
-    if (!config) {
+    if (!isReasoningModelSlug(slug)) {
         throw new Error(`Unknown reasoning model: ${slug}`);
     }
 
-    return config;
+    return REASONING_MODEL_REGISTRY[slug];
 }
 
 export function isReasoningModelSlug(value: unknown): value is ReasoningModelSlug {
-    return typeof value === 'string' && value in REASONING_MODEL_REGISTRY;
+    return typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASONING_MODEL_REGISTRY, value);
 }
