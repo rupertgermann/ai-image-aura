@@ -1,8 +1,8 @@
 # AURA AI
 
-AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with the OpenAI Images API.
+AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI and Google-hosted image models.
 
-The app runs entirely in the browser. API keys, generated images, reference images, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
+The app runs entirely in the browser. Provider API keys, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
 
 ## Screens
 
@@ -16,15 +16,16 @@ The app runs entirely in the browser. API keys, generated images, reference imag
 
 ## Highlights
 
-- Prompt-based image generation with `gpt-image-2`
+- Prompt-based image generation with `gpt-image-2` and `nano-banana-pro`
 - `Single Shot` and `Autopilot` generation modes
-- Goal-to-prompt translation, iterative scoring, and prompt refinement powered by `gpt-5.4`
-- Prompt enhancement controls for style, lighting, palette, quality, aspect ratio, and background
+- Goal-to-prompt translation, iterative scoring, and prompt refinement with selectable reasoning models: `gpt-5.4` and `gemini-2.5-flash`
+- Provider-specific API key storage for OpenAI and Google
+- Prompt enhancement controls for style, lighting, palette, and model-specific output settings
 - Reference-image workflows for guided generation and AI-assisted edits
 - Creative lineage tracking across generation, create-similar, editor saves, AI edits, save-as-copy branches, and Autopilot iterations
-- Local archive with search, multi-select actions, ZIP export, lineage-aware detail view, replay actions, fork actions, and keyboard navigation
-- In-browser editor with brightness, contrast, saturation, filters, AI transforms, overwrite, save-as-copy, and reset controls
-- Persistent local UI state for theme, prompts, generation settings, Autopilot settings, archive search, and editor controls
+- Local archive with search, multi-select actions, layer-aware ZIP export, lineage-aware detail view, replay actions, fork actions, and keyboard navigation
+- Layered in-browser editor with image layers, composition adjustments, AI result layers, non-destructive drafts, undo/redo, overwrite, save-as-copy, reset, and revert controls
+- Persistent local UI state for prompts, model-specific generation settings, Autopilot settings, archive search, editor drafts, and editor controls
 - Local-first persistence powered by SQLocal and IndexedDB
 
 ## Tech Stack
@@ -35,6 +36,8 @@ The app runs entirely in the browser. API keys, generated images, reference imag
 - SQLocal for browser-local SQLite metadata
 - `idb-keyval` for binary and transient IndexedDB storage
 - JSZip for archive export bundles
+- Konva and React Konva for the layered editor canvas
+- Lucide React for iconography
 - Vitest for module and workflow tests
 
 ## Runtime Requirements
@@ -49,7 +52,7 @@ npm install
 npm run dev
 ```
 
-Open the app in your browser, go to **Settings**, and enter an OpenAI API key to enable generation and editing.
+Open the app in your browser, go to **Settings**, and enter the provider keys for the models you want to use. OpenAI powers `gpt-image-2` and `gpt-5.4`; Google powers `nano-banana-pro` and `gemini-2.5-flash`.
 
 ## Available Scripts
 
@@ -102,24 +105,29 @@ npm run preview
 
 The Generate view supports:
 
+- Image model selection between `GPT Image 2` and `Nano Banana Pro`
 - Mode toggle between `Single Shot` and `Autopilot`
 - Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode
-- Quality options: `low`, `medium`, `high`
-- Aspect ratio options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
-- Background options: `auto`, `opaque`, `transparent`
+- Reasoning model selection between `GPT 5.4` and `Gemini 2.5 Flash` in Autopilot mode
+- `GPT Image 2` quality options: `low`, `medium`, `high`
+- `GPT Image 2` size options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
+- `GPT Image 2` background options: `auto`, `opaque`, `transparent`
+- `Nano Banana Pro` aspect ratio options: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
+- `Nano Banana Pro` resolution options: `1K`, `2K`, `4K`
 - Style, lighting, and palette modifiers that are merged into the request prompt
 - Configurable Autopilot iteration count from `1` to `8`
 - Configurable Autopilot satisfaction threshold from `50` to `100`
-- Cost disclosure and confirmation before each Autopilot run
+- Cost disclosure and confirmation before each Autopilot run, including the selected image and reasoning models
 - Live Autopilot progress, best-iteration highlighting, and pause/cancel support
 - Multiple reference image uploads through file picker and drag-and-drop
+- `Nano Banana Pro` reference inputs are capped to the first `14` images for provider compatibility
 - Reference preview modal with next and previous navigation
 - Save-to-archive, download, and clear-result actions
 
-Prompt-only generations use the OpenAI generations endpoint. When reference images are attached, the app switches to the edits endpoint so the request can include uploaded image inputs.
+Prompt-only `GPT Image 2` generations use the OpenAI generations endpoint. `GPT Image 2` requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts.
 
-Autopilot reuses the current generation settings for every iteration, evaluates results against the goal, refines the prompt between iterations, and keeps the best-scoring result as the primary output.
+Autopilot reuses the current image model settings for every iteration, evaluates results against the goal with the selected reasoning model, refines the prompt between iterations, and keeps the best-scoring result as the primary output.
 
 ### Archive
 
@@ -128,7 +136,7 @@ The Archive view supports:
 - Prompt-based search with persisted search text
 - Multi-select image management
 - Select-all and deselect-all actions scoped to the current filtered result set
-- ZIP export for selected images together with archive and lineage manifests
+- ZIP export for selected images together with archive manifests, lineage manifests, reference images, flattened images, and layer assets
 - Bulk deletion with confirmation
 - Image detail modal with prompt copy, metadata display, reference previews, lineage timeline, and step selection
 - Lineage replay into Generate for generation, reference-generation, and Autopilot steps
@@ -138,54 +146,68 @@ The Archive view supports:
 - Previous and next navigation from the detail modal with keyboard arrow support
 - Create Similar to transfer prompt settings and references back into Generate
 
-The lineage detail view can display the currently selected archive image, an ancestor step, or a stored Autopilot iteration preview from the lineage metadata.
+The lineage detail view can display the currently selected archive image, an ancestor step, or a stored Autopilot iteration preview from the lineage metadata. Archive transfer helpers validate ZIP imports and report missing assets or broken parent references, while the app also supports manifest-based metadata recovery through URL parameters.
 
 ### Editor
 
 The Editor view supports:
 
-- Brightness, contrast, and saturation controls
+- A Konva-backed layered canvas with a locked base layer for the opened archive image
+- Uploaded raster image layers that become part of the visible composition
+- Layer selection, multi-selection, rename, visibility, opacity, move up/down, duplicate, and delete actions
+- Direct move, scale, and rotation handles for the primary selected non-base layer
+- Brightness, contrast, and saturation controls applied to the full composition
 - Quick filters: `Normal`, `B&W`, `Sepia`, and `Soft`
-- AI transformation prompts applied to the current canvas image
-- Optional reference images for edit guidance
+- Collapsible Adjustments and Filters sections
+- AI transformation prompts with selectable image models
+- AI transforms targeted to selected visible non-base layers, or to the whole visible composition when no editable layer is selected
+- AI result layers inserted non-destructively above the targeted layer selection
+- Optional visual context reference images for edit guidance
+- Unsaved editor drafts persisted per archive image
+- Undo and redo for layer, adjustment, reference, and AI result changes
 - Save changes in place
 - Save as copy
-- Reset controls back to defaults
+- Reset Adjustments and Revert Draft controls
 
-Editor adjustments persist locally per image, and editor saves are recorded in lineage as overwrite, save-as-copy, or AI-edit steps depending on the action taken.
+Editor saves are recorded in lineage as overwrite, save-as-copy, manual-edit, or AI-edit steps depending on the action taken. Layered images keep durable layer stack metadata and per-layer image assets alongside the flattened archive preview.
 
 ### Settings
 
 The Settings view supports:
 
 - Local OpenAI API key storage in the browser
+- Local Google Gemini API key storage in the browser
 - Saved-key status feedback and masked key entry
-- Immediate generation and editing availability once a key is stored
+- Immediate model availability once the matching provider key is stored
 
-The sidebar also includes a persistent theme toggle and a collapsible navigation rail.
+The sidebar includes a collapsible navigation rail.
 
 ## Storage Model
 
 The application is designed as a local-first web app.
 
-- OpenAI API keys are stored in browser `localStorage`
-- View state, generation settings, Autopilot settings, archive search, and editor adjustments are stored in browser `localStorage`
+- Provider API keys are stored in browser `localStorage`
+- View state, generation drafts, model-specific generation settings, Autopilot settings, archive search, and editor drafts are stored in browser `localStorage`
 - Current generated results and transferred reference payloads are stored in IndexedDB via `idb-keyval`
 - Archive image metadata is stored in a browser-local SQLite database via SQLocal
+- Layer stack metadata is stored with archive image metadata in SQLocal
+- Flattened images, reference images, and per-layer image assets are stored in IndexedDB via `idb-keyval`
 - Lineage metadata is stored in a browser-local SQLite database via SQLocal
-- Archive ZIP bundles contain `archive-manifest.json` and `lineage-manifest.json`
+- Archive ZIP bundles contain image files, reference files, layer asset files, `archive-manifest.json`, and `lineage-manifest.json`
 
 There is no custom backend service in this repository.
 
-## OpenAI Integration
+## Provider Integration
 
-The app calls the OpenAI API directly from the browser.
+The app calls provider APIs directly from the browser.
 
-- Prompt-only generations use `POST /v1/images/generations`
-- Reference-based generations and editor transforms use `POST /v1/images/edits`
-- Autopilot goal translation, evaluation, and prompt refinement use `POST /v1/responses`
-- The image generation model is `gpt-image-2`
-- Autopilot reasoning uses `gpt-5.4`
+- OpenAI image generation uses `POST /v1/images/generations`
+- OpenAI reference-based generation and editor transforms use `POST /v1/images/edits`
+- OpenAI Autopilot reasoning uses `POST /v1/responses`
+- Google image generation and editing use Gemini `generateContent`
+- Google Autopilot reasoning uses Gemini `generateContent`
+- Image models: `gpt-image-2`, `nano-banana-pro`
+- Reasoning models: `gpt-5.4`, `gemini-2.5-flash`
 - The app requests a single image per generation or edit operation
 - Image responses are consumed as base64 payloads and converted into browser-safe data URLs for preview and persistence
 
@@ -199,7 +221,7 @@ Additional implementation details live in:
 - The project is designed for local use in the browser
 - Secrets are not committed to the repository
 - The repository does not ship with embedded API keys, `.env` files, or private key material
-- Sensitive OpenAI request payloads are not logged by the client helper
+- Sensitive provider request payloads are not logged by the client helpers
 
 If you fork this project, keep the same standard for your own commits and issues.
 
@@ -209,36 +231,45 @@ If you fork this project, keep the same standard for your own commits and issues
 src/
   app/             App-level controller, notifications, and persisted preferences
   archive/         Archive storage, ZIP export/import helpers, and archive controllers
-  autopilot/       Autopilot orchestration and GPT-5.4 helper modules
+  autopilot/       Autopilot orchestration and reasoning-model helper modules
   components/      Reusable UI components and modals
   db/              SQLocal bootstrap and persistence types
+  download/        Local download helpers for images and ZIP bundles
   editor/          Canvas editing, editor sessions, and save flows
   generate-session Generate draft persistence, save logic, and Autopilot glue
-  image-workflow/  OpenAI request orchestration for generate and edit flows
+  hooks/           Shared React hooks for local storage and archive state
+  image-workflow/  Provider request orchestration for generate and edit flows
   lineage/         Lineage storage, replay, timelines, and metadata helpers
   references/      Reference image collection state and hydration helpers
   services/        IndexedDB-backed storage adapters
-  utils/           OpenAI and file conversion helpers
+  utils/           Provider model constants, OpenAI helpers, and file conversion helpers
   views/           Generate, Archive, Editor, and Settings views
 docs/
   agentic-creative-autopilot-prd.md
   creative-lineage-autopilot-qa-plan.md
   creative-lineage-graph-prd.md
+  DESIGN.md
+  adr/
   openAI_create_image.md
   openAI_image_generation.md
-  prompt.md
 plans/
   creative-lineage-and-autopilot.md
+  layered-editor.md
+  localstorage-to-sqlite.md
+  telepathic-instruments-rebrand.md
 ```
 
 ## Documentation
 
-- `docs/openAI_image_generation.md` describes the current OpenAI integration and request routing
+- `CONTEXT.md` defines the repo's domain vocabulary for image models, providers, lineage, and layered editor concepts
+- `docs/openAI_image_generation.md` describes the current provider integration and request routing
 - `docs/openAI_create_image.md` maps Generate, Editor, and Autopilot flows to the request payloads used by the app
+- `docs/adr/` captures durable architecture decisions for archive assets, Konva canvas rendering, editor history, copy semantics, AI transform targeting, and layered-image adjustments
 - `docs/creative-lineage-graph-prd.md` captures the lineage product requirements
 - `docs/agentic-creative-autopilot-prd.md` captures the Autopilot product requirements
 - `docs/creative-lineage-autopilot-qa-plan.md` outlines QA coverage for lineage and Autopilot flows
 - `plans/creative-lineage-and-autopilot.md` summarizes the implementation plan behind the current lineage and Autopilot architecture
+- `plans/layered-editor.md` summarizes the implementation plan behind the current layered editor architecture
 
 ## License
 

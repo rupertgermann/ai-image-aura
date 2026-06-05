@@ -7,8 +7,9 @@ term exactly as defined here; don't drift to the listed synonyms-to-avoid.
 ## Image model
 
 A user-selectable engine that turns a prompt (plus optional reference images)
-into an image. The image model is chosen **per generation** in the Generate and
-Editor views and is recorded on every saved image and every lineage step.
+into an image. The image model is chosen **per generation** in the Generate view
+and per AI transform in the Editor view. It is recorded on every saved image and
+every lineage step.
 
 Current values: `gpt-image-2`, `nano-banana-pro`.
 
@@ -32,7 +33,7 @@ The model Autopilot uses for its language/vision steps — goal-to-prompt
 translation, satisfaction evaluation (which looks at the generated image), and
 prompt refinement. Selected **independently of the image model**.
 
-Current values: `gpt-5.4` (OpenAI), a Gemini text model (Google).
+Current values: `gpt-5.4` (OpenAI), `gemini-2.5-flash` (Google).
 
 - Not the same thing as the **image model**. An Autopilot run pairs one image
   model with one reasoning model; they may belong to different providers.
