@@ -22,6 +22,7 @@ import {
 
 const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
+const GENERATE_CURRENT_RESULT_REFERENCES_KEY = 'generate_current_result_references';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
 const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
 
@@ -64,7 +65,8 @@ export interface GenerateSessionStore {
     saveLineageSource(source: GenerateLineageSource): void;
     clearLineageSource(): void;
     loadCurrentResult(): Promise<string | null>;
-    saveCurrentResult(result: string): Promise<void>;
+    loadCurrentResultReferences(): Promise<string[] | null>;
+    saveCurrentResult(result: string, usedReferences?: string[] | null): Promise<void>;
     clearCurrentResult(): Promise<void>;
     consumeTransferredReferences(): Promise<string[]>;
 }
@@ -163,12 +165,37 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         return this.blobStorage.load(GENERATE_CURRENT_RESULT_KEY);
     }
 
-    saveCurrentResult(result: string): Promise<void> {
-        return this.blobStorage.save(GENERATE_CURRENT_RESULT_KEY, result);
+    async loadCurrentResultReferences(): Promise<string[] | null> {
+        const value = await this.blobStorage.load(GENERATE_CURRENT_RESULT_REFERENCES_KEY);
+        if (!value) {
+            return null;
+        }
+
+        try {
+            const references = JSON.parse(value) as unknown;
+            return Array.isArray(references) && references.every((reference) => typeof reference === 'string')
+                ? references
+                : null;
+        } catch {
+            return null;
+        }
     }
 
-    clearCurrentResult(): Promise<void> {
-        return this.blobStorage.remove(GENERATE_CURRENT_RESULT_KEY);
+    async saveCurrentResult(result: string, usedReferences: string[] | null = null): Promise<void> {
+        await this.blobStorage.save(GENERATE_CURRENT_RESULT_KEY, result);
+        if (Array.isArray(usedReferences)) {
+            await this.blobStorage.save(GENERATE_CURRENT_RESULT_REFERENCES_KEY, JSON.stringify(usedReferences));
+            return;
+        }
+
+        await this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY);
+    }
+
+    async clearCurrentResult(): Promise<void> {
+        await Promise.all([
+            this.blobStorage.remove(GENERATE_CURRENT_RESULT_KEY),
+            this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY),
+        ]);
     }
 
     async consumeTransferredReferences(): Promise<string[]> {

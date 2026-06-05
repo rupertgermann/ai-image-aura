@@ -126,6 +126,38 @@ describe('saveGeneratedImage', () => {
         ]);
     });
 
+    it('records Nano Banana Pro reference-generation lineage from the saved used Reference images', async () => {
+        const lineage = createStore();
+        const sessionStore = createSessionStore();
+        const references = Array.from({ length: 14 }, (_, index) => `data:image/png;base64,used-ref-${index}`);
+        const image = createArchiveImage({
+            id: 'generated-nano-with-refs',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            references,
+        });
+
+        const savedImage = await saveGeneratedImage(image, {
+            saveImage: vi.fn(async (nextImage) => nextImage),
+            lineageStore: lineage,
+            sessionStore,
+        });
+
+        expect(savedImage.references).toEqual(references);
+        await expect(lineage.getByArchiveImageId('generated-nano-with-refs')).resolves.toEqual([
+            expect.objectContaining({
+                stepType: 'reference-generation',
+                metadata: expect.objectContaining({
+                    referenceImages: {
+                        count: references.length,
+                        ids: references.map((_, index) => `generated-nano-with-refs:reference:${index}`),
+                    },
+                    referenceCount: references.length,
+                    referenceIds: references.map((_, index) => `generated-nano-with-refs:reference:${index}`),
+                }),
+            }),
+        ]);
+    });
+
     it('records nano-banana-pro archive metadata dimensions through shared Image model controls', async () => {
         const lineage = createStore();
         const sessionStore = createSessionStore();
