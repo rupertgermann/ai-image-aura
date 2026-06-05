@@ -1,4 +1,5 @@
 import type { LineageStore, LineageStep } from './LineageStore';
+import { readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
 import { readGenerateLineageReferenceCount } from './generateLineageMetadata';
 
 export interface LineageTimelineEntry {
@@ -99,6 +100,8 @@ async function countDescendants(steps: LineageStep[], store: Pick<LineageStore, 
 }
 
 function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
+    const autopilotMetadata = getAutopilotTimelineMetadata(step);
+
     return {
         id: step.id,
         archiveImageId: step.archiveImageId,
@@ -106,13 +109,19 @@ function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
         label: getStepLabel(step),
         summary: getStepSummary(step),
         timestamp: step.timestamp,
-        goalText: asString(step.metadata.goalText),
-        iterationNumber: asNumberOrNull(step.metadata.iterationNumber),
-        evaluatorScore: asNumberOrNull(step.metadata.evaluatorScore),
-        evaluatorFeedback: asStringArray(step.metadata.evaluatorFeedback),
-        replayImageDataUrl: asString(step.metadata.outputImageDataUrl),
-        runLabel: getRunLabel(step),
+        goalText: autopilotMetadata?.goalText ?? null,
+        iterationNumber: autopilotMetadata?.iterationNumber ?? null,
+        evaluatorScore: autopilotMetadata?.evaluatorScore ?? null,
+        evaluatorFeedback: autopilotMetadata?.evaluatorFeedback ?? [],
+        replayImageDataUrl: autopilotMetadata?.replayImageDataUrl ?? null,
+        runLabel: autopilotMetadata?.runLabel ?? null,
     };
+}
+
+function getAutopilotTimelineMetadata(step: LineageStep): AutopilotTimelineMetadata | null {
+    return step.stepType === 'autopilot-iteration'
+        ? readAutopilotTimelineMetadata(step.metadata)
+        : null;
 }
 
 function summarizeParent(step: LineageStep) {
@@ -163,7 +172,7 @@ function getStepSummary(step: LineageStep) {
         case 'save-as-copy':
             return summarizeLayeredSave(metadata, 'Saved layered copy') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Branched from previous version';
         case 'autopilot-iteration':
-            return summarizeAutopilot(metadata);
+            return summarizeAutopilot(readAutopilotTimelineMetadata(metadata));
     }
 }
 
@@ -201,26 +210,15 @@ function summarizeLayeredSave(metadata: Record<string, unknown>, fallback: strin
     return parts.length > 1 ? parts.join(' · ') : fallback;
 }
 
-function summarizeAutopilot(metadata: Record<string, unknown>) {
-    const iterationNumber = asNumberOrNull(metadata.iterationNumber);
-    const score = asNumberOrNull(metadata.evaluatorScore);
-    const goalText = excerpt(asString(metadata.goalText), 56);
+function summarizeAutopilot(metadata: AutopilotTimelineMetadata) {
+    const goalText = excerpt(metadata.goalText, 56);
     const parts = [
-        iterationNumber !== null ? `Iteration ${iterationNumber}` : null,
-        score !== null ? `score ${score}` : null,
+        metadata.iterationNumber !== null ? `Iteration ${metadata.iterationNumber}` : null,
+        metadata.evaluatorScore !== null ? `score ${metadata.evaluatorScore}` : null,
         goalText ? `goal: ${goalText}` : null,
     ].filter(Boolean);
 
     return parts.length > 0 ? parts.join(' · ') : 'Autopilot iteration recorded';
-}
-
-function getRunLabel(step: LineageStep) {
-    if (step.stepType !== 'autopilot-iteration') {
-        return null;
-    }
-
-    const goalText = excerpt(asString(step.metadata.goalText), 36);
-    return goalText ? `Autopilot Run · ${goalText}` : 'Autopilot Run';
 }
 
 function summarizeAdjustments(value: unknown) {
@@ -270,10 +268,4 @@ function asString(value: unknown) {
 
 function asNumberOrNull(value: unknown) {
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function asStringArray(value: unknown) {
-    return Array.isArray(value)
-        ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-        : [];
 }

@@ -4,8 +4,23 @@ import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, i
 import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 import { readGenerateLineageImageModel } from './generateLineageMetadata';
+import { readAutopilotGenerateReplayMetadata } from './autopilotLineageMetadata';
 
 type ReplayableStep = Pick<LineageStep, 'stepType'>;
+type GenerateReplayImageModel = NonNullable<ReturnType<typeof readGenerateLineageImageModel>>;
+
+interface GenerateReplayMetadata {
+    imageModel: GenerateReplayImageModel | null;
+    model: ReturnType<typeof resolveReplayModel> | null;
+    prompt: string | null;
+    style: string | null;
+    lighting: string | null;
+    palette: string | null;
+    quality: unknown;
+    aspectRatio: string | null;
+    imageSize: unknown;
+    background: unknown;
+}
 
 export function isGenerateReplayable(step: ReplayableStep) {
     return step.stepType === 'generation' || step.stepType === 'reference-generation' || step.stepType === 'autopilot-iteration';
@@ -19,23 +34,26 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
     draft: GenerateDraft;
     lineageSource: GenerateLineageSource;
 } {
-    const typedImageModel = readGenerateLineageImageModel(step.metadata);
-    const model = typedImageModel?.slug ?? resolveReplayModel(image, step);
-    const replayAspectRatio = asString(step.metadata.aspectRatio) ?? image?.aspectRatio;
+    const replayMetadata = readGenerateReplayMetadata(step);
+    const typedImageModel = replayMetadata.imageModel;
+    const model = typedImageModel?.slug
+        ?? replayMetadata.model
+        ?? resolveReplayModel(image, step.stepType === 'autopilot-iteration' ? null : step);
+    const replayAspectRatio = replayMetadata.aspectRatio ?? image?.aspectRatio;
 
     return {
         draft: sanitizeGenerateDraft({
             ...DEFAULT_GENERATE_DRAFT,
             model,
-            prompt: asString(step.metadata.prompt) ?? image?.prompt ?? '',
-            style: asString(step.metadata.style) ?? image?.style ?? 'none',
-            lighting: asString(step.metadata.lighting) ?? image?.lighting ?? 'none',
-            palette: asString(step.metadata.palette) ?? image?.palette ?? 'none',
+            prompt: replayMetadata.prompt ?? image?.prompt ?? '',
+            style: replayMetadata.style ?? image?.style ?? 'none',
+            lighting: replayMetadata.lighting ?? image?.lighting ?? 'none',
+            palette: replayMetadata.palette ?? image?.palette ?? 'none',
             gptImage2: model === OPENAI_IMAGE_MODEL
-                ? resolveGptImage2ReplayControls(typedImageModel, step, image, replayAspectRatio)
+                ? resolveGptImage2ReplayControls(typedImageModel, replayMetadata, image, replayAspectRatio)
                 : DEFAULT_GENERATE_DRAFT.gptImage2,
             nanoBananaPro: model === NANO_BANANA_PRO_IMAGE_MODEL
-                ? resolveNanoBananaReplayControls(typedImageModel, step, image, replayAspectRatio)
+                ? resolveNanoBananaReplayControls(typedImageModel, replayMetadata, image, replayAspectRatio)
                 : DEFAULT_GENERATE_DRAFT.nanoBananaPro,
             isSaved: false,
         }),
@@ -46,8 +64,27 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
     };
 }
 
-function resolveReplayModel(image: ArchiveImage | null, step: LineageStep) {
-    if (isImageModelSlug(step.metadata.model)) {
+function readGenerateReplayMetadata(step: LineageStep): GenerateReplayMetadata {
+    if (step.stepType === 'autopilot-iteration') {
+        return readAutopilotGenerateReplayMetadata(step.metadata);
+    }
+
+    return {
+        imageModel: readGenerateLineageImageModel(step.metadata),
+        model: isImageModelSlug(step.metadata.model) ? step.metadata.model : null,
+        prompt: asString(step.metadata.prompt),
+        style: asString(step.metadata.style),
+        lighting: asString(step.metadata.lighting),
+        palette: asString(step.metadata.palette),
+        quality: step.metadata.quality,
+        aspectRatio: asString(step.metadata.aspectRatio),
+        imageSize: step.metadata.imageSize,
+        background: step.metadata.background,
+    };
+}
+
+function resolveReplayModel(image: ArchiveImage | null, step: LineageStep | null) {
+    if (isImageModelSlug(step?.metadata.model)) {
         return step.metadata.model;
     }
 
@@ -59,8 +96,8 @@ function resolveReplayModel(image: ArchiveImage | null, step: LineageStep) {
 }
 
 function resolveGptImage2ReplayControls(
-    typedImageModel: ReturnType<typeof readGenerateLineageImageModel>,
-    step: LineageStep,
+    typedImageModel: GenerateReplayImageModel | null,
+    metadata: GenerateReplayMetadata,
     image: ArchiveImage | null,
     replayAspectRatio: string | undefined,
 ) {
@@ -69,15 +106,15 @@ function resolveGptImage2ReplayControls(
     }
 
     return sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
-        quality: step.metadata.quality ?? image?.quality,
+        quality: metadata.quality ?? image?.quality,
         size: replayAspectRatio,
-        background: step.metadata.background ?? image?.background,
+        background: metadata.background ?? image?.background,
     });
 }
 
 function resolveNanoBananaReplayControls(
-    typedImageModel: ReturnType<typeof readGenerateLineageImageModel>,
-    step: LineageStep,
+    typedImageModel: GenerateReplayImageModel | null,
+    metadata: GenerateReplayMetadata,
     image: ArchiveImage | null,
     replayAspectRatio: string | undefined,
 ) {
@@ -87,7 +124,7 @@ function resolveNanoBananaReplayControls(
 
     return sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, {
         aspectRatio: replayAspectRatio,
-        imageSize: step.metadata.imageSize ?? image?.quality,
+        imageSize: metadata.imageSize ?? image?.quality,
     });
 }
 

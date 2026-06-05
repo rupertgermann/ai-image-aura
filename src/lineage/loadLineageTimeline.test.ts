@@ -163,11 +163,14 @@ describe('loadLineageTimeline', () => {
             stepType: 'autopilot-iteration',
             timestamp: '2026-04-04T08:00:00.000Z',
             metadata: {
-                goalText: 'A moody editorial portrait with electric blue haze',
-                iterationNumber: 1,
-                evaluatorScore: 84,
-                evaluatorFeedback: ['Push the rim light harder.'],
-                outputImageDataUrl: 'data:image/png;base64,auto1',
+                goal: { text: 'A moody editorial portrait with electric blue haze' },
+                iteration: { number: 1 },
+                evaluation: {
+                    score: 84,
+                    feedback: ['Push the rim light harder.'],
+                },
+                replayImage: { dataUrl: 'data:image/png;base64,auto1' },
+                run: { label: 'Autopilot Run · A moody editorial portrait with ele...' },
             },
         });
         const savedStep = createStep({
@@ -208,6 +211,37 @@ describe('loadLineageTimeline', () => {
                 id: 'saved-1',
                 stepType: 'generation',
                 runLabel: null,
+            }),
+        ]);
+    });
+
+    it('summarizes sparse legacy autopilot metadata safely', async () => {
+        const timeline = await loadLineageTimeline('autopilot:legacy:iteration:1', createStore({
+            byArchiveImageId: {
+                'autopilot:legacy:iteration:1': [createStep({
+                    id: 'auto-legacy',
+                    archiveImageId: 'autopilot:legacy:iteration:1',
+                    stepType: 'autopilot-iteration',
+                    timestamp: '2026-04-04T08:00:00.000Z',
+                    metadata: {},
+                })],
+            },
+            byId: {},
+            children: {
+                'auto-legacy': [],
+            },
+        }));
+
+        expect(timeline.entries).toEqual([
+            expect.objectContaining({
+                id: 'auto-legacy',
+                summary: 'Autopilot iteration recorded',
+                goalText: null,
+                iterationNumber: null,
+                evaluatorScore: null,
+                evaluatorFeedback: [],
+                replayImageDataUrl: null,
+                runLabel: 'Autopilot Run',
             }),
         ]);
     });

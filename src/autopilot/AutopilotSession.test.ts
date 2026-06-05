@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAutopilotSession } from './AutopilotSession';
 import type { LineageMetadataPort, LineageStep } from '../lineage/LineageStore';
 import { createLineageStore, type LineageStore } from '../lineage/LineageStore';
+import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import { GEMINI_FLASH_REASONING_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -52,6 +54,7 @@ describe('AutopilotSession', () => {
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             apiKey: 'key',
+            reasoningModel: GEMINI_FLASH_REASONING_MODEL,
             maxIterations: 3,
             satisfactionThreshold: 90,
             generate,
@@ -74,6 +77,28 @@ describe('AutopilotSession', () => {
         await expect(lineage.getChildren('step-2')).resolves.toEqual([
             expect.objectContaining({ id: 'step-3', parentStepId: 'step-2' }),
         ]);
+        await expect(lineage.getById('step-1')).resolves.toEqual(expect.objectContaining({
+            parentStepId: null,
+            metadata: expect.objectContaining({
+                goal: { text: 'A cinematic portrait' },
+                reasoningModel: { slug: GEMINI_FLASH_REASONING_MODEL },
+                imageModel: {
+                    slug: OPENAI_IMAGE_MODEL,
+                    controls: {
+                        quality: 'high',
+                        size: '1024x1024',
+                        background: 'transparent',
+                    },
+                },
+                iteration: { number: 1 },
+                evaluation: {
+                    score: 40,
+                    feedback: ['Needs stronger lighting.'],
+                },
+                replayImage: { dataUrl: 'data:image/png;base64,one' },
+                run: { label: 'Autopilot Run · A cinematic portrait' },
+            }),
+        }));
     });
 
     it('exposes a running best that breaks score ties by earliest iteration', async () => {
@@ -194,8 +219,9 @@ function createStore(): LineageStore {
     });
 }
 
-function createSettings() {
+function createSettings(): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
     return {
+        model: OPENAI_IMAGE_MODEL,
         quality: 'high' as const,
         aspectRatio: '1024x1024',
         background: 'transparent' as const,

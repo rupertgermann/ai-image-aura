@@ -3,6 +3,7 @@ import { satisfactionEvaluator } from './SatisfactionEvaluator';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { buildAutopilotLineageMetadata } from '../lineage/autopilotLineageMetadata';
 
 export const DEFAULT_AUTOPILOT_MAX_ITERATIONS = 4;
 export const MAX_AUTOPILOT_ITERATIONS = 8;
@@ -98,23 +99,15 @@ class DefaultAutopilotSession implements AutopilotSession {
                     parentStepId,
                     stepType: 'autopilot-iteration',
                     timestamp: new Date().toISOString(),
-                    metadata: {
-                        goalText: this.input.goal,
-                        reasoningModel: this.input.reasoningModel ?? null,
+                    metadata: buildAutopilotLineageMetadata({
+                        goal: this.input.goal,
+                        reasoningModel: this.input.reasoningModel,
                         iterationNumber,
-                        evaluatorScore: evaluation.score,
-                        evaluatorFeedback: evaluation.feedback,
+                        evaluation,
                         prompt: currentPrompt,
-                        model: this.input.settings.model ?? null,
-                        quality: this.input.settings.quality,
-                        aspectRatio: this.input.settings.aspectRatio,
-                        imageSize: this.input.settings.imageSize ?? null,
-                        background: this.input.settings.background,
-                        style: this.input.settings.style,
-                        lighting: this.input.settings.lighting,
-                        palette: this.input.settings.palette,
+                        settings: this.input.settings,
                         outputImageDataUrl: imageDataUrl,
-                    },
+                    }),
                 });
 
                 const completedIteration: AutopilotIteration = {
