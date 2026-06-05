@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useArchiveController } from '../archive/useArchiveController';
+import { recoverArchiveMetadataFromManifests } from '../archive/recoverArchiveMetadata';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore } from '../generate-session/GenerateSession';
 import { useAppNotifications } from './useAppNotifications';
@@ -16,10 +17,11 @@ export function useAppController() {
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
     }, [notifyError]);
-    const { images, addImage, deleteImage } = useImageArchive({
+    const { images, addImage, deleteImage, refresh } = useImageArchive({
         onError: handleArchiveError,
     });
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
+    const recoveryStartedRef = useRef(false);
 
     useEffect(() => {
         initializeAuraPersistence().catch((error) => {
@@ -27,6 +29,48 @@ export function useAppController() {
             notifyError(nextError, 'Storage initialization failed');
         });
     }, [notifyError]);
+
+    useEffect(() => {
+        if (recoveryStartedRef.current) {
+            return;
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        const archiveManifestUrl = params.get('archiveManifest');
+        if (!archiveManifestUrl) {
+            return;
+        }
+
+        recoveryStartedRef.current = true;
+        const lineageManifestUrl = params.get('lineageManifest');
+
+        const loadManifest = async (url: string) => {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to load ${url}`);
+            }
+
+            return response.json() as Promise<unknown>;
+        };
+
+        async function recover() {
+            try {
+                const [archiveManifest, lineageManifest] = await Promise.all([
+                    loadManifest(archiveManifestUrl!),
+                    lineageManifestUrl ? loadManifest(lineageManifestUrl) : Promise.resolve(undefined),
+                ]);
+                const summary = await recoverArchiveMetadataFromManifests(archiveManifest, lineageManifest);
+
+                await refresh();
+                addToast(`Recovered metadata for ${summary.restoredImages} archive images`, 'success');
+                window.history.replaceState(null, '', `${window.location.pathname}${window.location.hash}`);
+            } catch (error) {
+                notifyError(error, 'Archive metadata recovery failed');
+            }
+        }
+
+        void recover();
+    }, [addToast, notifyError, refresh]);
 
     const saveImage = useCallback(async (image: ArchiveImage) => {
         const savedImage = await addImage(image);

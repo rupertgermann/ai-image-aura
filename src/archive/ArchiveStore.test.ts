@@ -58,6 +58,10 @@ class InMemoryBlobPort {
 
         this.blobs.delete(key);
     }
+
+    async listKeys() {
+        return Array.from(this.blobs.keys());
+    }
 }
 
 describe('ArchiveStore layer asset ownership', () => {
@@ -196,6 +200,29 @@ describe('ArchiveStore layer asset ownership', () => {
         expect(metadata.records.has('flat')).toBe(false);
         expect(blobs.blobs.has('img_flat')).toBe(false);
         expect(blobs.blobs.has('ref_flat_0')).toBe(false);
+    });
+
+    it('recovers orphaned image blobs when metadata is missing', async () => {
+        const { store, metadata, blobs } = createStore();
+        blobs.blobs.set('img_orphaned-image', 'data:image/png;base64,orphaned');
+        blobs.blobs.set('ref_orphaned-image_0', 'data:image/png;base64,ignored-reference');
+        blobs.blobs.set('layer_orphaned-image_base', 'data:image/png;base64,ignored-layer');
+
+        await expect(store.list()).resolves.toEqual([
+            expect.objectContaining({
+                id: 'orphaned-image',
+                url: 'data:image/png;base64,orphaned',
+                prompt: 'Recovered image',
+                timestamp: '2026-06-05T09:00:00.000Z',
+                references: [],
+            }),
+        ]);
+        expect(metadata.records.get('orphaned-image')).toEqual(expect.objectContaining({
+            id: 'orphaned-image',
+            storedUrl: 'orphaned-image',
+            prompt: 'Recovered image',
+            referenceIds: [],
+        }));
     });
 });
 

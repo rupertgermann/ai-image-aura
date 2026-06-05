@@ -30,6 +30,7 @@ interface ArchiveBlobPort {
     save(key: string, data: string): Promise<void>;
     load(key: string): Promise<string | null>;
     remove(key: string): Promise<void>;
+    listKeys(): Promise<string[]>;
 }
 
 interface CreateArchiveStoreDeps {
@@ -57,6 +58,10 @@ class StorageArchiveBlobPort implements ArchiveBlobPort {
     remove(key: string): Promise<void> {
         return this.provider.remove(key);
     }
+
+    listKeys(): Promise<string[]> {
+        return this.provider.listKeys();
+    }
 }
 
 class LocalArchiveStore implements ArchiveStore {
@@ -80,7 +85,11 @@ class LocalArchiveStore implements ArchiveStore {
     async list(): Promise<ArchiveImage[]> {
         const records = await this.metadata.list();
         const images = await Promise.all(records.map((record) => this.hydrate(record)));
-        return images.filter((image): image is ArchiveImage => image !== null);
+        const recoveredImages = await this.recoverOrphanedImageBlobs(records);
+        return [
+            ...images.filter((image): image is ArchiveImage => image !== null),
+            ...recoveredImages,
+        ];
     }
 
     async save(input: SaveArchiveImageInput): Promise<ArchiveImage> {
@@ -281,9 +290,63 @@ class LocalArchiveStore implements ArchiveStore {
 
         return { ...layerStack, layers };
     }
+
+    private async recoverOrphanedImageBlobs(records: ArchiveMetadataRecord[]): Promise<ArchiveImage[]> {
+        const knownImageIds = new Set(records.map((record) => record.id));
+        const imageIds = (await this.blobs.listKeys())
+            .map(getImageIdFromBlobKey)
+            .filter((id): id is string => id !== null && !knownImageIds.has(id))
+            .sort();
+
+        const recoveredImages = await Promise.all(imageIds.map((id) => this.recoverOrphanedImageBlob(id)));
+        return recoveredImages.filter((image): image is ArchiveImage => image !== null);
+    }
+
+    private async recoverOrphanedImageBlob(id: string): Promise<ArchiveImage | null> {
+        const url = await this.blobs.load(getImageBlobKey(id));
+        if (!url) {
+            return null;
+        }
+
+        const recoveredImage: ArchiveImage = {
+            id,
+            url,
+            prompt: 'Recovered image',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            timestamp: this.clock(),
+            width: 1024,
+            height: 1024,
+            references: [],
+        };
+
+        await this.metadata.save({
+            id,
+            storedUrl: id,
+            prompt: recoveredImage.prompt,
+            quality: recoveredImage.quality,
+            aspectRatio: recoveredImage.aspectRatio,
+            background: recoveredImage.background,
+            timestamp: recoveredImage.timestamp,
+            width: recoveredImage.width,
+            height: recoveredImage.height,
+            referenceIds: [],
+        });
+
+        return recoveredImage;
+    }
 }
 
 const getImageBlobKey = (id: string) => `img_${id}`;
+
+const getImageIdFromBlobKey = (key: string) => {
+    if (!key.startsWith('img_') || key.length === 'img_'.length) {
+        return null;
+    }
+
+    return key.slice('img_'.length);
+};
 
 const getReferenceBlobKey = (id: string, index: number) => `ref_${id}_${index}`;
 

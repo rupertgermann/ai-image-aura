@@ -91,6 +91,17 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         <p>Generated images will appear here after you save them.</p>
                     </div>
                 </div>
+            ) : filteredImages.length === 0 ? (
+                <div className="empty-archive">
+                    <div className="empty-state glass-panel">
+                        <Search size={48} className="dim-icon" />
+                        <h3>No Matches</h3>
+                        <p>No archived images match the current search.</p>
+                        <button className="btn-ghost" onClick={() => setSearch('')}>
+                            <X size={18} /> Clear Search
+                        </button>
+                    </div>
+                </div>
             ) : (
                 <div className="image-grid">
                     {filteredImages.map(img => (
