@@ -247,14 +247,14 @@ export function useGenerateController({
         });
 
         try {
-            const usedReferenceImages = referenceImages.slice();
+            const runReferenceImages = referenceImages.slice();
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
                 apiKey,
                 reasoningApiKey,
                 reasoningModel,
                 draft,
-                referenceImages: usedReferenceImages,
+                referenceImages: runReferenceImages,
                 sessionStore: session,
                 lineageStore: lineage,
                 workflow,
@@ -284,8 +284,8 @@ export function useGenerateController({
             });
 
             if (outcome.result.bestIteration) {
-                const usedReferences = await snapshotGeneratedReferenceImages({
-                    referenceImages: usedReferenceImages,
+                const usedReferences = outcome.usedReferences ?? await snapshotGeneratedReferenceImages({
+                    referenceImages: outcome.usedReferenceImages,
                     serializeReferenceFiles: workflow.serializeReferences,
                 });
                 setCurrentResult(outcome.result.bestIteration.imageDataUrl);

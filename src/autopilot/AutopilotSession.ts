@@ -75,14 +75,16 @@ class DefaultAutopilotSession implements AutopilotSession {
         const reasoningApiKey = this.input.reasoningApiKey ?? this.input.apiKey;
         const iterations: AutopilotIteration[] = [];
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
+        const runSettings = snapshotAutopilotSettings(this.input.settings);
         let currentPrompt = this.input.initialPrompt;
         let parentStepId = this.input.initialParentStepId ?? null;
         let runningBest: AutopilotIteration | null = null;
 
         for (let iterationNumber = 1; iterationNumber <= maxIterations; iterationNumber += 1) {
             try {
+                const iterationSettings = snapshotAutopilotSettings(runSettings);
                 const imageDataUrl = await generate({
-                    ...this.input.settings,
+                    ...iterationSettings,
                     apiKey: this.input.apiKey,
                     prompt: currentPrompt,
                 });
@@ -105,7 +107,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                         iterationNumber,
                         evaluation,
                         prompt: currentPrompt,
-                        settings: this.input.settings,
+                        settings: snapshotAutopilotSettings(runSettings),
                         outputImageDataUrl: imageDataUrl,
                     }),
                 });
@@ -186,4 +188,13 @@ function pickBetterIteration(best: AutopilotIteration | null, candidate: Autopil
 
 export function createAutopilotSession(input: CreateAutopilotSessionInput): AutopilotSession {
     return new DefaultAutopilotSession(input);
+}
+
+function snapshotAutopilotSettings(
+    settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>,
+): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
+    return {
+        ...settings,
+        referenceImages: settings.referenceImages.slice(),
+    };
 }

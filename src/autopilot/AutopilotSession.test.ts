@@ -127,6 +127,44 @@ describe('AutopilotSession', () => {
         expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 1]);
     });
 
+    it('freezes the Reference image snapshot for every iteration', async () => {
+        const lineage = createStore();
+        const firstReference = new File(['reference-0'], 'ref-0.png', { type: 'image/png' });
+        const secondReference = new File(['reference-1'], 'ref-1.png', { type: 'image/png' });
+        const settings = createSettings({
+            referenceImages: [firstReference, secondReference],
+        });
+        const seenReferenceNames: string[][] = [];
+        const generate = vi.fn(async (input: GenerateImageInput) => {
+            seenReferenceNames.push(input.referenceImages.map((file) => file.name));
+            input.referenceImages.push(new File(['request-mutation'], `request-mutated-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+            settings.referenceImages.push(new File(['external-mutation'], `external-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+
+            return `data:image/png;base64,iteration-${seenReferenceNames.length}`;
+        });
+
+        const result = await createAutopilotSession({
+            goal: 'A cinematic portrait',
+            initialPrompt: 'prompt 1',
+            settings,
+            apiKey: 'key',
+            maxIterations: 2,
+            satisfactionThreshold: 90,
+            generate,
+            evaluate: vi.fn()
+                .mockResolvedValueOnce({ score: 50, feedback: ['Keep going.'] })
+                .mockResolvedValueOnce({ score: 95, feedback: ['Strong match.'] }),
+            refine: vi.fn().mockResolvedValueOnce('prompt 2'),
+            lineageStore: lineage,
+        }).run();
+
+        expect(result.status).toBe('satisfied');
+        expect(seenReferenceNames).toEqual([
+            ['ref-0.png', 'ref-1.png'],
+            ['ref-0.png', 'ref-1.png'],
+        ]);
+    });
+
     it('stops early when the satisfaction threshold is met', async () => {
         const lineage = createStore();
         const generate = vi.fn().mockResolvedValueOnce('data:image/png;base64,one');
@@ -219,7 +257,9 @@ function createStore(): LineageStore {
     });
 }
 
-function createSettings(): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
+function createSettings(
+    overrides: Partial<Omit<GenerateImageInput, 'apiKey' | 'prompt'>> = {},
+): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
     return {
         model: OPENAI_IMAGE_MODEL,
         quality: 'high' as const,
@@ -229,5 +269,6 @@ function createSettings(): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
         lighting: 'golden hour',
         palette: 'copper + teal + cream',
         referenceImages: [],
+        ...overrides,
     };
 }

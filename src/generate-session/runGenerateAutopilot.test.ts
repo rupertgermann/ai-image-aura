@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
+import { NANO_BANANA_PRO_IMAGE_MODEL } from '../utils/openaiModels';
+import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import type { LineageStep, SaveLineageStepInput } from '../lineage/LineageStore';
 
 describe('runGenerateAutopilot', () => {
     it('delegates to AutopilotSession and persists the best result', async () => {
@@ -77,8 +80,102 @@ describe('runGenerateAutopilot', () => {
         }));
         expect(run).toHaveBeenCalledOnce();
         expect(onSessionCreated).toHaveBeenCalledWith(expect.objectContaining({ run, cancel }));
-        expect(saveCurrentResult).toHaveBeenCalledWith('data:image/png;base64,best');
+        expect(saveCurrentResult).toHaveBeenCalledWith('data:image/png;base64,best', []);
         expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'autopilot:run:iteration:1', stepId: 'step-1' });
         expect(outcome.session.cancel).toBe(cancel);
+    });
+
+    it('limits and persists the provider-used Reference image snapshot for Nano Banana Pro runs', async () => {
+        const selectedReferenceFiles = Array.from({ length: 15 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
+        );
+        const expectedProviderReferenceFiles = selectedReferenceFiles.slice(0, 14);
+        const expectedProviderReferenceNames = expectedProviderReferenceFiles.map((file) => file.name);
+        const selectedReferenceDataUrls = selectedReferenceFiles.map((file, index) =>
+            `data:${file.type};base64,reference-${index}`,
+        );
+        const referenceDataUrlByFile = new Map<File, string>(
+            selectedReferenceFiles.map((file, index) => [file, selectedReferenceDataUrls[index]]),
+        );
+        const seenReferenceNames: string[][] = [];
+        const generate = vi.fn(async (input: GenerateImageInput) => {
+            seenReferenceNames.push(input.referenceImages.map((file) => file.name));
+            input.referenceImages.push(new File(['request-mutation'], `request-mutated-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+            selectedReferenceFiles.unshift(new File(['new-reference'], `new-ref-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+
+            return `data:image/png;base64,iteration-${seenReferenceNames.length}`;
+        });
+        const saveCurrentResult = vi.fn(async () => undefined);
+        const serializeReferences = vi.fn(async (files: File[]) =>
+            files.map((file) => referenceDataUrlByFile.get(file) ?? 'data:image/png;base64,unknown'),
+        );
+        let nextStep = 0;
+        const saveLineageStep = vi.fn(async (step: SaveLineageStepInput): Promise<LineageStep> => {
+            nextStep += 1;
+            return {
+                id: `step-${nextStep}`,
+                archiveImageId: step.archiveImageId,
+                parentStepId: step.parentStepId ?? null,
+                stepType: step.stepType,
+                timestamp: step.timestamp ?? '2026-06-05T12:00:00.000Z',
+                metadata: step.metadata,
+            };
+        });
+
+        const outcome = await runGenerateAutopilot({
+            goal: 'A cinematic portrait',
+            apiKey: 'key',
+            reasoningApiKey: 'reasoning-key',
+            draft: {
+                model: NANO_BANANA_PRO_IMAGE_MODEL,
+                prompt: 'prompt 1',
+                style: 'risograph poster',
+                lighting: 'golden hour',
+                palette: 'copper + teal + cream',
+                gptImage2: {
+                    quality: 'high',
+                    size: '1024x1024',
+                    background: 'transparent',
+                },
+                nanoBananaPro: {
+                    aspectRatio: '16:9',
+                    imageSize: '4K',
+                },
+                isSaved: false,
+            },
+            referenceImages: selectedReferenceFiles,
+            sessionStore: {
+                loadLineageSource: () => null,
+                saveCurrentResult,
+                saveLineageSource: vi.fn(),
+            },
+            lineageStore: {
+                save: saveLineageStep,
+            },
+            workflow: {
+                generate,
+                serializeReferences,
+            },
+            evaluate: vi.fn()
+                .mockResolvedValueOnce({ score: 45, feedback: ['Needs stronger lighting.'] })
+                .mockResolvedValueOnce({ score: 88, feedback: ['Best so far.'] }),
+            refine: vi.fn().mockResolvedValueOnce('best prompt'),
+            maxIterations: 2,
+            satisfactionThreshold: 90,
+        });
+
+        expect(seenReferenceNames).toEqual([
+            expectedProviderReferenceNames,
+            expectedProviderReferenceNames,
+        ]);
+        expect(serializeReferences).toHaveBeenCalledWith(expectedProviderReferenceFiles);
+        expect(saveCurrentResult).toHaveBeenCalledWith(
+            'data:image/png;base64,iteration-2',
+            selectedReferenceDataUrls.slice(0, 14),
+        );
+        expect(outcome.usedReferenceImages.map((file) => file.name)).toEqual(
+            expectedProviderReferenceNames,
+        );
+        expect(outcome.usedReferences).toEqual(selectedReferenceDataUrls.slice(0, 14));
     });
 });
