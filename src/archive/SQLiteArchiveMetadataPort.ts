@@ -61,8 +61,8 @@ export class SQLiteArchiveMetadataPort {
                 ${record.background},
                 ${record.timestamp},
                 ${record.model || OPENAI_IMAGE_MODEL},
-                ${record.width || 1024},
-                ${record.height || 1024},
+                ${record.width ?? null},
+                ${record.height ?? null},
                 ${JSON.stringify(record.referenceIds)},
                 ${record.style || null},
                 ${record.lighting || null},
@@ -86,8 +86,8 @@ export class SQLiteArchiveMetadataPort {
             background: image.background,
             timestamp: image.timestamp,
             model: image.model,
-            width: image.width,
-            height: image.height,
+            width: optionalNumber(image.width),
+            height: optionalNumber(image.height),
             style: image.style,
             lighting: image.lighting,
             palette: image.palette,
@@ -114,8 +114,8 @@ export class SQLiteArchiveMetadataPort {
             background: row.background,
             timestamp: row.timestamp,
             model: row.model,
-            width: row.width,
-            height: row.height,
+            width: optionalNumber(row.width),
+            height: optionalNumber(row.height),
             style: row.style,
             lighting: row.lighting,
             palette: row.palette,
@@ -140,6 +140,10 @@ const parseReferenceIds = (value?: string): number[] => {
     } catch {
         return [];
     }
+};
+
+const optionalNumber = (value: unknown): number | undefined => {
+    return typeof value === 'number' ? value : undefined;
 };
 
 const parseLayerStack = (value?: string): ArchiveLayerStack | undefined => {

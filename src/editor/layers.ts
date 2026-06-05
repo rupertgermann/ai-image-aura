@@ -24,8 +24,7 @@ export interface LayerHistoryState {
 }
 
 export function createBaseLayerStack(image: ArchiveImage): ArchiveLayerStack {
-    const canvasWidth = image.width ?? 1024;
-    const canvasHeight = image.height ?? 1024;
+    const { width: canvasWidth, height: canvasHeight } = resolveImageDimensions(image);
 
     return {
         canvasWidth,
@@ -51,7 +50,7 @@ export function createBaseLayerStack(image: ArchiveImage): ArchiveLayerStack {
 
 export function hydrateLayerStack(image: ArchiveImage): ArchiveLayerStack {
     if (image.layerStack?.layers.length) {
-        return normalizeLayerStack(image.layerStack);
+        return repairLayerStackDimensions(normalizeLayerStack(image.layerStack), image);
     }
 
     return createBaseLayerStack(image);
@@ -89,6 +88,13 @@ export function createEditorDraft(image: ArchiveImage): EditorDraft {
     };
 }
 
+export function repairEditorDraftForImage(draft: EditorDraft, image: ArchiveImage): EditorDraft {
+    return {
+        ...draft,
+        layerStack: repairLayerStackDimensions(normalizeLayerStack(draft.layerStack), image),
+    };
+}
+
 export function hasDurableLayerStack(layerStack: ArchiveLayerStack): boolean {
     return layerStack.layers.some((layer) => layer.kind !== 'base');
 }
@@ -98,8 +104,9 @@ export function addUploadedLayer(
     assetUrl: string,
     makeId: () => string,
     name = 'Uploaded layer',
+    sourceSize?: { width: number; height: number },
 ): { layerStack: ArchiveLayerStack; layerId: string } {
-    const { width, height } = fitLayerToCanvas(layerStack.canvasWidth, layerStack.canvasHeight);
+    const { width, height } = fitLayerToCanvas(layerStack.canvasWidth, layerStack.canvasHeight, sourceSize);
     const layerId = makeId();
     const layer: ArchiveLayer = {
         id: layerId,
@@ -204,6 +211,13 @@ export function moveLayer(layerStack: ArchiveLayerStack, layerId: string, direct
     const [removed] = layers.splice(index, 1);
     layers.splice(nextIndex, 0, removed);
     return { ...layerStack, layers };
+}
+
+export function getEditableLayerIds(layerStack: ArchiveLayerStack, layerIds: string[]): string[] {
+    const selected = new Set(layerIds);
+    return layerStack.layers
+        .filter((layer) => selected.has(layer.id) && layer.kind !== 'base' && !layer.locked)
+        .map((layer) => layer.id);
 }
 
 export function updateLayer(layerStack: ArchiveLayerStack, layerId: string, patch: Partial<ArchiveLayer>): ArchiveLayerStack {
@@ -340,13 +354,141 @@ export function redoHistory(history: LayerHistoryState): LayerHistoryState {
     };
 }
 
-function fitLayerToCanvas(canvasWidth: number, canvasHeight: number) {
+function fitLayerToCanvas(canvasWidth: number, canvasHeight: number, sourceSize?: { width: number; height: number }) {
     const maxWidth = canvasWidth * 0.6;
     const maxHeight = canvasHeight * 0.6;
-    const size = Math.max(1, Math.min(maxWidth, maxHeight));
-    return { width: size, height: size };
+    const sourceWidth = Math.max(1, sourceSize?.width ?? 1);
+    const sourceHeight = Math.max(1, sourceSize?.height ?? 1);
+    const scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+
+    return {
+        width: sourceWidth * scale,
+        height: sourceHeight * scale,
+    };
 }
 
 function clampOpacity(opacity: number) {
     return Math.min(1, Math.max(0, opacity));
+}
+
+function resolveImageDimensions(image: Pick<ArchiveImage, 'width' | 'height' | 'aspectRatio' | 'quality'>) {
+    const explicitDimensions = getValidDimensions(image.width, image.height);
+    const aspectDimensions = getAspectRatioDimensions(image.aspectRatio, image.quality);
+
+    if (!explicitDimensions) {
+        return aspectDimensions ?? { width: 1024, height: 1024 };
+    }
+
+    if (aspectDimensions && shouldRepairSquareFallback(explicitDimensions, aspectDimensions)) {
+        return aspectDimensions;
+    }
+
+    return explicitDimensions;
+}
+
+function repairLayerStackDimensions(layerStack: ArchiveLayerStack, image: ArchiveImage): ArchiveLayerStack {
+    const targetDimensions = resolveImageDimensions(image);
+    if (layerStack.canvasWidth === targetDimensions.width && layerStack.canvasHeight === targetDimensions.height) {
+        return layerStack;
+    }
+
+    if (!shouldRepairSquareFallback({
+        width: layerStack.canvasWidth,
+        height: layerStack.canvasHeight,
+    }, targetDimensions)) {
+        return layerStack;
+    }
+
+    const scaleX = targetDimensions.width / layerStack.canvasWidth;
+    const scaleY = targetDimensions.height / layerStack.canvasHeight;
+
+    return {
+        ...layerStack,
+        canvasWidth: targetDimensions.width,
+        canvasHeight: targetDimensions.height,
+        layers: layerStack.layers.map((layer) => ({
+            ...layer,
+            x: layer.kind === 'base' ? 0 : layer.x * scaleX,
+            y: layer.kind === 'base' ? 0 : layer.y * scaleY,
+            width: layer.width * scaleX,
+            height: layer.height * scaleY,
+        })),
+    };
+}
+
+function getValidDimensions(width: number | undefined, height: number | undefined) {
+    if (!width || !height || width <= 0 || height <= 0) {
+        return null;
+    }
+
+    return { width, height };
+}
+
+function getAspectRatioDimensions(aspectRatio: string, quality: string) {
+    const exactDimensions = parseExactDimensions(aspectRatio);
+    if (exactDimensions) {
+        return exactDimensions;
+    }
+
+    const ratioDimensions = parseRatioDimensions(aspectRatio, getLongEdgeFromQuality(quality));
+    return ratioDimensions;
+}
+
+function parseExactDimensions(aspectRatio: string) {
+    const match = aspectRatio.match(/^(\d+)x(\d+)$/);
+    if (!match) {
+        return null;
+    }
+
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    return getValidDimensions(width, height);
+}
+
+function parseRatioDimensions(aspectRatio: string, longEdge: number) {
+    const match = aspectRatio.match(/^(\d+):(\d+)$/);
+    if (!match) {
+        return null;
+    }
+
+    const widthRatio = Number(match[1]);
+    const heightRatio = Number(match[2]);
+    if (!widthRatio || !heightRatio) {
+        return null;
+    }
+
+    if (widthRatio >= heightRatio) {
+        return {
+            width: longEdge,
+            height: Math.max(1, Math.round(longEdge * (heightRatio / widthRatio))),
+        };
+    }
+
+    return {
+        width: Math.max(1, Math.round(longEdge * (widthRatio / heightRatio))),
+        height: longEdge,
+    };
+}
+
+function getLongEdgeFromQuality(quality: string) {
+    if (quality === '4K') {
+        return 4096;
+    }
+
+    if (quality === '2K') {
+        return 2048;
+    }
+
+    return 1024;
+}
+
+function shouldRepairSquareFallback(
+    explicitDimensions: { width: number; height: number },
+    aspectDimensions: { width: number; height: number } | null,
+) {
+    if (!aspectDimensions || aspectDimensions.width === aspectDimensions.height) {
+        return false;
+    }
+
+    return explicitDimensions.width === 1024 && explicitDimensions.height === 1024;
 }
