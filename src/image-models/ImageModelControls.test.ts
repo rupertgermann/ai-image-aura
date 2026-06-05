@@ -233,17 +233,19 @@ describe('Image model controls', () => {
 
         expect(mapImageModelEditProviderRequest(OPENAI_IMAGE_MODEL, {
             sourceImage,
+            compositionContextImage: references[1],
             referenceImages: references.slice(0, 1),
             quality: 'low',
         })).toEqual({
             quality: 'low',
             size: '1024x1024',
             background: 'auto',
-            referenceImages: [sourceImage, references[0]],
+            referenceImages: [sourceImage, references[1], references[0]],
         });
 
         const nanoRequest = mapImageModelEditProviderRequest(NANO_BANANA_PRO_IMAGE_MODEL, {
             sourceImage,
+            compositionContextImage: new File(['context'], 'composition-context.png', { type: 'image/png' }),
             referenceImages: references,
         });
 
@@ -251,9 +253,13 @@ describe('Image model controls', () => {
             aspectRatio: '1:1',
             imageSize: '1K',
             preserveSourceDimensions: true,
-            referenceImages: [sourceImage, ...references.slice(0, 13)],
+            referenceImages: [
+                sourceImage,
+                expect.objectContaining({ name: 'composition-context.png' }),
+                ...references.slice(0, 14),
+            ],
         });
-        expect(nanoRequest.referenceImages).toHaveLength(14);
+        expect(nanoRequest.referenceImages).toHaveLength(16);
     });
 
     it('exposes shared UI facts for Reference image limits used by Generate and Editor', () => {

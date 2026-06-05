@@ -218,6 +218,41 @@ describe('saveEditedImage', () => {
         expect(steps.at(-1)?.metadata).not.toHaveProperty('layerStack');
     });
 
+    it('counts only saved user Reference images in AI edit lineage metadata', async () => {
+        const lineage = createStore();
+        await seedSourceLineage(lineage);
+
+        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,edited-with-refs', {
+            ...createSaveContext(),
+            isCopy: true,
+            references: [
+                'data:image/png;base64,user-ref-1',
+                'data:image/png;base64,user-ref-2',
+            ],
+            aiEditPrompt: 'blend the selected subject into the scene',
+            targetMode: 'selected-layers',
+            targetLayerCount: 1,
+            targetIncludesBaseLayer: false,
+        }, {
+            saveImage: vi.fn(async (image) => image),
+            lineageStore: lineage,
+            makeId: () => 'edit-with-user-refs',
+        });
+
+        const steps = await lineage.getByArchiveImageId(savedImage.id);
+        expect(steps.at(-1)).toEqual(expect.objectContaining({
+            stepType: 'ai-edit',
+            metadata: expect.objectContaining({
+                referenceCount: 2,
+                targetMode: 'selected-layers',
+            }),
+        }));
+        expect(savedImage.references).toEqual([
+            'data:image/png;base64,user-ref-1',
+            'data:image/png;base64,user-ref-2',
+        ]);
+    });
+
 
     it('uses an explicit parent step id when forking from an older lineage step', async () => {
         const lineage = createStore();

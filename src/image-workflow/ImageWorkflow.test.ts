@@ -219,7 +219,36 @@ describe('ImageWorkflow', () => {
         })).rejects.toThrow('No image data returned from image provider');
     });
 
-    it('sends the editable source before composition context and user references', async () => {
+    it('sends whole-composition edit requests with the editable source before user references', async () => {
+        let seenReferenceImages: File[] = [];
+        const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
+            seenReferenceImages = input.referenceImages ?? [];
+            return { b64_json: 'edited' };
+        });
+        const providers: ImageProviderRegistry = {
+            openai: {
+                generate: vi.fn(),
+                edit,
+            },
+        };
+        const workflow = createImageWorkflow(providers);
+        const sourceImage = new Blob(['whole-composition'], { type: 'image/png' });
+        const userReference = new File(['reference'], 'user-reference.png', { type: 'image/png' });
+
+        await workflow.edit({
+            apiKey: 'sk-test',
+            prompt: 'make it cinematic',
+            sourceImage,
+            referenceImages: [userReference],
+        });
+
+        expect(seenReferenceImages.map((file) => file.name)).toEqual([
+            'edit-input.png',
+            'user-reference.png',
+        ]);
+    });
+
+    it('sends selected-layer edit requests with composition context before user references', async () => {
         let seenReferenceImages: File[] = [];
         const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
             seenReferenceImages = input.referenceImages ?? [];
@@ -240,7 +269,8 @@ describe('ImageWorkflow', () => {
             apiKey: 'sk-test',
             prompt: 'replace the sky',
             sourceImage,
-            referenceImages: [compositionContext, userReference],
+            compositionContextImage: compositionContext,
+            referenceImages: [userReference],
         });
 
         expect(seenReferenceImages.map((file) => file.name)).toEqual([
@@ -271,6 +301,7 @@ describe('ImageWorkflow', () => {
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'make it cinematic',
             sourceImage: new Blob(['source'], { type: 'image/png' }),
+            compositionContextImage: new File(['composition'], 'composition-context.png', { type: 'image/png' }),
             referenceImages: references,
         });
 
@@ -282,6 +313,7 @@ describe('ImageWorkflow', () => {
         }));
         expect(request?.referenceImages?.map((file) => file.name)).toEqual([
             'edit-input.png',
+            'composition-context.png',
             'ref-0.png',
             'ref-1.png',
             'ref-2.png',
@@ -295,6 +327,7 @@ describe('ImageWorkflow', () => {
             'ref-10.png',
             'ref-11.png',
             'ref-12.png',
+            'ref-13.png',
         ]);
     });
 });

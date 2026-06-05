@@ -90,10 +90,6 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
             if (!canvasRef.current) throw new Error('Canvas not ready');
             return canvasRef.current.exportDataUrl();
         },
-        exportBlob: async () => {
-            if (!canvasRef.current) throw new Error('Canvas not ready');
-            return canvasRef.current.exportBlob();
-        },
         adjustments,
         onSave,
     });

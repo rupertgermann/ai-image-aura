@@ -1,16 +1,13 @@
 import { useCallback, useState } from 'react';
 import type { ArchiveLayerStack } from '../db/types';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
-import { dataURLtoFile } from '../utils/file';
 import type { ImageModelSlug } from '../utils/openaiModels';
+import { applyAiTransformResultToDraft, renderAiTransformEditInput } from './aiTransform';
 import {
     hasDurableLayerStack,
-    insertAiResultLayer,
-    planAiTransformTarget,
     type EditorAdjustments,
     type EditorDraft,
 } from './layers';
-import { renderLayerStackToBlob } from './renderLayerStack';
 import type { EditorSaveContext } from './saveEditedImage';
 
 interface UseEditorControllerOptions {
@@ -25,7 +22,6 @@ interface UseEditorControllerOptions {
     addReferenceFiles: (files: File[]) => void;
     serializeReferences: () => Promise<string[]>;
     exportDataUrl: () => Promise<string>;
-    exportBlob: () => Promise<Blob>;
     adjustments: EditorAdjustments;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void | Promise<void>;
 }
@@ -41,7 +37,6 @@ export function useEditorController({
     addReferenceFiles,
     serializeReferences,
     exportDataUrl,
-    exportBlob,
     adjustments,
     onSave,
 }: UseEditorControllerOptions) {
@@ -106,48 +101,42 @@ export function useEditorController({
         setAiError(null);
 
         try {
-            const targetPlan = planAiTransformTarget(draft);
-            const sourceLayerStack = draft.layerStack;
-            const sourceImage = targetPlan.mode === 'selected-layers'
-                ? await renderLayerStackToBlob({
-                    ...sourceLayerStack,
-                    layers: sourceLayerStack.layers.filter((layer) => targetPlan.targetLayerIds.includes(layer.id)),
-                }, adjustments, targetPlan.targetBounds)
-                : await exportBlob();
-            const contextReferences = targetPlan.requiresCompositionContext
-                ? [dataURLtoFile(await exportDataUrl(), 'composition-context.png')]
-                : [];
+            const editInput = await renderAiTransformEditInput({
+                draft,
+                adjustments,
+                referenceImages,
+            });
             const resultUrl = await imageWorkflow.edit({
                 apiKey,
                 model,
                 prompt: aiPrompt,
-                sourceImage,
-                referenceImages: [...contextReferences, ...referenceImages],
+                sourceImage: editInput.sourceImage,
+                compositionContextImage: editInput.compositionContextImage,
+                referenceImages: editInput.referenceImages,
                 quality: 'medium',
             });
-            const result = insertAiResultLayer(sourceLayerStack, targetPlan.targetLayerIds, resultUrl, () => crypto.randomUUID());
-            const resultLayer = result.layerStack.layers.find((layer) => layer.id === result.layerId);
+            const result = applyAiTransformResultToDraft(
+                draft,
+                editInput.targetPlan,
+                resultUrl,
+                () => crypto.randomUUID(),
+            );
 
-            commitDraft({
-                ...draft,
-                layerStack: result.layerStack,
-                selectedLayerIds: [result.layerId],
-                primarySelectedLayerId: result.layerId,
-            });
+            commitDraft(result.draft);
             setLastAiEditPrompt(aiPrompt.trim());
             setLastAiEditModel(model);
-            setLastAiTargetMode(targetPlan.metadata.targetMode);
-            setLastAiTargetLayerCount(targetPlan.metadata.targetLayerCount);
-            setLastAiTargetIncludesBaseLayer(targetPlan.metadata.targetIncludesBaseLayer);
-            setLastAiResultLayerId(result.layerId);
-            setLastAiResultLayerName(resultLayer?.name ?? null);
+            setLastAiTargetMode(editInput.targetPlan.metadata.targetMode);
+            setLastAiTargetLayerCount(editInput.targetPlan.metadata.targetLayerCount);
+            setLastAiTargetIncludesBaseLayer(editInput.targetPlan.metadata.targetIncludesBaseLayer);
+            setLastAiResultLayerId(result.resultLayerId);
+            setLastAiResultLayerName(result.resultLayerName);
             setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {
             setAiLoading(false);
         }
-    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, exportBlob, exportDataUrl, isCanvasReady, layerStack, model, referenceImages]);
+    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, isCanvasReady, layerStack, model, referenceImages]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();

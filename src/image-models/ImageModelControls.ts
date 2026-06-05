@@ -348,12 +348,18 @@ export function mapImageModelEditProviderRequest(
     model: ImageModelSlug,
     input: {
         sourceImage: File;
+        compositionContextImage?: File | null;
         referenceImages: File[];
         quality?: ImageQuality;
         aspectRatio?: NanoBananaAspectRatio;
         imageSize?: NanoBananaImageSize;
     },
 ) {
+    const referenceImages = [
+        ...(input.compositionContextImage ? [input.compositionContextImage] : []),
+        ...limitReferenceImagesForImageModel(model, input.referenceImages),
+    ];
+
     if (model === NANO_BANANA_PRO_IMAGE_MODEL) {
         const controls = sanitizeImageModelControls(model, {
             aspectRatio: input.aspectRatio,
@@ -363,7 +369,7 @@ export function mapImageModelEditProviderRequest(
             aspectRatio: controls.aspectRatio,
             imageSize: controls.imageSize,
             preserveSourceDimensions: true,
-            referenceImages: [input.sourceImage, ...input.referenceImages.slice(0, NANO_REFERENCE_LIMIT - 1)],
+            referenceImages: [input.sourceImage, ...referenceImages],
         };
     }
 
@@ -371,7 +377,7 @@ export function mapImageModelEditProviderRequest(
         quality: coerceImageQuality(input.quality, 'medium'),
         size: '1024x1024',
         background: 'auto' as ImageBackground,
-        referenceImages: [input.sourceImage, ...input.referenceImages],
+        referenceImages: [input.sourceImage, ...referenceImages],
     };
 }
 
