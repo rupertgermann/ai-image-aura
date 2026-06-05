@@ -544,6 +544,10 @@ textarea {
     gap: var(--element-gap);
 }
 
+.collapsible-section-body[hidden] {
+    display: none;
+}
+
 .section-desc,
 .empty-state p,
 .confirm-body p,
