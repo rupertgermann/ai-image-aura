@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw } from 'lucide-react';
+import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { EditorCanvas, type EditorCanvasHandle } from '../editor/EditorCanvas';
 import { LayerPanel } from '../editor/LayerPanel';
@@ -18,6 +18,8 @@ interface EditorViewProps {
 const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
+    const [adjustmentsOpen, setAdjustmentsOpen] = useState(true);
+    const [filtersOpen, setFiltersOpen] = useState(true);
     const canvasRef = useRef<EditorCanvasHandle>(null);
     const activeModel = resolveImageModelConfig(aiEditModel);
     const activeApiKey = getProviderKey(activeModel.provider);
@@ -203,70 +205,88 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                     )}
 
                     <div className="sidebar-group">
-                        <div className="section-title">
+                        <button
+                            className="section-title section-toggle"
+                            type="button"
+                            aria-expanded={adjustmentsOpen}
+                            aria-controls="editor-adjustments-panel"
+                            onClick={() => setAdjustmentsOpen((open) => !open)}
+                        >
                             <Sliders size={18} className="icon-purple" />
-                            <h3>Adjustments</h3>
-                        </div>
+                            <span className="section-heading">Adjustments</span>
+                            {adjustmentsOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
 
-                        <div className="slider-group">
-                            <div className="slider-label">
-                                <span>Brightness</span>
-                                <span>{brightness}%</span>
+                        <div id="editor-adjustments-panel" className="collapsible-section-body" hidden={!adjustmentsOpen}>
+                            <div className="slider-group">
+                                <div className="slider-label">
+                                    <span>Brightness</span>
+                                    <span>{brightness}%</span>
+                                </div>
+                                <input
+                                    type="range" min="0" max="200" value={brightness}
+                                    onChange={(e) => setBrightness(Number(e.target.value))}
+                                    className="editor-slider"
+                                />
                             </div>
-                            <input
-                                type="range" min="0" max="200" value={brightness}
-                                onChange={(e) => setBrightness(Number(e.target.value))}
-                                className="editor-slider"
-                            />
-                        </div>
 
-                        <div className="slider-group">
-                            <div className="slider-label">
-                                <span>Contrast</span>
-                                <span>{contrast}%</span>
+                            <div className="slider-group">
+                                <div className="slider-label">
+                                    <span>Contrast</span>
+                                    <span>{contrast}%</span>
+                                </div>
+                                <input
+                                    type="range" min="0" max="200" value={contrast}
+                                    onChange={(e) => setContrast(Number(e.target.value))}
+                                    className="editor-slider"
+                                />
                             </div>
-                            <input
-                                type="range" min="0" max="200" value={contrast}
-                                onChange={(e) => setContrast(Number(e.target.value))}
-                                className="editor-slider"
-                            />
-                        </div>
 
-                        <div className="slider-group">
-                            <div className="slider-label">
-                                <span>Saturation</span>
-                                <span>{saturation}%</span>
+                            <div className="slider-group">
+                                <div className="slider-label">
+                                    <span>Saturation</span>
+                                    <span>{saturation}%</span>
+                                </div>
+                                <input
+                                    type="range" min="0" max="200" value={saturation}
+                                    onChange={(e) => setSaturation(Number(e.target.value))}
+                                    className="editor-slider"
+                                />
                             </div>
-                            <input
-                                type="range" min="0" max="200" value={saturation}
-                                onChange={(e) => setSaturation(Number(e.target.value))}
-                                className="editor-slider"
-                            />
                         </div>
                     </div>
 
                     <div className="sidebar-group">
-                        <div className="section-title">
+                        <button
+                            className="section-title section-toggle"
+                            type="button"
+                            aria-expanded={filtersOpen}
+                            aria-controls="editor-filters-panel"
+                            onClick={() => setFiltersOpen((open) => !open)}
+                        >
                             <MoveHorizontal size={18} className="icon-purple" />
-                            <h3>Filters</h3>
-                        </div>
-                        <div className="filter-grid">
-                            <button
-                                className={`filter-btn ${filter === 'none' ? 'active' : ''}`}
-                                onClick={() => setFilter('none')}
-                            >Normal</button>
-                            <button
-                                className={`filter-btn ${filter === 'grayscale(100%)' ? 'active' : ''}`}
-                                onClick={() => setFilter('grayscale(100%)')}
-                            >B&W</button>
-                            <button
-                                className={`filter-btn ${filter === 'sepia(100%)' ? 'active' : ''}`}
-                                onClick={() => setFilter('sepia(100%)')}
-                            >Sepia</button>
-                            <button
-                                className={`filter-btn ${filter === 'blur(5px)' ? 'active' : ''}`}
-                                onClick={() => setFilter('blur(5px)')}
-                            >Soft</button>
+                            <span className="section-heading">Filters</span>
+                            {filtersOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
+                        <div id="editor-filters-panel" className="collapsible-section-body" hidden={!filtersOpen}>
+                            <div className="filter-grid">
+                                <button
+                                    className={`filter-btn ${filter === 'none' ? 'active' : ''}`}
+                                    onClick={() => setFilter('none')}
+                                >Normal</button>
+                                <button
+                                    className={`filter-btn ${filter === 'grayscale(100%)' ? 'active' : ''}`}
+                                    onClick={() => setFilter('grayscale(100%)')}
+                                >B&W</button>
+                                <button
+                                    className={`filter-btn ${filter === 'sepia(100%)' ? 'active' : ''}`}
+                                    onClick={() => setFilter('sepia(100%)')}
+                                >Sepia</button>
+                                <button
+                                    className={`filter-btn ${filter === 'blur(5px)' ? 'active' : ''}`}
+                                    onClick={() => setFilter('blur(5px)')}
+                                >Soft</button>
+                            </div>
                         </div>
                     </div>
 

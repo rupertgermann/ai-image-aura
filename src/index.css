@@ -507,6 +507,7 @@ textarea {
 
 .section-title h2,
 .section-title h3,
+.section-heading,
 .editor-sidebar h3,
 .empty-state h3,
 .confirm-body h3,
@@ -515,6 +516,32 @@ textarea {
     font-size: var(--text-heading-sm);
     font-weight: var(--font-weight-regular);
     line-height: var(--leading-heading-sm);
+}
+
+.section-toggle {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 0;
+    text-align: left;
+}
+
+.section-toggle .section-heading {
+    flex: 1;
+}
+
+.section-toggle svg:last-child {
+    color: var(--color-steel);
+}
+
+.section-toggle:hover .section-heading,
+.section-toggle:hover svg:last-child {
+    color: var(--color-amber-glow);
+}
+
+.collapsible-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--element-gap);
 }
 
 .section-desc,
