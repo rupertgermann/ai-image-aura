@@ -72,7 +72,7 @@ describe('ArchiveTransfer', () => {
 
     it('round-trips archive images and lineage relationships through ZIP import', async () => {
         const sourceLineage = createStore();
-        const sourceImages = createImages();
+        const sourceImages = [...createImages(), createLayeredImage()];
         await seedLineage(sourceLineage);
 
         const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: sourceLineage });
@@ -86,9 +86,10 @@ describe('ArchiveTransfer', () => {
 
         expect(summary.brokenParentReferences).toEqual([]);
         expect(summary.missingAssetFiles).toEqual([]);
-        expect(summary.importedImageIds).toEqual(['image-1', 'image-2', 'image-3']);
+        expect(summary.importedImageIds).toEqual(['image-1', 'image-2', 'image-3', 'layered-image']);
         expect(summary.importedStepIds).toEqual(['step-1', 'step-2', 'step-3', 'step-4']);
-        expect(Array.from(archiveStore.images.keys())).toEqual(['image-1', 'image-2', 'image-3']);
+        expect(Array.from(archiveStore.images.keys())).toEqual(['image-1', 'image-2', 'image-3', 'layered-image']);
+        expect(archiveStore.images.get('layered-image')?.layerStack?.layers.map((layer) => layer.id)).toEqual(['base', 'upload']);
 
         await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
             expect.objectContaining({ id: 'step-1', stepType: 'generation', parentStepId: null }),
@@ -177,6 +178,50 @@ describe('ArchiveTransfer', () => {
             { stepId: 'step-1', parentStepId: 'missing-parent' },
         ]);
         expect(summary.importedStepIds).toEqual(['step-1']);
+    });
+
+    it('rejects malformed layer stack entries through the shared manifest parser', async () => {
+        const zip = new JSZip();
+        zip.file('aura-layered-image.png', Uint8Array.from([105, 109, 103]));
+        zip.file('archive-manifest.json', JSON.stringify({
+            version: 1,
+            images: [
+                {
+                    id: 'layered-image',
+                    prompt: 'broken layered import',
+                    quality: 'high',
+                    aspectRatio: '1024x1024',
+                    background: 'transparent',
+                    timestamp: '2026-04-04T12:00:00.000Z',
+                    imageFileName: 'aura-layered-image.png',
+                    references: [],
+                    layerStack: {
+                        canvasWidth: 1024,
+                        canvasHeight: 1024,
+                        layers: [
+                            {
+                                id: 'base',
+                                name: 'Base',
+                                kind: 'base',
+                                assetFileName: 'aura-layered-image-layer-base.png',
+                                x: 0,
+                                y: 0,
+                                height: 1024,
+                                rotation: 0,
+                                opacity: 1,
+                                visible: true,
+                                locked: true,
+                            },
+                        ],
+                    },
+                },
+            ],
+        }));
+
+        await expect(importArchiveZip(await zip.generateAsync({ type: 'uint8array' }), {
+            archiveStore: new InMemoryArchiveStore(),
+            lineageStore: createStore(),
+        })).rejects.toThrow('Invalid layer width');
     });
 });
 

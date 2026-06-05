@@ -1,7 +1,7 @@
 import type { ArchiveImage } from '../db/types';
 import { DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateDraft, type GenerateLineageSource } from '../generate-session/GenerateSession';
-import { DEFAULT_IMAGE_MODEL, isImageModelSlug } from '../utils/openaiModels';
-import type { ImageBackground, ImageQuality } from '../utils/openai';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug } from '../utils/openaiModels';
+import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 
 type ReplayableStep = Pick<LineageStep, 'stepType'>;
@@ -19,6 +19,7 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
     lineageSource: GenerateLineageSource;
 } {
     const model = resolveReplayModel(image, step);
+    const replayAspectRatio = asString(step.metadata.aspectRatio) ?? image?.aspectRatio;
 
     return {
         draft: sanitizeGenerateDraft({
@@ -28,17 +29,15 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
             style: asString(step.metadata.style) ?? image?.style ?? 'none',
             lighting: asString(step.metadata.lighting) ?? image?.lighting ?? 'none',
             palette: asString(step.metadata.palette) ?? image?.palette ?? 'none',
-            gptImage2: {
-                ...DEFAULT_GENERATE_DRAFT.gptImage2,
-                quality: asQuality(step.metadata.quality) ?? asQuality(image?.quality) ?? DEFAULT_GENERATE_DRAFT.gptImage2.quality,
-                size: asString(step.metadata.aspectRatio) ?? image?.aspectRatio ?? DEFAULT_GENERATE_DRAFT.gptImage2.size,
-                background: asBackground(step.metadata.background) ?? asBackground(image?.background) ?? DEFAULT_GENERATE_DRAFT.gptImage2.background,
-            },
-            nanoBananaPro: {
-                ...DEFAULT_GENERATE_DRAFT.nanoBananaPro,
-                aspectRatio: asString(step.metadata.aspectRatio) as GenerateDraft['nanoBananaPro']['aspectRatio'] ?? image?.aspectRatio as GenerateDraft['nanoBananaPro']['aspectRatio'] ?? DEFAULT_GENERATE_DRAFT.nanoBananaPro.aspectRatio,
-                imageSize: asString(step.metadata.imageSize) as GenerateDraft['nanoBananaPro']['imageSize'] ?? image?.quality as GenerateDraft['nanoBananaPro']['imageSize'] ?? DEFAULT_GENERATE_DRAFT.nanoBananaPro.imageSize,
-            },
+            gptImage2: model === OPENAI_IMAGE_MODEL ? sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
+                quality: step.metadata.quality ?? image?.quality,
+                size: replayAspectRatio,
+                background: step.metadata.background ?? image?.background,
+            }) : DEFAULT_GENERATE_DRAFT.gptImage2,
+            nanoBananaPro: model === NANO_BANANA_PRO_IMAGE_MODEL ? sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, {
+                aspectRatio: replayAspectRatio,
+                imageSize: step.metadata.imageSize ?? image?.quality,
+            }) : DEFAULT_GENERATE_DRAFT.nanoBananaPro,
             isSaved: false,
         }),
         lineageSource: {
@@ -62,12 +61,4 @@ function resolveReplayModel(image: ArchiveImage | null, step: LineageStep) {
 
 function asString(value: unknown) {
     return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-function asQuality(value: unknown): ImageQuality | null {
-    return value === 'low' || value === 'medium' || value === 'high' ? value : null;
-}
-
-function asBackground(value: unknown): ImageBackground | null {
-    return value === 'auto' || value === 'opaque' || value === 'transparent' ? value : null;
 }

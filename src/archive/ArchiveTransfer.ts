@@ -3,51 +3,25 @@ import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage, ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { LineageStep } from '../lineage/types';
 import type { LineageStore } from '../lineage/LineageStore';
+import {
+    ARCHIVE_MANIFEST_FILE,
+    LINEAGE_MANIFEST_FILE,
+    createArchiveManifest,
+    createArchiveManifestLayerStack,
+    createEmptyLineageManifest,
+    createLineageManifest,
+    parseArchiveManifest,
+    parseLineageManifest,
+    type ArchiveManifestImage,
+    type ArchiveManifestLayerStack,
+} from './ArchiveManifest';
 
-export const ARCHIVE_MANIFEST_FILE = 'archive-manifest.json';
-export const LINEAGE_MANIFEST_FILE = 'lineage-manifest.json';
-export const ARCHIVE_MANIFEST_VERSION = 1;
-export const LINEAGE_MANIFEST_VERSION = 1;
-
-interface ArchiveManifestReference {
-    fileName: string;
-}
-
-interface ArchiveManifestImage {
-    id: string;
-    prompt: string;
-    quality: string;
-    aspectRatio: string;
-    background: string;
-    timestamp: string;
-    model?: string;
-    width?: number;
-    height?: number;
-    style?: string;
-    lighting?: string;
-    palette?: string;
-    imageFileName: string;
-    references: ArchiveManifestReference[];
-    layerStack?: ArchiveManifestLayerStack;
-}
-
-interface ArchiveManifestLayer extends Omit<ArchiveLayer, 'assetUrl'> {
-    assetFileName: string;
-}
-
-interface ArchiveManifestLayerStack extends Omit<ArchiveLayerStack, 'layers'> {
-    layers: ArchiveManifestLayer[];
-}
-
-interface ArchiveManifest {
-    version: number;
-    images: ArchiveManifestImage[];
-}
-
-interface LineageManifest {
-    version: number;
-    steps: LineageStep[];
-}
+export {
+    ARCHIVE_MANIFEST_FILE,
+    ARCHIVE_MANIFEST_VERSION,
+    LINEAGE_MANIFEST_FILE,
+    LINEAGE_MANIFEST_VERSION,
+} from './ArchiveManifest';
 
 interface BuildArchiveZipDeps {
     lineageStore: Pick<LineageStore, 'getByArchiveImageId'>;
@@ -102,15 +76,9 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
         });
     }
 
-    zip.file(ARCHIVE_MANIFEST_FILE, JSON.stringify({
-        version: ARCHIVE_MANIFEST_VERSION,
-        images: archiveManifestImages,
-    }, null, 2));
+    zip.file(ARCHIVE_MANIFEST_FILE, JSON.stringify(createArchiveManifest(archiveManifestImages), null, 2));
 
-    zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify({
-        version: LINEAGE_MANIFEST_VERSION,
-        steps: dedupeLineageSteps(lineageCollections),
-    }, null, 2));
+    zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify(createLineageManifest(dedupeLineageSteps(lineageCollections)), null, 2));
 
     return zip.generateAsync({ type: 'uint8array' });
 }
@@ -124,9 +92,10 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
     const importedImageIds: string[] = [];
 
     for (const image of archiveManifest.images) {
-        const imageFile = zip.file(image.imageFileName);
+        const imageFileName = image.imageFileName ?? getImageFileName(image.id);
+        const imageFile = zip.file(imageFileName);
         if (!imageFile) {
-            missingAssetFiles.push(image.imageFileName);
+            missingAssetFiles.push(imageFileName);
             continue;
         }
 
@@ -211,122 +180,10 @@ async function readJsonFile(zip: JSZip, fileName: string): Promise<unknown> {
 async function readOptionalJsonFile(zip: JSZip, fileName: string): Promise<unknown> {
     const file = zip.file(fileName);
     if (!file) {
-        return { version: LINEAGE_MANIFEST_VERSION, steps: [] };
+        return createEmptyLineageManifest();
     }
 
     return JSON.parse(await file.async('text')) as unknown;
-}
-
-function parseArchiveManifest(value: unknown): ArchiveManifest {
-    if (!isRecord(value) || !Array.isArray(value.images) || typeof value.version !== 'number') {
-        throw new Error('Invalid archive manifest');
-    }
-
-    return {
-        version: value.version,
-        images: value.images.map(parseArchiveManifestImage),
-    };
-}
-
-function parseArchiveManifestImage(value: unknown): ArchiveManifestImage {
-    if (!isRecord(value)) {
-        throw new Error('Invalid archive image manifest entry');
-    }
-
-    return {
-        id: requireString(value.id, 'archive image id'),
-        prompt: requireString(value.prompt, 'archive image prompt'),
-        quality: requireString(value.quality, 'archive image quality'),
-        aspectRatio: requireString(value.aspectRatio, 'archive image aspectRatio'),
-        background: requireString(value.background, 'archive image background'),
-        timestamp: requireString(value.timestamp, 'archive image timestamp'),
-        model: optionalString(value.model),
-        width: optionalNumber(value.width),
-        height: optionalNumber(value.height),
-        style: optionalString(value.style),
-        lighting: optionalString(value.lighting),
-        palette: optionalString(value.palette),
-        imageFileName: requireString(value.imageFileName, 'archive image fileName'),
-        references: Array.isArray(value.references) ? value.references.map(parseArchiveManifestReference) : [],
-        layerStack: parseOptionalLayerStack(value.layerStack),
-    };
-}
-
-function parseArchiveManifestReference(value: unknown): ArchiveManifestReference {
-    if (!isRecord(value)) {
-        throw new Error('Invalid archive reference manifest entry');
-    }
-
-    return {
-        fileName: requireString(value.fileName, 'archive reference fileName'),
-    };
-}
-
-function parseLineageManifest(value: unknown): LineageManifest {
-    if (!isRecord(value) || !Array.isArray(value.steps) || typeof value.version !== 'number') {
-        throw new Error('Invalid lineage manifest');
-    }
-
-    return {
-        version: value.version,
-        steps: value.steps.map(parseLineageStep),
-    };
-}
-
-function parseLineageStep(value: unknown): LineageStep {
-    if (!isRecord(value)) {
-        throw new Error('Invalid lineage step entry');
-    }
-
-    const metadata = value.metadata;
-    if (!isRecord(metadata)) {
-        throw new Error('Invalid lineage metadata');
-    }
-
-    return {
-        id: requireString(value.id, 'lineage step id'),
-        archiveImageId: requireString(value.archiveImageId, 'lineage archiveImageId'),
-        parentStepId: value.parentStepId === null ? null : optionalString(value.parentStepId) ?? null,
-        stepType: requireLineageStepType(value.stepType),
-        timestamp: requireString(value.timestamp, 'lineage timestamp'),
-        metadata,
-    };
-}
-
-function requireLineageStepType(value: unknown): LineageStep['stepType'] {
-    if (
-        value === 'generation'
-        || value === 'reference-generation'
-        || value === 'ai-edit'
-        || value === 'manual-edit'
-        || value === 'overwrite'
-        || value === 'save-as-copy'
-        || value === 'autopilot-iteration'
-    ) {
-        return value;
-    }
-
-    throw new Error('Invalid lineage step type');
-}
-
-function requireString(value: unknown, label: string) {
-    if (typeof value !== 'string') {
-        throw new Error(`Invalid ${label}`);
-    }
-
-    return value;
-}
-
-function optionalString(value: unknown) {
-    return typeof value === 'string' ? value : undefined;
-}
-
-function optionalNumber(value: unknown) {
-    return typeof value === 'number' ? value : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null;
 }
 
 function getImageFileName(id: string) {
@@ -342,30 +199,11 @@ function getLayerFileName(imageId: string, layerId: string) {
 }
 
 async function addLayerStackToZip(zip: JSZip, imageId: string, layerStack: ArchiveLayerStack): Promise<ArchiveManifestLayerStack> {
-    const layers = await Promise.all(layerStack.layers.map(async (layer) => {
-        const assetFileName = getLayerFileName(imageId, layer.id);
-        zip.file(assetFileName, await imageUrlToBytes(layer.assetUrl));
-        return {
-            id: layer.id,
-            name: layer.name,
-            kind: layer.kind,
-            x: layer.x,
-            y: layer.y,
-            width: layer.width,
-            height: layer.height,
-            rotation: layer.rotation,
-            opacity: layer.opacity,
-            visible: layer.visible,
-            locked: layer.locked,
-            assetFileName,
-        };
+    await Promise.all(layerStack.layers.map(async (layer) => {
+        zip.file(getLayerFileName(imageId, layer.id), await imageUrlToBytes(layer.assetUrl));
     }));
 
-    return {
-        canvasWidth: layerStack.canvasWidth,
-        canvasHeight: layerStack.canvasHeight,
-        layers,
-    };
+    return createArchiveManifestLayerStack(imageId, layerStack, getLayerFileName);
 }
 
 async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStack | undefined, missingAssetFiles: string[]): Promise<ArchiveLayerStack | undefined> {
@@ -375,14 +213,15 @@ async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStac
 
     const layers: ArchiveLayer[] = [];
     for (const layer of layerStack.layers) {
-        const file = zip.file(layer.assetFileName);
+        const { assetFileName, ...layerMetadata } = layer;
+        const file = zip.file(assetFileName);
         if (!file) {
-            missingAssetFiles.push(layer.assetFileName);
+            missingAssetFiles.push(assetFileName);
             continue;
         }
 
         layers.push({
-            ...layer,
+            ...layerMetadata,
             assetUrl: await blobToDataUrl(await file.async('blob')),
         });
     }
@@ -392,66 +231,6 @@ async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStac
         canvasHeight: layerStack.canvasHeight,
         layers,
     };
-}
-
-function parseOptionalLayerStack(value: unknown): ArchiveManifestLayerStack | undefined {
-    if (value === undefined || value === null) {
-        return undefined;
-    }
-    if (!isRecord(value) || !Array.isArray(value.layers)) {
-        throw new Error('Invalid archive layer stack');
-    }
-
-    return {
-        canvasWidth: requireNumber(value.canvasWidth, 'layer stack canvasWidth'),
-        canvasHeight: requireNumber(value.canvasHeight, 'layer stack canvasHeight'),
-        layers: value.layers.map(parseLayer),
-    };
-}
-
-function parseLayer(value: unknown): ArchiveManifestLayer {
-    if (!isRecord(value)) {
-        throw new Error('Invalid archive layer entry');
-    }
-
-    return {
-        id: requireString(value.id, 'layer id'),
-        name: requireString(value.name, 'layer name'),
-        kind: requireLayerKind(value.kind),
-        assetFileName: requireString(value.assetFileName, 'layer assetFileName'),
-        x: requireNumber(value.x, 'layer x'),
-        y: requireNumber(value.y, 'layer y'),
-        width: requireNumber(value.width, 'layer width'),
-        height: requireNumber(value.height, 'layer height'),
-        rotation: requireNumber(value.rotation, 'layer rotation'),
-        opacity: requireNumber(value.opacity, 'layer opacity'),
-        visible: requireBoolean(value.visible, 'layer visible'),
-        locked: requireBoolean(value.locked, 'layer locked'),
-    };
-}
-
-function requireLayerKind(value: unknown): ArchiveLayer['kind'] {
-    if (value === 'base' || value === 'uploaded' || value === 'ai-result') {
-        return value;
-    }
-
-    throw new Error('Invalid layer kind');
-}
-
-function requireNumber(value: unknown, label: string) {
-    if (typeof value !== 'number') {
-        throw new Error(`Invalid ${label}`);
-    }
-
-    return value;
-}
-
-function requireBoolean(value: unknown, label: string) {
-    if (typeof value !== 'boolean') {
-        throw new Error(`Invalid ${label}`);
-    }
-
-    return value;
 }
 
 async function blobToDataUrl(blob: Blob) {

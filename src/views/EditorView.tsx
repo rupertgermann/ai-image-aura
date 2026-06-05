@@ -7,7 +7,8 @@ import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
-import { IMAGE_MODEL_REGISTRY, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
+import { getImageModelReferenceLimitMessage, getImageModelUiChoices } from '../image-models/ImageModelControls';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
@@ -96,6 +97,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         adjustments,
         onSave,
     });
+    const aiReferenceWarning = getImageModelReferenceLimitMessage(aiEditModel, referenceImages.length, 'AI transforms');
 
     useEffect(() => {
         const isTextInput = (target: EventTarget | null) => {
@@ -299,18 +301,17 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                             <div className="option-group">
                                 <label>MODEL</label>
                                 <div className="toggle-group">
-                                    {(Object.keys(IMAGE_MODEL_REGISTRY) as ImageModelSlug[]).map((modelSlug) => {
-                                        const config = resolveImageModelConfig(modelSlug);
-                                        const hasKey = !!getProviderKey(config.provider);
+                                    {getImageModelUiChoices().map((choice) => {
+                                        const hasKey = !!getProviderKey(choice.provider);
                                         return (
                                             <button
-                                                key={modelSlug}
-                                                className={aiEditModel === modelSlug ? 'active' : ''}
-                                                onClick={() => setAiEditModel(modelSlug)}
+                                                key={choice.slug}
+                                                className={aiEditModel === choice.slug ? 'active' : ''}
+                                                onClick={() => setAiEditModel(choice.slug)}
                                                 disabled={!hasKey}
-                                                title={hasKey ? config.label : `Add a ${config.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
+                                                title={hasKey ? choice.label : `Add a ${choice.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
                                             >
-                                                {config.label}
+                                                {choice.label}
                                             </button>
                                         );
                                     })}
@@ -371,6 +372,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                             </div>
 
                             {aiError && <div className="error-message mini">{aiError}</div>}
+                            {aiReferenceWarning && <div className="info-message mini">{aiReferenceWarning}</div>}
                             {!activeApiKey && <div className="error-message mini">Set {activeModel.label} API key in Settings</div>}
                         </div>
                     </div>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
+import { generateSessionStore, getActiveGenerateArchiveFields, getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
@@ -42,6 +42,41 @@ interface UseGenerateControllerOptions {
     createAutopilot?: typeof createAutopilotSession;
     evaluate?: typeof satisfactionEvaluator.evaluate;
     refine?: typeof promptRefiner.refine;
+}
+
+interface BuildGeneratedArchiveImageInput {
+    id: string;
+    url: string;
+    timestamp: string;
+    draft: GenerateDraft;
+    references: string[];
+}
+
+export function buildGeneratedArchiveImage({
+    id,
+    url,
+    timestamp,
+    draft,
+    references,
+}: BuildGeneratedArchiveImageInput): ArchiveImage {
+    const archiveFields = getActiveGenerateArchiveFields(draft);
+
+    return {
+        id,
+        url,
+        prompt: draft.prompt,
+        model: draft.model,
+        timestamp,
+        width: archiveFields.width,
+        height: archiveFields.height,
+        quality: archiveFields.quality,
+        aspectRatio: archiveFields.aspectRatio,
+        background: archiveFields.background,
+        style: draft.style,
+        lighting: draft.lighting,
+        palette: draft.palette,
+        references,
+    };
 }
 
 export function useGenerateController({
@@ -232,24 +267,13 @@ export function useGenerateController({
 
         try {
             const references = await serializeReferences();
-            const controls = getActiveGenerateControls(draft);
-            const { width, height } = getImageDimensions(controls.aspectRatio, controls.imageSize);
-            await saveGeneratedImage({
+            await saveGeneratedImage(buildGeneratedArchiveImage({
                 id: crypto.randomUUID(),
                 url: currentResult,
-                prompt: draft.prompt,
-                model: draft.model,
                 timestamp: new Date().toISOString(),
-                width,
-                height,
-                quality: controls.imageSize ?? controls.quality,
-                aspectRatio: controls.aspectRatio,
-                background: controls.background,
-                style: draft.style,
-                lighting: draft.lighting,
-                palette: draft.palette,
+                draft,
                 references,
-            }, {
+            }), {
                 saveImage: async (image) => Promise.resolve(onSaveImage(image)),
                 lineageStore: lineage,
                 sessionStore: session,
@@ -286,36 +310,4 @@ export function useGenerateController({
         download,
         clear,
     };
-}
-
-function getImageDimensions(aspectRatio: string, imageSize?: string) {
-    if (imageSize) {
-        const longEdge = imageSize === '4K' ? 4096 : imageSize === '2K' ? 2048 : 1024;
-        const [widthRatio, heightRatio] = aspectRatio.split(':').map(Number);
-        if (widthRatio && heightRatio) {
-            if (widthRatio >= heightRatio) {
-                return {
-                    width: longEdge,
-                    height: Math.round(longEdge * (heightRatio / widthRatio)),
-                };
-            }
-
-            return {
-                width: Math.round(longEdge * (widthRatio / heightRatio)),
-                height: longEdge,
-            };
-        }
-    }
-
-    if (aspectRatio === 'auto') {
-        return { width: 1024, height: 1024 };
-    }
-
-    const [width, height] = aspectRatio.split('x').map(Number);
-
-    if (!width || !height) {
-        return { width: 1024, height: 1024 };
-    }
-
-    return { width, height };
 }

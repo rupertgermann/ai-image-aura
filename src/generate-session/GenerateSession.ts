@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
 import type { ArchiveImage } from '../db/types';
+import {
+    buildActiveImageModelControls,
+    buildImageModelArchiveFields,
+    getDefaultImageModelControls,
+    getImageModelDraftKey as resolveImageModelDraftKey,
+    sanitizeArchiveImageModelControls,
+    sanitizeImageModelControls,
+    type GptImage2Controls,
+    type ImageModelArchiveFields,
+    type NanoBananaProControls,
+} from '../image-models/ImageModelControls';
 import { storage, type StorageProvider } from '../services/StorageService';
-import type { ImageBackground, ImageQuality } from '../utils/openai';
 import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
+    OPENAI_IMAGE_MODEL,
     isImageModelSlug,
     type ImageModelSlug,
-    type NanoBananaAspectRatio,
-    type NanoBananaImageSize,
 } from '../utils/openaiModels';
 
 const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
 const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
-const VALID_OPENAI_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
-const VALID_NANO_ASPECT_RATIOS = new Set(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']);
-const VALID_NANO_IMAGE_SIZES = new Set(['1K', '2K', '4K']);
 
 const LEGACY_KEYS = {
     prompt: 'aura_generate_prompt',
@@ -41,16 +47,9 @@ export interface GenerateDraft {
     isSaved: boolean;
 }
 
-export interface GptImage2DraftControls {
-    quality: ImageQuality;
-    size: string;
-    background: ImageBackground;
-}
+export type GptImage2DraftControls = GptImage2Controls;
 
-export interface NanoBananaProDraftControls {
-    aspectRatio: NanoBananaAspectRatio;
-    imageSize: NanoBananaImageSize;
-}
+export type NanoBananaProDraftControls = NanoBananaProControls;
 
 export interface GenerateLineageSource {
     archiveImageId: string;
@@ -81,15 +80,8 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
     style: 'none',
     lighting: 'none',
     palette: 'none',
-    gptImage2: {
-        quality: 'medium',
-        size: '1024x1024',
-        background: 'auto',
-    },
-    nanoBananaPro: {
-        aspectRatio: '1:1',
-        imageSize: '1K',
-    },
+    gptImage2: getDefaultImageModelControls(OPENAI_IMAGE_MODEL),
+    nanoBananaPro: getDefaultImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL),
     isSaved: false,
 };
 
@@ -127,24 +119,17 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
     }
 
     async transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
+        const model = isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL;
+
         this.writeDraft(sanitizeGenerateDraft({
             ...DEFAULT_GENERATE_DRAFT,
             prompt: image.prompt,
-            model: isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL,
+            model,
             style: image.style || 'none',
             lighting: image.lighting || 'none',
             palette: image.palette || 'none',
-            gptImage2: {
-                ...DEFAULT_GENERATE_DRAFT.gptImage2,
-                quality: coerceQuality(image.quality),
-                size: coerceOpenAiSize(image.aspectRatio),
-                background: coerceBackground(image.background),
-            },
-            nanoBananaPro: {
-                ...DEFAULT_GENERATE_DRAFT.nanoBananaPro,
-                aspectRatio: coerceNanoAspectRatio(image.aspectRatio),
-                imageSize: coerceNanoImageSize(image.quality),
-            },
+            gptImage2: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
+            nanoBananaPro: sanitizeArchiveImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, image),
             isSaved: false,
             ...draftOverrides,
         }));
@@ -287,9 +272,15 @@ type DraftLike = Partial<GenerateDraft> & {
 };
 
 export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
-    const legacyQuality = coerceQuality(draft.quality);
-    const legacySize = coerceOpenAiSize(draft.aspectRatio);
-    const legacyBackground = coerceBackground(draft.background);
+    const legacyGptImage2Controls = sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
+        quality: draft.quality,
+        size: draft.aspectRatio,
+        background: draft.background,
+    });
+    const legacyNanoBananaProControls = sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, {
+        aspectRatio: draft.aspectRatio,
+        imageSize: draft.quality,
+    });
 
     return {
         model: isImageModelSlug(draft.model) ? draft.model : DEFAULT_GENERATE_DRAFT.model,
@@ -297,108 +288,26 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
         style: typeof draft.style === 'string' ? draft.style : DEFAULT_GENERATE_DRAFT.style,
         lighting: typeof draft.lighting === 'string' ? draft.lighting : DEFAULT_GENERATE_DRAFT.lighting,
         palette: typeof draft.palette === 'string' ? draft.palette : DEFAULT_GENERATE_DRAFT.palette,
-        gptImage2: sanitizeGptImage2Controls(draft.gptImage2, {
-            quality: legacyQuality,
-            size: legacySize,
-            background: legacyBackground,
-        }),
-        nanoBananaPro: sanitizeNanoBananaProControls(draft.nanoBananaPro, {
-            aspectRatio: coerceNanoAspectRatio(draft.aspectRatio),
-            imageSize: DEFAULT_GENERATE_DRAFT.nanoBananaPro.imageSize,
-        }),
+        gptImage2: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, draft.gptImage2, legacyGptImage2Controls),
+        nanoBananaPro: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, draft.nanoBananaPro, legacyNanoBananaProControls),
         isSaved: typeof draft.isSaved === 'boolean' ? draft.isSaved : DEFAULT_GENERATE_DRAFT.isSaved,
     };
 };
 
 export function getActiveGenerateControls(draft: GenerateDraft) {
     if (draft.model === NANO_BANANA_PRO_IMAGE_MODEL) {
-        return {
-            aspectRatio: draft.nanoBananaPro.aspectRatio,
-            imageSize: draft.nanoBananaPro.imageSize,
-            quality: DEFAULT_GENERATE_DRAFT.gptImage2.quality,
-            background: DEFAULT_GENERATE_DRAFT.gptImage2.background,
-        };
+        return buildActiveImageModelControls(draft.model, draft.nanoBananaPro);
     }
 
-    return {
-        aspectRatio: draft.gptImage2.size,
-        imageSize: undefined,
-        quality: draft.gptImage2.quality,
-        background: draft.gptImage2.background,
-    };
+    return buildActiveImageModelControls(draft.model, draft.gptImage2);
 }
 
-export function getImageModelDraftKey(model: ImageModelSlug) {
-    return model === NANO_BANANA_PRO_IMAGE_MODEL ? 'nanoBananaPro' : 'gptImage2';
+export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModelArchiveFields {
+    if (draft.model === NANO_BANANA_PRO_IMAGE_MODEL) {
+        return buildImageModelArchiveFields(draft.model, draft.nanoBananaPro);
+    }
+
+    return buildImageModelArchiveFields(draft.model, draft.gptImage2);
 }
 
-function sanitizeGptImage2Controls(value: unknown, fallback: GptImage2DraftControls): GptImage2DraftControls {
-    const record = value && typeof value === 'object' ? value as Partial<GptImage2DraftControls> : {};
-    return {
-        quality: isQuality(record.quality) ? record.quality : fallback.quality,
-        size: isOpenAiSize(record.size) ? record.size : fallback.size,
-        background: isBackground(record.background) ? record.background : fallback.background,
-    };
-}
-
-function sanitizeNanoBananaProControls(value: unknown, fallback: NanoBananaProDraftControls): NanoBananaProDraftControls {
-    const record = value && typeof value === 'object' ? value as Partial<NanoBananaProDraftControls> : {};
-    return {
-        aspectRatio: isNanoAspectRatio(record.aspectRatio) ? record.aspectRatio : fallback.aspectRatio,
-        imageSize: isNanoImageSize(record.imageSize) ? record.imageSize : fallback.imageSize,
-    };
-}
-
-const coerceQuality = (quality: unknown): ImageQuality => {
-    return isQuality(quality)
-        ? quality
-        : DEFAULT_GENERATE_DRAFT.gptImage2.quality;
-};
-
-const coerceBackground = (background: unknown): ImageBackground => {
-    return isBackground(background)
-        ? background
-        : DEFAULT_GENERATE_DRAFT.gptImage2.background;
-};
-
-const coerceOpenAiSize = (size: unknown): string => {
-    return isOpenAiSize(size)
-        ? size
-        : DEFAULT_GENERATE_DRAFT.gptImage2.size;
-};
-
-const coerceNanoAspectRatio = (aspectRatio: unknown): NanoBananaAspectRatio => {
-    if (aspectRatio === '1024x1024' || aspectRatio === 'auto') return '1:1';
-    if (aspectRatio === '1536x1024') return '3:2';
-    if (aspectRatio === '1024x1536') return '2:3';
-
-    return isNanoAspectRatio(aspectRatio)
-        ? aspectRatio
-        : DEFAULT_GENERATE_DRAFT.nanoBananaPro.aspectRatio;
-};
-
-const coerceNanoImageSize = (imageSize: unknown): NanoBananaImageSize => {
-    return isNanoImageSize(imageSize)
-        ? imageSize
-        : DEFAULT_GENERATE_DRAFT.nanoBananaPro.imageSize;
-};
-
-function isQuality(value: unknown): value is ImageQuality {
-    return value === 'low' || value === 'medium' || value === 'high';
-}
-
-function isBackground(value: unknown): value is ImageBackground {
-    return value === 'auto' || value === 'opaque' || value === 'transparent';
-}
-
-function isOpenAiSize(value: unknown): value is string {
-    return typeof value === 'string' && VALID_OPENAI_SIZES.has(value);
-}
-
-function isNanoAspectRatio(value: unknown): value is NanoBananaAspectRatio {
-    return typeof value === 'string' && VALID_NANO_ASPECT_RATIOS.has(value);
-}
-
-function isNanoImageSize(value: unknown): value is NanoBananaImageSize {
-    return typeof value === 'string' && VALID_NANO_IMAGE_SIZES.has(value);
-}
+export const getImageModelDraftKey = resolveImageModelDraftKey;

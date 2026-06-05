@@ -20,13 +20,7 @@ class InMemoryArchiveMetadataPort {
     }
 
     async save(record: ArchiveMetadataRecord) {
-        this.records.set(record.id, {
-            ...record,
-            layerStack: record.layerStack ? {
-                ...record.layerStack,
-                layers: record.layerStack.layers.map((layer) => ({ ...layer, assetUrl: '' })),
-            } : undefined,
-        });
+        this.records.set(record.id, record);
     }
 
     async remove(id: string) {
@@ -66,13 +60,17 @@ class InMemoryBlobPort {
 
 describe('ArchiveStore layer asset ownership', () => {
     it('hydrates durable layer metadata with layer bitmap assets', async () => {
-        const { store } = createStore();
+        const { store, metadata } = createStore();
 
         await store.save(createImageInput({
             id: 'image-1',
             layerStack: createLayerStack('image-1', ['base', 'upload']),
         }));
 
+        expect(metadata.records.get('image-1')?.layerStack?.layers.map((layer) => [layer.id, layer.assetUrl])).toEqual([
+            ['base', ''],
+            ['upload', ''],
+        ]);
         await expect(store.list()).resolves.toEqual([
             expect.objectContaining({
                 id: 'image-1',

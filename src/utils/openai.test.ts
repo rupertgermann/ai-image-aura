@@ -22,7 +22,7 @@ describe('openAiImageClient', () => {
 
             expect(result).toEqual({ b64_json: 'generated' });
 
-            const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            const [url, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
             expect(url).toBe('https://api.openai.com/v1/images/generations');
             expect(request.method).toBe('POST');
 
@@ -65,7 +65,7 @@ describe('openAiImageClient', () => {
             expect(result).toEqual({ b64_json: 'edited' });
             expect(fetchMock).toHaveBeenCalledTimes(1);
 
-            const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            const [url, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
             expect(url).toBe('https://api.openai.com/v1/images/edits');
             expect(request.method).toBe('POST');
 
@@ -138,7 +138,7 @@ describe('openAiResponsesClient', () => {
 
             expect(result).toEqual({ outputText: 'summary of image' });
 
-            const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            const [url, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
             expect(url).toBe('https://api.openai.com/v1/responses');
             expect(request.method).toBe('POST');
 
@@ -234,7 +234,7 @@ describe('openAiResponsesClient', () => {
                 userText: 'just text please',
             });
 
-            const [, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+            const [, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
             const body = JSON.parse(String(request.body));
             const userContent = body.input[1].content;
 
