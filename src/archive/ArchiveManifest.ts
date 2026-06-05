@@ -1,4 +1,5 @@
 import type { ArchiveLayer, ArchiveLayerKind, ArchiveLayerStack } from '../db/types';
+import { parseLineageMetadata } from '../lineage/lineageMetadata';
 import type { LineageStep } from '../lineage/types';
 
 export const ARCHIVE_MANIFEST_FILE = 'archive-manifest.json';
@@ -181,13 +182,15 @@ function parseLineageStep(value: unknown): LineageStep {
         throw new Error('Invalid lineage metadata');
     }
 
+    const stepType = requireLineageStepType(value.stepType);
+
     return {
         id: requireString(value.id, 'lineage step id'),
         archiveImageId: requireString(value.archiveImageId, 'lineage archiveImageId'),
         parentStepId: value.parentStepId === null ? null : optionalString(value.parentStepId) ?? null,
-        stepType: requireLineageStepType(value.stepType),
+        stepType,
         timestamp: requireString(value.timestamp, 'lineage timestamp'),
-        metadata,
+        metadata: parseLineageMetadata(stepType, metadata),
     };
 }
 

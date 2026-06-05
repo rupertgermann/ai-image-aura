@@ -1,4 +1,12 @@
 import type { LineageStore, LineageStep } from './LineageStore';
+import { readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
+import {
+    readEditorTimelineMetadata,
+    type EditorLineageAdjustment,
+    type EditorLineageLayers,
+    type EditorTimelineMetadata,
+} from './editorLineageMetadata';
+import { readGenerateLineageReferenceCount } from './generateLineageMetadata';
 
 export interface LineageTimelineEntry {
     id: string;
@@ -98,6 +106,8 @@ async function countDescendants(steps: LineageStep[], store: Pick<LineageStore, 
 }
 
 function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
+    const autopilotMetadata = getAutopilotTimelineMetadata(step);
+
     return {
         id: step.id,
         archiveImageId: step.archiveImageId,
@@ -105,13 +115,19 @@ function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
         label: getStepLabel(step),
         summary: getStepSummary(step),
         timestamp: step.timestamp,
-        goalText: asString(step.metadata.goalText),
-        iterationNumber: asNumberOrNull(step.metadata.iterationNumber),
-        evaluatorScore: asNumberOrNull(step.metadata.evaluatorScore),
-        evaluatorFeedback: asStringArray(step.metadata.evaluatorFeedback),
-        replayImageDataUrl: asString(step.metadata.outputImageDataUrl),
-        runLabel: getRunLabel(step),
+        goalText: autopilotMetadata?.goalText ?? null,
+        iterationNumber: autopilotMetadata?.iterationNumber ?? null,
+        evaluatorScore: autopilotMetadata?.evaluatorScore ?? null,
+        evaluatorFeedback: autopilotMetadata?.evaluatorFeedback ?? [],
+        replayImageDataUrl: autopilotMetadata?.replayImageDataUrl ?? null,
+        runLabel: autopilotMetadata?.runLabel ?? null,
     };
+}
+
+function getAutopilotTimelineMetadata(step: LineageStep): AutopilotTimelineMetadata | null {
+    return step.stepType === 'autopilot-iteration'
+        ? readAutopilotTimelineMetadata(step.metadata)
+        : null;
 }
 
 function summarizeParent(step: LineageStep) {
@@ -141,8 +157,8 @@ function getStepLabel(step: LineageStep) {
 function getStepSummary(step: LineageStep) {
     const metadata = step.metadata;
     const prompt = excerpt(asString(metadata.prompt));
-    const editPrompt = excerpt(asString(metadata.editPrompt));
-    const referenceCount = asNumber(metadata.referenceCount);
+    const referenceCount = readGenerateLineageReferenceCount(metadata);
+    const editorMetadata = readEditorTimelineMetadata(metadata);
 
     switch (step.stepType) {
         case 'generation':
@@ -154,27 +170,32 @@ function getStepSummary(step: LineageStep) {
 
             return prompt ? `Prompt: ${prompt}` : 'Generated from saved references';
         case 'ai-edit':
-            return summarizeLayeredAiEdit(metadata, editPrompt);
+            return summarizeLayeredAiEdit(editorMetadata);
         case 'manual-edit':
-            return summarizeAdjustments(metadata.editorAdjustments) ?? 'Manual adjustments applied';
+            return summarizeAdjustments(editorMetadata.editorAdjustment) ?? 'Manual adjustments applied';
         case 'overwrite':
-            return summarizeLayeredSave(metadata, 'Saved layered image') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Saved over current image';
+            return summarizeLayeredSave(editorMetadata.layers, 'Saved layered image')
+                ?? summarizeAdjustments(editorMetadata.editorAdjustment)
+                ?? 'Saved over current image';
         case 'save-as-copy':
-            return summarizeLayeredSave(metadata, 'Saved layered copy') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Branched from previous version';
+            return summarizeLayeredSave(editorMetadata.layers, 'Saved layered copy')
+                ?? summarizeAdjustments(editorMetadata.editorAdjustment)
+                ?? 'Branched from previous version';
         case 'autopilot-iteration':
-            return summarizeAutopilot(metadata);
+            return summarizeAutopilot(readAutopilotTimelineMetadata(metadata));
     }
 }
 
-function summarizeLayeredAiEdit(metadata: Record<string, unknown>, editPrompt: string | null) {
+function summarizeLayeredAiEdit(metadata: EditorTimelineMetadata) {
+    const editPrompt = excerpt(metadata.editPrompt);
     const base = editPrompt ? `AI edit: ${editPrompt}` : 'AI edit applied';
-    if (metadata.isLayered !== true) {
+    if (!metadata.layers.layered) {
         return base;
     }
 
-    const targetMode = asString(metadata.targetMode);
-    const targetLayerCount = asNumberOrNull(metadata.targetLayerCount);
-    const aiResultLayerName = excerpt(asString(metadata.aiResultLayerName), 32);
+    const targetMode = metadata.aiTransformTarget.mode;
+    const targetLayerCount = metadata.aiTransformTarget.layerCount;
+    const aiResultLayerName = excerpt(metadata.layers.aiResultLayer?.name ?? null, 32);
     const parts = [
         base,
         targetMode === 'selected-layers' && targetLayerCount !== null ? `targeted ${targetLayerCount} layer${targetLayerCount === 1 ? '' : 's'}` : 'whole composition',
@@ -184,13 +205,13 @@ function summarizeLayeredAiEdit(metadata: Record<string, unknown>, editPrompt: s
     return parts.join(' · ');
 }
 
-function summarizeLayeredSave(metadata: Record<string, unknown>, fallback: string) {
-    if (metadata.isLayered !== true) {
+function summarizeLayeredSave(metadata: EditorLineageLayers, fallback: string) {
+    if (!metadata.layered) {
         return null;
     }
 
-    const layerCount = asNumberOrNull(metadata.layerCount);
-    const visibleLayerCount = asNumberOrNull(metadata.visibleLayerCount);
+    const layerCount = metadata.count;
+    const visibleLayerCount = metadata.visibleCount;
     const parts = [
         fallback,
         layerCount !== null ? `${layerCount} layer${layerCount === 1 ? '' : 's'}` : null,
@@ -200,34 +221,22 @@ function summarizeLayeredSave(metadata: Record<string, unknown>, fallback: strin
     return parts.length > 1 ? parts.join(' · ') : fallback;
 }
 
-function summarizeAutopilot(metadata: Record<string, unknown>) {
-    const iterationNumber = asNumberOrNull(metadata.iterationNumber);
-    const score = asNumberOrNull(metadata.evaluatorScore);
-    const goalText = excerpt(asString(metadata.goalText), 56);
+function summarizeAutopilot(metadata: AutopilotTimelineMetadata) {
+    const goalText = excerpt(metadata.goalText, 56);
     const parts = [
-        iterationNumber !== null ? `Iteration ${iterationNumber}` : null,
-        score !== null ? `score ${score}` : null,
+        metadata.iterationNumber !== null ? `Iteration ${metadata.iterationNumber}` : null,
+        metadata.evaluatorScore !== null ? `score ${metadata.evaluatorScore}` : null,
         goalText ? `goal: ${goalText}` : null,
     ].filter(Boolean);
 
     return parts.length > 0 ? parts.join(' · ') : 'Autopilot iteration recorded';
 }
 
-function getRunLabel(step: LineageStep) {
-    if (step.stepType !== 'autopilot-iteration') {
+function summarizeAdjustments(adjustments: EditorLineageAdjustment | null) {
+    if (!adjustments) {
         return null;
     }
 
-    const goalText = excerpt(asString(step.metadata.goalText), 36);
-    return goalText ? `Autopilot Run · ${goalText}` : 'Autopilot Run';
-}
-
-function summarizeAdjustments(value: unknown) {
-    if (!value || typeof value !== 'object') {
-        return null;
-    }
-
-    const adjustments = value as Record<string, unknown>;
     const changed: string[] = [];
 
     if (adjustments.brightness !== 100) {
@@ -265,18 +274,4 @@ function excerpt(value: string | null, maxLength: number = 72) {
 
 function asString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value : null;
-}
-
-function asNumber(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function asNumberOrNull(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function asStringArray(value: unknown) {
-    return Array.isArray(value)
-        ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
-        : [];
 }

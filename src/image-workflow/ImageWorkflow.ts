@@ -32,6 +32,7 @@ export interface EditImageInput {
     model?: ImageModelSlug;
     prompt: string;
     sourceImage: Blob;
+    compositionContextImage?: File | null;
     referenceImages: File[];
     quality?: ImageQuality;
     aspectRatio?: NanoBananaAspectRatio;
@@ -69,6 +70,7 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
             const { model, modelSlug, provider } = resolveImageProvider(input.model, providers);
             const providerRequest = mapImageModelEditProviderRequest(modelSlug, {
                 sourceImage: createEditSourceFile(input.sourceImage),
+                compositionContextImage: input.compositionContextImage,
                 referenceImages: input.referenceImages,
                 quality: input.quality,
                 aspectRatio: input.aspectRatio,

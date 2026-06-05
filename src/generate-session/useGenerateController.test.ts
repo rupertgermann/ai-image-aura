@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
-import { buildGeneratedArchiveImage } from './useGenerateController';
+import {
+    buildGeneratedArchiveImage,
+    buildGeneratedArchiveImageForSave,
+    snapshotGeneratedReferenceImages,
+} from './useGenerateController';
 
 describe('Generate controller Image model archive metadata', () => {
     it('builds gpt-image-2 archive metadata from shared Image model controls', () => {
@@ -57,6 +62,49 @@ describe('Generate controller Image model archive metadata', () => {
             height: 2304,
             references: [],
         });
+    });
+});
+
+describe('Generate controller Reference image provenance', () => {
+    it('saves an over-limit Nano Banana Pro result from the used Reference image snapshot', async () => {
+        const draft = createDraft({
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+        });
+        const selectedReferenceFiles = Array.from({ length: 15 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
+        );
+        const selectedReferenceDataUrls = selectedReferenceFiles.map((file, index) =>
+            `data:${file.type};base64,reference-${index}`,
+        );
+        const changedReferenceDataUrls = [
+            'data:image/png;base64,new-reference',
+            ...selectedReferenceDataUrls,
+        ];
+        const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(
+            NANO_BANANA_PRO_IMAGE_MODEL,
+            selectedReferenceFiles,
+        );
+        const serializeReferenceFiles = vi.fn(async (files: File[]) =>
+            files.map((file) => selectedReferenceDataUrls[selectedReferenceFiles.indexOf(file)]),
+        );
+        const serializeReferences = vi.fn(async () => changedReferenceDataUrls);
+
+        const usedReferences = await snapshotGeneratedReferenceImages({
+            referenceImages: referenceRunPlan.providerReferenceImages,
+            serializeReferenceFiles,
+        });
+        const image = await buildGeneratedArchiveImageForSave({
+            id: 'generated-nano-with-refs',
+            url: 'data:image/png;base64,nano-result',
+            timestamp: '2026-06-05T12:00:00.000Z',
+            draft,
+            usedReferences,
+            serializeReferences,
+        });
+
+        expect(serializeReferenceFiles).toHaveBeenCalledWith(selectedReferenceFiles.slice(0, 14));
+        expect(serializeReferences).not.toHaveBeenCalled();
+        expect(image.references).toEqual(selectedReferenceDataUrls.slice(0, 14));
     });
 });
 

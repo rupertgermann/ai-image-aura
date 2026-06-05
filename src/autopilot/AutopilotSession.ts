@@ -3,6 +3,7 @@ import { satisfactionEvaluator } from './SatisfactionEvaluator';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { buildAutopilotLineageMetadata } from '../lineage/autopilotLineageMetadata';
 
 export const DEFAULT_AUTOPILOT_MAX_ITERATIONS = 4;
 export const MAX_AUTOPILOT_ITERATIONS = 8;
@@ -74,14 +75,16 @@ class DefaultAutopilotSession implements AutopilotSession {
         const reasoningApiKey = this.input.reasoningApiKey ?? this.input.apiKey;
         const iterations: AutopilotIteration[] = [];
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
+        const runSettings = snapshotAutopilotSettings(this.input.settings);
         let currentPrompt = this.input.initialPrompt;
         let parentStepId = this.input.initialParentStepId ?? null;
         let runningBest: AutopilotIteration | null = null;
 
         for (let iterationNumber = 1; iterationNumber <= maxIterations; iterationNumber += 1) {
             try {
+                const iterationSettings = snapshotAutopilotSettings(runSettings);
                 const imageDataUrl = await generate({
-                    ...this.input.settings,
+                    ...iterationSettings,
                     apiKey: this.input.apiKey,
                     prompt: currentPrompt,
                 });
@@ -98,23 +101,15 @@ class DefaultAutopilotSession implements AutopilotSession {
                     parentStepId,
                     stepType: 'autopilot-iteration',
                     timestamp: new Date().toISOString(),
-                    metadata: {
-                        goalText: this.input.goal,
-                        reasoningModel: this.input.reasoningModel ?? null,
+                    metadata: buildAutopilotLineageMetadata({
+                        goal: this.input.goal,
+                        reasoningModel: this.input.reasoningModel,
                         iterationNumber,
-                        evaluatorScore: evaluation.score,
-                        evaluatorFeedback: evaluation.feedback,
+                        evaluation,
                         prompt: currentPrompt,
-                        model: this.input.settings.model ?? null,
-                        quality: this.input.settings.quality,
-                        aspectRatio: this.input.settings.aspectRatio,
-                        imageSize: this.input.settings.imageSize ?? null,
-                        background: this.input.settings.background,
-                        style: this.input.settings.style,
-                        lighting: this.input.settings.lighting,
-                        palette: this.input.settings.palette,
+                        settings: snapshotAutopilotSettings(runSettings),
                         outputImageDataUrl: imageDataUrl,
-                    },
+                    }),
                 });
 
                 const completedIteration: AutopilotIteration = {
@@ -193,4 +188,13 @@ function pickBetterIteration(best: AutopilotIteration | null, candidate: Autopil
 
 export function createAutopilotSession(input: CreateAutopilotSessionInput): AutopilotSession {
     return new DefaultAutopilotSession(input);
+}
+
+function snapshotAutopilotSettings(
+    settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>,
+): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
+    return {
+        ...settings,
+        referenceImages: settings.referenceImages.slice(),
+    };
 }

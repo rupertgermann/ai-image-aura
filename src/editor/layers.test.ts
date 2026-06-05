@@ -11,6 +11,7 @@ import {
     hydrateLayerStack,
     insertAiResultLayer,
     moveLayer,
+    planAiTransformTarget,
     pushHistory,
     repairEditorDraftForImage,
     redoHistory,
@@ -265,6 +266,120 @@ describe('layer editor helpers', () => {
             height: 614.4000000000001,
         });
     });
+
+    it('plans selected visible non-base layers as a bounded AI transform target', () => {
+        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+
+        const plan = planAiTransformTarget(createDraft(layerStack, ['layer-1']));
+
+        expect(plan).toEqual({
+            mode: 'selected-layers',
+            targetLayerIds: ['layer-1'],
+            targetBounds: {
+                x: 204.8,
+                y: 204.8,
+                width: 614.4000000000001,
+                height: 614.4000000000001,
+            },
+            requiresCompositionContext: true,
+            metadata: {
+                targetMode: 'selected-layers',
+                targetLayerCount: 1,
+                targetIncludesBaseLayer: false,
+            },
+        });
+    });
+
+    it('plans base-plus-non-base selection as selected layers anchored by the base bounds', () => {
+        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+
+        const plan = planAiTransformTarget(createDraft(layerStack, ['layer-1', 'base']));
+
+        expect(plan).toEqual({
+            mode: 'selected-layers',
+            targetLayerIds: ['base', 'layer-1'],
+            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
+            requiresCompositionContext: true,
+            metadata: {
+                targetMode: 'selected-layers',
+                targetLayerCount: 2,
+                targetIncludesBaseLayer: true,
+            },
+        });
+    });
+
+    it('falls back to a whole-composition AI transform target for base-only selection', () => {
+        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+
+        const plan = planAiTransformTarget(createDraft(layerStack, ['base']));
+
+        expect(plan).toEqual({
+            mode: 'whole-composition',
+            targetLayerIds: ['base', 'layer-1'],
+            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
+            requiresCompositionContext: false,
+            metadata: {
+                targetMode: 'whole-composition',
+                targetLayerCount: null,
+                targetIncludesBaseLayer: null,
+            },
+        });
+    });
+
+    it('falls back to a whole-composition AI transform target for hidden selected layers', () => {
+        const visibleStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+        const layerStack = updateLayer(visibleStack, 'layer-1', { visible: false });
+
+        const plan = planAiTransformTarget(createDraft(layerStack, ['layer-1']));
+
+        expect(plan).toEqual({
+            mode: 'whole-composition',
+            targetLayerIds: ['base'],
+            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
+            requiresCompositionContext: false,
+            metadata: {
+                targetMode: 'whole-composition',
+                targetLayerCount: null,
+                targetIncludesBaseLayer: null,
+            },
+        });
+    });
+
+    it('falls back to a whole-composition AI transform target for missing selected layers', () => {
+        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+
+        const plan = planAiTransformTarget(createDraft(layerStack, ['missing-layer']));
+
+        expect(plan).toEqual({
+            mode: 'whole-composition',
+            targetLayerIds: ['base', 'layer-1'],
+            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
+            requiresCompositionContext: false,
+            metadata: {
+                targetMode: 'whole-composition',
+                targetLayerCount: null,
+                targetIncludesBaseLayer: null,
+            },
+        });
+    });
+
+    it('falls back to a whole-composition AI transform target when no layers are selected', () => {
+        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+
+        const plan = planAiTransformTarget(createDraft(layerStack, []));
+
+        expect(plan).toEqual({
+            mode: 'whole-composition',
+            targetLayerIds: ['base', 'layer-1'],
+            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
+            requiresCompositionContext: false,
+            metadata: {
+                targetMode: 'whole-composition',
+                targetLayerCount: null,
+                targetIncludesBaseLayer: null,
+            },
+        });
+    });
 });
 
 function createImage(): ArchiveImage {
@@ -288,4 +403,14 @@ function createStack(): ArchiveLayerStack {
         width: 1024,
         height: 1024,
     });
+}
+
+function createDraft(layerStack: ArchiveLayerStack, selectedLayerIds: string[]) {
+    return {
+        layerStack,
+        adjustments: { brightness: 100, contrast: 100, saturation: 100, filter: 'none' },
+        references: ['data:image/png;base64,reference'],
+        selectedLayerIds,
+        primarySelectedLayerId: selectedLayerIds[0] ?? null,
+    };
 }

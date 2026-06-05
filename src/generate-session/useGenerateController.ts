@@ -37,8 +37,8 @@ interface UseGenerateControllerOptions {
     serializeReferences: () => Promise<string[]>;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
-    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
-    workflow?: Pick<ImageWorkflow, 'generate'>;
+    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'loadCurrentResultReferences' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
+    workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     createAutopilot?: typeof createAutopilotSession;
     evaluate?: typeof satisfactionEvaluator.evaluate;
     refine?: typeof promptRefiner.refine;
@@ -50,6 +50,20 @@ interface BuildGeneratedArchiveImageInput {
     timestamp: string;
     draft: GenerateDraft;
     references: string[];
+}
+
+interface SnapshotGeneratedReferenceImagesInput {
+    referenceImages: File[];
+    serializeReferenceFiles: (files: File[]) => Promise<string[]>;
+}
+
+interface BuildGeneratedArchiveImageForSaveInput {
+    id: string;
+    url: string;
+    timestamp: string;
+    draft: GenerateDraft;
+    usedReferences: string[] | null;
+    serializeReferences: () => Promise<string[]>;
 }
 
 export function buildGeneratedArchiveImage({
@@ -79,6 +93,32 @@ export function buildGeneratedArchiveImage({
     };
 }
 
+export function snapshotGeneratedReferenceImages({
+    referenceImages,
+    serializeReferenceFiles,
+}: SnapshotGeneratedReferenceImagesInput): Promise<string[]> {
+    return serializeReferenceFiles(referenceImages.slice());
+}
+
+export async function buildGeneratedArchiveImageForSave({
+    id,
+    url,
+    timestamp,
+    draft,
+    usedReferences,
+    serializeReferences,
+}: BuildGeneratedArchiveImageForSaveInput): Promise<ArchiveImage> {
+    const references = usedReferences ?? await serializeReferences();
+
+    return buildGeneratedArchiveImage({
+        id,
+        url,
+        timestamp,
+        draft,
+        references,
+    });
+}
+
 export function useGenerateController({
     apiKey,
     reasoningApiKey,
@@ -97,6 +137,7 @@ export function useGenerateController({
     refine,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
+    const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
@@ -113,9 +154,13 @@ export function useGenerateController({
     }, [setDraft]);
 
     useEffect(() => {
-        session.loadCurrentResult().then((value) => {
+        Promise.all([
+            session.loadCurrentResult(),
+            session.loadCurrentResultReferences(),
+        ]).then(([value, references]) => {
             if (value) {
                 setCurrentResult(value);
+                setCurrentResultReferences(references);
             }
         });
 
@@ -145,6 +190,11 @@ export function useGenerateController({
 
         try {
             const controls = getActiveGenerateControls(draft);
+            const usedReferenceImages = referenceImages.slice();
+            const usedReferences = await snapshotGeneratedReferenceImages({
+                referenceImages: usedReferenceImages,
+                serializeReferenceFiles: workflow.serializeReferences,
+            });
             const imageUrl = await workflow.generate({
                 apiKey,
                 model: draft.model,
@@ -156,12 +206,13 @@ export function useGenerateController({
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
-                referenceImages,
+                referenceImages: usedReferenceImages,
             });
 
             setCurrentResult(imageUrl);
+            setCurrentResultReferences(usedReferences);
             updateDraft({ isSaved: false });
-            await session.saveCurrentResult(imageUrl);
+            await session.saveCurrentResult(imageUrl, usedReferences);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to generate image');
         } finally {
@@ -186,6 +237,7 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        setCurrentResultReferences(null);
         setAutopilot({
             running: true,
             iterations: [],
@@ -195,13 +247,14 @@ export function useGenerateController({
         });
 
         try {
+            const runReferenceImages = referenceImages.slice();
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
                 apiKey,
                 reasoningApiKey,
                 reasoningModel,
                 draft,
-                referenceImages,
+                referenceImages: runReferenceImages,
                 sessionStore: session,
                 lineageStore: lineage,
                 workflow,
@@ -231,11 +284,17 @@ export function useGenerateController({
             });
 
             if (outcome.result.bestIteration) {
+                const usedReferences = outcome.usedReferences ?? await snapshotGeneratedReferenceImages({
+                    referenceImages: outcome.usedReferenceImages,
+                    serializeReferenceFiles: workflow.serializeReferences,
+                });
                 setCurrentResult(outcome.result.bestIteration.imageDataUrl);
+                setCurrentResultReferences(usedReferences);
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
                     isSaved: false,
                 });
+                await session.saveCurrentResult(outcome.result.bestIteration.imageDataUrl, usedReferences);
             }
 
             if (outcome.result.status === 'failed' && outcome.result.error) {
@@ -266,14 +325,15 @@ export function useGenerateController({
         }
 
         try {
-            const references = await serializeReferences();
-            await saveGeneratedImage(buildGeneratedArchiveImage({
+            const image = await buildGeneratedArchiveImageForSave({
                 id: crypto.randomUUID(),
                 url: currentResult,
                 timestamp: new Date().toISOString(),
                 draft,
-                references,
-            }), {
+                usedReferences: currentResultReferences,
+                serializeReferences,
+            });
+            await saveGeneratedImage(image, {
                 saveImage: async (image) => Promise.resolve(onSaveImage(image)),
                 lineageStore: lineage,
                 sessionStore: session,
@@ -282,7 +342,7 @@ export function useGenerateController({
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [currentResult, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
+    }, [currentResult, currentResultReferences, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
 
     const download = useCallback(() => {
         if (!currentResult) {
@@ -294,6 +354,7 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         setCurrentResult(null);
+        setCurrentResultReferences(null);
         await session.clearCurrentResult();
     }, [session]);
 

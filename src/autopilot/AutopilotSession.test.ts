@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAutopilotSession } from './AutopilotSession';
 import type { LineageMetadataPort, LineageStep } from '../lineage/LineageStore';
 import { createLineageStore, type LineageStore } from '../lineage/LineageStore';
+import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import { GEMINI_FLASH_REASONING_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -52,6 +54,7 @@ describe('AutopilotSession', () => {
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             apiKey: 'key',
+            reasoningModel: GEMINI_FLASH_REASONING_MODEL,
             maxIterations: 3,
             satisfactionThreshold: 90,
             generate,
@@ -74,6 +77,28 @@ describe('AutopilotSession', () => {
         await expect(lineage.getChildren('step-2')).resolves.toEqual([
             expect.objectContaining({ id: 'step-3', parentStepId: 'step-2' }),
         ]);
+        await expect(lineage.getById('step-1')).resolves.toEqual(expect.objectContaining({
+            parentStepId: null,
+            metadata: expect.objectContaining({
+                goal: { text: 'A cinematic portrait' },
+                reasoningModel: { slug: GEMINI_FLASH_REASONING_MODEL },
+                imageModel: {
+                    slug: OPENAI_IMAGE_MODEL,
+                    controls: {
+                        quality: 'high',
+                        size: '1024x1024',
+                        background: 'transparent',
+                    },
+                },
+                iteration: { number: 1 },
+                evaluation: {
+                    score: 40,
+                    feedback: ['Needs stronger lighting.'],
+                },
+                replayImage: { dataUrl: 'data:image/png;base64,one' },
+                run: { label: 'Autopilot Run · A cinematic portrait' },
+            }),
+        }));
     });
 
     it('exposes a running best that breaks score ties by earliest iteration', async () => {
@@ -100,6 +125,44 @@ describe('AutopilotSession', () => {
 
         expect(result.bestIteration).toEqual(expect.objectContaining({ iterationNumber: 1 }));
         expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 1]);
+    });
+
+    it('freezes the Reference image snapshot for every iteration', async () => {
+        const lineage = createStore();
+        const firstReference = new File(['reference-0'], 'ref-0.png', { type: 'image/png' });
+        const secondReference = new File(['reference-1'], 'ref-1.png', { type: 'image/png' });
+        const settings = createSettings({
+            referenceImages: [firstReference, secondReference],
+        });
+        const seenReferenceNames: string[][] = [];
+        const generate = vi.fn(async (input: GenerateImageInput) => {
+            seenReferenceNames.push(input.referenceImages.map((file) => file.name));
+            input.referenceImages.push(new File(['request-mutation'], `request-mutated-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+            settings.referenceImages.push(new File(['external-mutation'], `external-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+
+            return `data:image/png;base64,iteration-${seenReferenceNames.length}`;
+        });
+
+        const result = await createAutopilotSession({
+            goal: 'A cinematic portrait',
+            initialPrompt: 'prompt 1',
+            settings,
+            apiKey: 'key',
+            maxIterations: 2,
+            satisfactionThreshold: 90,
+            generate,
+            evaluate: vi.fn()
+                .mockResolvedValueOnce({ score: 50, feedback: ['Keep going.'] })
+                .mockResolvedValueOnce({ score: 95, feedback: ['Strong match.'] }),
+            refine: vi.fn().mockResolvedValueOnce('prompt 2'),
+            lineageStore: lineage,
+        }).run();
+
+        expect(result.status).toBe('satisfied');
+        expect(seenReferenceNames).toEqual([
+            ['ref-0.png', 'ref-1.png'],
+            ['ref-0.png', 'ref-1.png'],
+        ]);
     });
 
     it('stops early when the satisfaction threshold is met', async () => {
@@ -194,8 +257,11 @@ function createStore(): LineageStore {
     });
 }
 
-function createSettings() {
+function createSettings(
+    overrides: Partial<Omit<GenerateImageInput, 'apiKey' | 'prompt'>> = {},
+): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
     return {
+        model: OPENAI_IMAGE_MODEL,
         quality: 'high' as const,
         aspectRatio: '1024x1024',
         background: 'transparent' as const,
@@ -203,5 +269,6 @@ function createSettings() {
         lighting: 'golden hour',
         palette: 'copper + teal + cream',
         referenceImages: [],
+        ...overrides,
     };
 }

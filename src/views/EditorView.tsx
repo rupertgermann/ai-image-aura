@@ -80,8 +80,6 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         model: aiEditModel,
         isCanvasReady: isReady,
         draft,
-        layerStack,
-        selectedLayerIds,
         commitDraft,
         referenceImages,
         addReferenceFiles,
@@ -89,10 +87,6 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         exportDataUrl: async () => {
             if (!canvasRef.current) throw new Error('Canvas not ready');
             return canvasRef.current.exportDataUrl();
-        },
-        exportBlob: async () => {
-            if (!canvasRef.current) throw new Error('Canvas not ready');
-            return canvasRef.current.exportBlob();
         },
         adjustments,
         onSave,
