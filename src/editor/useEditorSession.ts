@@ -13,6 +13,7 @@ import {
     hasDurableLayerStack,
     moveLayer,
     pushHistory,
+    repairEditorDraftForImage,
     redoHistory,
     removeDraftReferenceAt,
     undoHistory,
@@ -30,7 +31,10 @@ export function useEditorSession(image: ArchiveImage | null) {
     const sessionKey = image?.id ?? 'default';
     const savedDraft = useMemo(() => image ? createEditorDraft(image) : null, [image]);
     const [persistedDraft, setPersistedDraft] = useLocalStorage<EditorDraft | null>(`editor_${sessionKey}_draft`, savedDraft);
-    const initialDraft = persistedDraft ?? savedDraft;
+    const repairedPersistedDraft = useMemo(() => {
+        return image && persistedDraft ? repairEditorDraftForImage(persistedDraft, image) : persistedDraft;
+    }, [image, persistedDraft]);
+    const initialDraft = repairedPersistedDraft ?? savedDraft;
     const [history, setHistory] = useState<LayerHistoryState | null>(() => initialDraft ? {
         past: [],
         present: initialDraft,
@@ -201,6 +205,14 @@ export function useEditorSession(image: ArchiveImage | null) {
     useEffect(() => {
         replaceReferenceDataUrls(draft?.references ?? []);
     }, [draft?.references, replaceReferenceDataUrls]);
+
+    useEffect(() => {
+        if (!persistedDraft || !repairedPersistedDraft || JSON.stringify(persistedDraft) === JSON.stringify(repairedPersistedDraft)) {
+            return;
+        }
+
+        setPersistedDraft(repairedPersistedDraft);
+    }, [persistedDraft, repairedPersistedDraft, setPersistedDraft]);
 
     const addReferenceFiles = useCallback(async (files: File[]) => {
         if (!draft || files.length === 0) {

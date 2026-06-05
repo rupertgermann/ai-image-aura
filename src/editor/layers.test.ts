@@ -8,9 +8,11 @@ import {
     duplicateLayers,
     getEditableLayerIds,
     getCombinedLayerBounds,
+    hydrateLayerStack,
     insertAiResultLayer,
     moveLayer,
     pushHistory,
+    repairEditorDraftForImage,
     redoHistory,
     removeDraftReferenceAt,
     undoHistory,
@@ -35,6 +37,90 @@ describe('layer editor helpers', () => {
                 }),
             ],
         });
+    });
+
+    it('hydrates base-only images from aspect ratio metadata when dimensions are missing', () => {
+        const stack = createBaseLayerStack({
+            ...createImage(),
+            aspectRatio: '16:9',
+            width: undefined,
+            height: undefined,
+        });
+
+        expect(stack).toEqual(expect.objectContaining({
+            canvasWidth: 1024,
+            canvasHeight: 576,
+        }));
+        expect(stack.layers[0]).toEqual(expect.objectContaining({
+            width: 1024,
+            height: 576,
+        }));
+    });
+
+    it('repairs old square fallback dimensions when they conflict with non-square aspect ratio metadata', () => {
+        const stack = createBaseLayerStack({
+            ...createImage(),
+            aspectRatio: '1536x1024',
+            width: 1024,
+            height: 1024,
+        });
+
+        expect(stack).toEqual(expect.objectContaining({
+            canvasWidth: 1536,
+            canvasHeight: 1024,
+        }));
+        expect(stack.layers[0]).toEqual(expect.objectContaining({
+            width: 1536,
+            height: 1024,
+        }));
+    });
+
+    it('repairs stale persisted editor drafts that were created with square fallback dimensions', () => {
+        const draft = {
+            layerStack: createStack(),
+            adjustments: { brightness: 100, contrast: 100, saturation: 100, filter: 'none' },
+            references: [],
+            selectedLayerIds: ['layer-1'],
+            primarySelectedLayerId: 'layer-1',
+        };
+        const repaired = repairEditorDraftForImage(draft, {
+            ...createImage(),
+            aspectRatio: '16:9',
+            width: 1024,
+            height: 1024,
+        });
+
+        expect(repaired.layerStack.canvasWidth).toBe(1024);
+        expect(repaired.layerStack.canvasHeight).toBe(576);
+        expect(repaired.layerStack.layers[0]).toEqual(expect.objectContaining({
+            width: 1024,
+            height: 576,
+        }));
+        expect(repaired.selectedLayerIds).toEqual(['layer-1']);
+    });
+
+    it('repairs durable layer stacks that were saved with old square fallback dimensions', () => {
+        const layeredStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+        const repaired = hydrateLayerStack({
+            ...createImage(),
+            aspectRatio: '16:9',
+            width: 1024,
+            height: 1024,
+            layerStack: layeredStack,
+        });
+
+        expect(repaired.canvasWidth).toBe(1024);
+        expect(repaired.canvasHeight).toBe(576);
+        expect(repaired.layers[0]).toEqual(expect.objectContaining({
+            width: 1024,
+            height: 576,
+        }));
+        expect(repaired.layers[1]).toEqual(expect.objectContaining({
+            x: 204.8,
+            y: 115.2,
+            width: 614.4,
+            height: expect.closeTo(345.6),
+        }));
     });
 
     it('adds uploaded layers centered, selected-ready, visible, and opaque', () => {
@@ -198,6 +284,7 @@ function createImage(): ArchiveImage {
 function createStack(): ArchiveLayerStack {
     return createBaseLayerStack({
         ...createImage(),
+        aspectRatio: '1024x1024',
         width: 1024,
         height: 1024,
     });
