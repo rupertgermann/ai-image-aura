@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
+import { generateSessionStore, getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { createAutopilotSession, type AutopilotSession } from '../autopilot/AutopilotSession';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { promptRefiner } from '../autopilot/PromptRefiner';
+import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -27,6 +28,8 @@ interface AutopilotProgressState {
 
 interface UseGenerateControllerOptions {
     apiKey: string | null;
+    reasoningApiKey?: string | null;
+    reasoningModel?: string;
     draft: GenerateDraft;
     setDraft: Dispatch<SetStateAction<GenerateDraft>>;
     referenceImages: File[];
@@ -37,12 +40,14 @@ interface UseGenerateControllerOptions {
     session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate'>;
     createAutopilot?: typeof createAutopilotSession;
+    evaluate?: typeof satisfactionEvaluator.evaluate;
+    refine?: typeof promptRefiner.refine;
 }
-
-const VALID_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
 export function useGenerateController({
     apiKey,
+    reasoningApiKey,
+    reasoningModel,
     draft,
     setDraft,
     referenceImages,
@@ -53,6 +58,8 @@ export function useGenerateController({
     session = generateSessionStore,
     workflow = imageWorkflow,
     createAutopilot = createAutopilotSession,
+    evaluate,
+    refine,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
@@ -84,15 +91,9 @@ export function useGenerateController({
         });
     }, [replaceReferences, session]);
 
-    useEffect(() => {
-        if (!VALID_SIZES.has(draft.aspectRatio)) {
-            setDraft((currentDraft) => ({ ...currentDraft, aspectRatio: '1024x1024' }));
-        }
-    }, [draft.aspectRatio, setDraft]);
-
     const generate = useCallback(async () => {
         if (!apiKey) {
-            setError('Please set your OpenAI API Key in Settings first.');
+            setError('Please set the selected image model API key in Settings first.');
             return;
         }
 
@@ -108,12 +109,15 @@ export function useGenerateController({
         }));
 
         try {
+            const controls = getActiveGenerateControls(draft);
             const imageUrl = await workflow.generate({
                 apiKey,
+                model: draft.model,
                 prompt: draft.prompt,
-                quality: draft.quality,
-                aspectRatio: draft.aspectRatio,
-                background: draft.background,
+                quality: controls.quality,
+                aspectRatio: controls.aspectRatio,
+                background: controls.background,
+                imageSize: controls.imageSize,
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
@@ -132,7 +136,12 @@ export function useGenerateController({
 
     const runAutopilot = useCallback(async (input: { goal: string; maxIterations?: number; satisfactionThreshold?: number }) => {
         if (!apiKey) {
-            setError('Please set your OpenAI API Key in Settings first.');
+            setError('Please set the selected image model API key in Settings first.');
+            return null;
+        }
+
+        if (!reasoningApiKey) {
+            setError('Please set the selected reasoning model API key in Settings first.');
             return null;
         }
 
@@ -154,12 +163,16 @@ export function useGenerateController({
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
                 apiKey,
+                reasoningApiKey,
+                reasoningModel,
                 draft,
                 referenceImages,
                 sessionStore: session,
                 lineageStore: lineage,
                 workflow,
                 createSession: createAutopilot,
+                evaluate,
+                refine,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
                 },
@@ -206,7 +219,7 @@ export function useGenerateController({
             autopilotSessionRef.current = null;
             setLoading(false);
         }
-    }, [apiKey, createAutopilot, draft, lineage, referenceImages, session, updateDraft, workflow]);
+    }, [apiKey, createAutopilot, draft, evaluate, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();
@@ -219,18 +232,19 @@ export function useGenerateController({
 
         try {
             const references = await serializeReferences();
-            const { width, height } = getImageDimensions(draft.aspectRatio);
+            const controls = getActiveGenerateControls(draft);
+            const { width, height } = getImageDimensions(controls.aspectRatio, controls.imageSize);
             await saveGeneratedImage({
                 id: crypto.randomUUID(),
                 url: currentResult,
                 prompt: draft.prompt,
-                model: OPENAI_IMAGE_MODEL,
+                model: draft.model,
                 timestamp: new Date().toISOString(),
                 width,
                 height,
-                quality: draft.quality,
-                aspectRatio: draft.aspectRatio,
-                background: draft.background,
+                quality: controls.imageSize ?? controls.quality,
+                aspectRatio: controls.aspectRatio,
+                background: controls.background,
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
@@ -274,7 +288,25 @@ export function useGenerateController({
     };
 }
 
-function getImageDimensions(aspectRatio: string) {
+function getImageDimensions(aspectRatio: string, imageSize?: string) {
+    if (imageSize) {
+        const longEdge = imageSize === '4K' ? 4096 : imageSize === '2K' ? 2048 : 1024;
+        const [widthRatio, heightRatio] = aspectRatio.split(':').map(Number);
+        if (widthRatio && heightRatio) {
+            if (widthRatio >= heightRatio) {
+                return {
+                    width: longEdge,
+                    height: Math.round(longEdge * (heightRatio / widthRatio)),
+                };
+            }
+
+            return {
+                width: Math.round(longEdge * (widthRatio / heightRatio)),
+                height: longEdge,
+            };
+        }
+    }
+
     if (aspectRatio === 'auto') {
         return { width: 1024, height: 1024 };
     }

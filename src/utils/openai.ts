@@ -1,4 +1,4 @@
-import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from './openaiModels';
+import { IMAGE_MODEL_REGISTRY, OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from './openaiModels';
 
 export type ImageQuality = 'low' | 'medium' | 'high';
 
@@ -6,6 +6,11 @@ export type ImageBackground = 'transparent' | 'opaque' | 'auto';
 
 export interface OpenAiImageRequest {
     apiKey: string;
+    apiModel?: string;
+    endpoints?: {
+        generate: string;
+        edit: string;
+    };
     prompt: string;
     quality?: ImageQuality;
     size?: string;
@@ -39,9 +44,9 @@ export interface OpenAiResponsesClient {
 export const openAiImageClient: OpenAiImageClient = {
     async createImage(request) {
         const isEdit = request.referenceImages && request.referenceImages.length > 0;
-        const endpoint = isEdit
-            ? 'https://api.openai.com/v1/images/edits'
-            : 'https://api.openai.com/v1/images/generations';
+        const apiModel = request.apiModel ?? OPENAI_IMAGE_MODEL;
+        const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
+        const endpoint = isEdit ? endpoints.edit : endpoints.generate;
 
         let body: BodyInit;
         const headers: Record<string, string> = {
@@ -50,7 +55,7 @@ export const openAiImageClient: OpenAiImageClient = {
 
         if (isEdit) {
             const formData = new FormData();
-            formData.append('model', OPENAI_IMAGE_MODEL);
+            formData.append('model', apiModel);
             formData.append('prompt', request.prompt);
             formData.append('n', '1');
 
@@ -73,7 +78,7 @@ export const openAiImageClient: OpenAiImageClient = {
                 quality?: ImageQuality;
                 background?: 'transparent' | 'opaque';
             } = {
-                model: OPENAI_IMAGE_MODEL,
+                model: apiModel,
                 prompt: request.prompt,
                 n: 1,
             };

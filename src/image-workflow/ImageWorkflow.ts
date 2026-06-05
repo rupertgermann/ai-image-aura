@@ -1,19 +1,23 @@
 import { dataURLtoFile, fileToDataURL } from '../utils/file';
 import {
-    openAiImageClient,
     type ImageBackground,
     type ImageQuality,
-    type OpenAiImageClient,
 } from '../utils/openai';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
+import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, type ImageProviderResponse } from './ImageProvider';
+
+export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
 
 const VALID_GENERATION_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
 
 export interface GenerateImageInput {
     apiKey: string;
+    model?: ImageModelSlug;
     prompt: string;
     quality: ImageQuality;
     aspectRatio: string;
     background: ImageBackground;
+    imageSize?: NanoBananaImageSize;
     style: string;
     lighting: string;
     palette: string;
@@ -22,10 +26,13 @@ export interface GenerateImageInput {
 
 export interface EditImageInput {
     apiKey: string;
+    model?: ImageModelSlug;
     prompt: string;
     sourceImage: Blob;
     referenceImages: File[];
     quality?: ImageQuality;
+    aspectRatio?: NanoBananaAspectRatio;
+    imageSize?: NanoBananaImageSize;
 }
 
 export interface ImageWorkflow {
@@ -35,26 +42,37 @@ export interface ImageWorkflow {
     hydrateReferences(dataUrls: string[]): File[];
 }
 
-export function createImageWorkflow(client: OpenAiImageClient = openAiImageClient): ImageWorkflow {
+export function createImageWorkflow(providers: ImageProviderRegistry = imageProviderRegistry): ImageWorkflow {
     return {
         async generate(input) {
-            return requestImageDataUrl(client, {
+            const { model, provider } = resolveImageProvider(input.model, providers);
+
+            return requestImageDataUrl(provider.generate({
                 apiKey: input.apiKey,
+                model,
                 prompt: buildGenerationPrompt(input),
                 quality: input.quality,
                 size: sanitizeGenerationSize(input.aspectRatio),
                 background: input.background,
+                aspectRatio: normalizeNanoAspectRatio(input.aspectRatio),
+                imageSize: input.imageSize,
                 referenceImages: input.referenceImages,
-            });
+            }));
         },
 
         async edit(input) {
-            return requestImageDataUrl(client, {
+            const { model, provider } = resolveImageProvider(input.model, providers);
+
+            return requestImageDataUrl(provider.edit({
                 apiKey: input.apiKey,
+                model,
                 prompt: input.prompt,
                 quality: input.quality ?? 'medium',
+                aspectRatio: input.aspectRatio,
+                imageSize: input.imageSize,
+                preserveSourceDimensions: model.slug === NANO_BANANA_PRO_IMAGE_MODEL,
                 referenceImages: [createEditSourceFile(input.sourceImage), ...input.referenceImages],
-            });
+            }));
         },
 
         serializeReferences(files) {
@@ -85,21 +103,35 @@ const sanitizeGenerationSize = (size: string) => {
     return VALID_GENERATION_SIZES.has(size) ? size : '1024x1024';
 };
 
+const normalizeNanoAspectRatio = (size: string): NanoBananaAspectRatio => {
+    if (size === '1536x1024') return '3:2';
+    if (size === '1024x1536') return '2:3';
+    if (size === 'auto' || size === '1024x1024') return '1:1';
+    return size as NanoBananaAspectRatio;
+};
+
 const createEditSourceFile = (sourceImage: Blob) => {
     return new File([sourceImage], 'edit-input.png', {
         type: sourceImage.type || 'image/png',
     });
 };
 
-const requestImageDataUrl = async (client: OpenAiImageClient, input: {
-    apiKey: string;
-    prompt: string;
-    quality?: ImageQuality;
-    size?: string;
-    background?: ImageBackground;
-    referenceImages?: File[];
-}) => {
-    const result = await client.createImage(input);
+const resolveImageProvider = (slug: ImageModelSlug = DEFAULT_IMAGE_MODEL, providers: ImageProviderRegistry): {
+    model: ReturnType<typeof resolveImageModelConfig>;
+    provider: ImageProvider;
+} => {
+    const model = resolveImageModelConfig(slug);
+    const provider = providers[model.provider];
+
+    if (!provider) {
+        throw new Error(`No image provider configured for ${model.provider}`);
+    }
+
+    return { model, provider };
+};
+
+const requestImageDataUrl = async (request: Promise<ImageProviderResponse>) => {
+    const result = await request;
 
     if (!result.b64_json) {
         throw new Error('No image data returned from OpenAI');

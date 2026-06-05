@@ -40,6 +40,8 @@ interface CreateAutopilotSessionInput {
     initialPrompt: string;
     settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>;
     apiKey: string;
+    reasoningApiKey?: string;
+    reasoningModel?: string;
     initialParentStepId?: string | null;
     maxIterations?: number;
     satisfactionThreshold?: number;
@@ -69,6 +71,7 @@ class DefaultAutopilotSession implements AutopilotSession {
         const refine = this.input.refine ?? ((input) => promptRefiner.refine(input));
         const maxIterations = Math.max(1, Math.min(MAX_AUTOPILOT_ITERATIONS, this.input.maxIterations ?? DEFAULT_AUTOPILOT_MAX_ITERATIONS));
         const satisfactionThreshold = Math.max(0, Math.min(100, this.input.satisfactionThreshold ?? DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD));
+        const reasoningApiKey = this.input.reasoningApiKey ?? this.input.apiKey;
         const iterations: AutopilotIteration[] = [];
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
         let currentPrompt = this.input.initialPrompt;
@@ -86,7 +89,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                 const evaluation = await evaluate({
                     imageDataUrl,
                     goal: this.input.goal,
-                    apiKey: this.input.apiKey,
+                    apiKey: reasoningApiKey,
                 });
 
                 const archiveImageId = `autopilot:${runId}:iteration:${iterationNumber}`;
@@ -97,12 +100,15 @@ class DefaultAutopilotSession implements AutopilotSession {
                     timestamp: new Date().toISOString(),
                     metadata: {
                         goalText: this.input.goal,
+                        reasoningModel: this.input.reasoningModel ?? null,
                         iterationNumber,
                         evaluatorScore: evaluation.score,
                         evaluatorFeedback: evaluation.feedback,
                         prompt: currentPrompt,
+                        model: this.input.settings.model ?? null,
                         quality: this.input.settings.quality,
                         aspectRatio: this.input.settings.aspectRatio,
+                        imageSize: this.input.settings.imageSize ?? null,
                         background: this.input.settings.background,
                         style: this.input.settings.style,
                         lighting: this.input.settings.lighting,
@@ -142,7 +148,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                     goal: this.input.goal,
                     currentPrompt,
                     feedback: evaluation.feedback,
-                    apiKey: this.input.apiKey,
+                    apiKey: reasoningApiKey,
                 });
             } catch (error) {
                 const normalizedError = error instanceof Error ? error : new Error('Autopilot run failed');

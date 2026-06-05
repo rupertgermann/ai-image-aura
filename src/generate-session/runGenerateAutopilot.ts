@@ -1,5 +1,5 @@
 import { createAutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
-import type { GenerateDraft, GenerateSessionStore } from './GenerateSession';
+import { getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
@@ -9,6 +9,8 @@ import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 interface RunGenerateAutopilotInput {
     goal: string;
     apiKey: string;
+    reasoningApiKey?: string;
+    reasoningModel?: string;
     draft: GenerateDraft;
     referenceImages: File[];
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'saveCurrentResult' | 'saveLineageSource'>;
@@ -31,19 +33,24 @@ export interface RunGenerateAutopilotOutcome {
 
 export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Promise<RunGenerateAutopilotOutcome> {
     const createSession = input.createSession ?? createAutopilotSession;
+    const controls = getActiveGenerateControls(input.draft);
     const session = createSession({
         goal: input.goal,
         initialPrompt: input.draft.prompt,
         settings: {
-            quality: input.draft.quality,
-            aspectRatio: input.draft.aspectRatio,
-            background: input.draft.background,
+            model: input.draft.model,
+            quality: controls.quality,
+            aspectRatio: controls.aspectRatio,
+            background: controls.background,
+            imageSize: controls.imageSize,
             style: input.draft.style,
             lighting: input.draft.lighting,
             palette: input.draft.palette,
             referenceImages: input.referenceImages,
         },
         apiKey: input.apiKey,
+        reasoningApiKey: input.reasoningApiKey,
+        reasoningModel: input.reasoningModel,
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
         maxIterations: input.maxIterations,
         satisfactionThreshold: input.satisfactionThreshold,

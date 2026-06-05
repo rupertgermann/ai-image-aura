@@ -36,14 +36,23 @@ describe('runGenerateAutopilot', () => {
         const outcome = await runGenerateAutopilot({
             goal: 'A cinematic portrait',
             apiKey: 'key',
+            reasoningApiKey: 'reasoning-key',
+            reasoningModel: 'gemini-2.5-flash',
             draft: {
+                model: 'gpt-image-2',
                 prompt: 'prompt 1',
-                quality: 'high',
-                aspectRatio: '1024x1024',
-                background: 'transparent',
                 style: 'risograph poster',
                 lighting: 'golden hour',
                 palette: 'copper + teal + cream',
+                gptImage2: {
+                    quality: 'high',
+                    size: '1024x1024',
+                    background: 'transparent',
+                },
+                nanoBananaPro: {
+                    aspectRatio: '1:1',
+                    imageSize: '1K',
+                },
                 isSaved: false,
             },
             referenceImages: [],
@@ -62,6 +71,8 @@ describe('runGenerateAutopilot', () => {
         expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
+            reasoningApiKey: 'reasoning-key',
+            reasoningModel: 'gemini-2.5-flash',
             initialParentStepId: 'step-parent',
         }));
         expect(run).toHaveBeenCalledOnce();

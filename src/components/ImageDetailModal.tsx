@@ -6,7 +6,7 @@ import { lineageStore } from '../lineage/LineageStore';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig } from '../utils/openaiModels';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
@@ -33,6 +33,9 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     const [lineageCollapsed, setLineageCollapsed] = useLocalStorage('archive_detail_lineage_collapsed', false);
 
     const dateStr = new Date(image.timestamp).toLocaleString();
+    const imageModel = isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
+    const modelLabel = resolveImageModelConfig(imageModel).label;
+    const isNanoImage = imageModel === NANO_BANANA_PRO_IMAGE_MODEL;
 
     const copyPrompt = () => {
         navigator.clipboard.writeText(image.prompt);
@@ -157,16 +160,24 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             </div>
                             <div className="info-cell">
                                 <label><Sparkles size={12} /> MODEL</label>
-                                <span>{image.model || OPENAI_IMAGE_MODEL}</span>
+                                <span>{modelLabel}</span>
                             </div>
+                            {!isNanoImage && (
+                                <div className="info-cell">
+                                    <label><Layers size={12} /> QUALITY</label>
+                                    <span className="status-badge">{image.quality}</span>
+                                </div>
+                            )}
                             <div className="info-cell">
-                                <label><Layers size={12} /> QUALITY</label>
-                                <span className="status-badge">{image.quality}</span>
-                            </div>
-                            <div className="info-cell">
-                                <label><Layout size={12} /> SIZE</label>
+                                <label><Layout size={12} /> {isNanoImage ? 'ASPECT' : 'SIZE'}</label>
                                 <span>{image.aspectRatio}</span>
                             </div>
+                            {isNanoImage && image.quality && (
+                                <div className="info-cell">
+                                    <label><Layers size={12} /> RESOLUTION</label>
+                                    <span className="status-badge">{image.quality}</span>
+                                </div>
+                            )}
                             {image.style && image.style !== 'none' && (
                                 <div className="info-cell">
                                     <label><Wand2 size={12} /> STYLE</label>

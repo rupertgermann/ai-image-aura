@@ -11,7 +11,7 @@ import { lineageStore } from '../lineage/LineageStore';
 import { createLineageNavigator } from '../lineage/LineageNavigator';
 
 export function useAppController() {
-    const { currentView, apiKey, changeView, updateApiKey } = useAppPreferences();
+    const { currentView, apiKey, googleApiKey, changeView, getKey, updateApiKey, updateGoogleApiKey } = useAppPreferences();
     const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
@@ -149,6 +149,7 @@ export function useAppController() {
         forkFromLineageStep,
         generateViewProps: {
             apiKey,
+            getProviderKey: getKey,
             onSaveImage: saveImage,
         },
         archiveViewProps: {
@@ -167,11 +168,14 @@ export function useAppController() {
             key: editingImage?.id ?? 'empty-editor',
             image: editingImage,
             apiKey,
+            getProviderKey: getKey,
             onSave: handleSaveEditedImage,
         },
         settingsViewProps: {
             apiKey,
+            googleApiKey,
             onApiKeyChange: updateApiKey,
+            onGoogleApiKeyChange: updateGoogleApiKey,
         },
     };
 }

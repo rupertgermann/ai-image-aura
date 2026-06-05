@@ -1,18 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { useEditorCanvas } from '../editor/useEditorCanvas';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
+import { IMAGE_MODEL_REGISTRY, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
-    apiKey: string | null;
+    getProviderKey: (provider: Provider) => string | null;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
+const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }) => {
+    const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
+    const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
+    const activeModel = resolveImageModelConfig(aiEditModel);
+    const activeApiKey = getProviderKey(activeModel.provider);
     const {
         brightness,
         setBrightness,
@@ -47,7 +52,8 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
         handleDragLeave,
         handleDrop,
     } = useEditorController({
-        apiKey,
+        apiKey: activeApiKey,
+        model: aiEditModel,
         isCanvasReady: isReady,
         currentImageUrl,
         setCurrentImageUrl,
@@ -159,18 +165,39 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                             <h3>AI Superpowers</h3>
                         </div>
                         <div className="ai-edit-box">
+                            <div className="option-group">
+                                <label>MODEL</label>
+                                <div className="toggle-group">
+                                    {(Object.keys(IMAGE_MODEL_REGISTRY) as ImageModelSlug[]).map((modelSlug) => {
+                                        const config = resolveImageModelConfig(modelSlug);
+                                        const hasKey = !!getProviderKey(config.provider);
+                                        return (
+                                            <button
+                                                key={modelSlug}
+                                                className={aiEditModel === modelSlug ? 'active' : ''}
+                                                onClick={() => setAiEditModel(modelSlug)}
+                                                disabled={!hasKey}
+                                                title={hasKey ? config.label : `Add a ${config.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
+                                            >
+                                                {config.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             <textarea
                                 placeholder="Describe your transformation... (e.g. 'Make it a sunset', 'Add a dragon in the sky')"
                                 value={aiPrompt}
                                 onChange={(e) => setAiPrompt(e.target.value)}
                                 className="aura-input"
                                 style={{ minHeight: '100px', resize: 'vertical' }}
-                                disabled={aiLoading || !apiKey || !isCanvasReady}
+                                disabled={aiLoading || !activeApiKey || !isCanvasReady}
                             />
                             <button
                                 className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
-                                disabled={aiLoading || !aiPrompt.trim() || !apiKey || !isCanvasReady}
+                                disabled={aiLoading || !aiPrompt.trim() || !activeApiKey || !isCanvasReady}
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
@@ -213,7 +240,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, apiKey, onSave }) => {
                             </div>
 
                             {aiError && <div className="error-message mini">{aiError}</div>}
-                            {!apiKey && <div className="error-message mini">Set API Key in Settings</div>}
+                            {!activeApiKey && <div className="error-message mini">Set {activeModel.label} API key in Settings</div>}
                         </div>
                     </div>
 
