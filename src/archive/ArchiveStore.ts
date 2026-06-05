@@ -1,4 +1,4 @@
-import type { ArchiveImage } from '../db/types';
+import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { storage, type StorageProvider } from '../services/StorageService';
 import { archiveMetadataPort } from '../db/AuraPersistence';
 
@@ -16,6 +16,7 @@ export interface ArchiveStore {
 type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
     storedUrl: string;
     referenceIds: number[];
+    layerStack?: ArchiveLayerStack;
 };
 
 interface ArchiveMetadataPort {
@@ -87,12 +88,15 @@ class LocalArchiveStore implements ArchiveStore {
         const existing = await this.metadata.get(id);
         const timestamp = input.timestamp ?? existing?.timestamp ?? this.clock();
         const referenceIds = input.references?.map((_, index) => index) ?? [];
-        const snapshot = await this.captureSnapshot(id, existing?.referenceIds ?? []);
+        const layerIds = input.layerStack?.layers.map((layer) => layer.id) ?? [];
+        const snapshot = await this.captureSnapshot(id, existing?.referenceIds ?? [], existing?.layerStack?.layers.map((layer) => layer.id) ?? []);
         const touchedReferenceIds = getTouchedReferenceIds(existing?.referenceIds ?? [], referenceIds);
+        const touchedLayerIds = getTouchedLayerIds(existing?.layerStack?.layers.map((layer) => layer.id) ?? [], layerIds);
 
         try {
             await this.blobs.save(getImageBlobKey(id), input.url);
             await this.syncReferences(id, existing?.referenceIds ?? [], input.references ?? []);
+            await this.syncLayers(id, existing?.layerStack?.layers.map((layer) => layer.id) ?? [], input.layerStack);
 
             await this.metadata.save({
                 id,
@@ -109,10 +113,11 @@ class LocalArchiveStore implements ArchiveStore {
                 lighting: input.lighting,
                 palette: input.palette,
                 referenceIds,
+                layerStack: input.layerStack,
             });
         } catch (error) {
             await this.restoreMetadata(id, existing);
-            await this.restoreSnapshot(id, snapshot, touchedReferenceIds);
+            await this.restoreSnapshot(id, snapshot, touchedReferenceIds, touchedLayerIds);
             throw error;
         }
 
@@ -131,29 +136,37 @@ class LocalArchiveStore implements ArchiveStore {
             style: input.style,
             lighting: input.lighting,
             palette: input.palette,
+            layerStack: input.layerStack,
         };
     }
 
     async remove(id: string): Promise<void> {
         const existing = await this.metadata.get(id);
-        const snapshot = await this.captureSnapshot(id, existing?.referenceIds ?? []);
+        const snapshot = await this.captureSnapshot(
+            id,
+            existing?.referenceIds ?? [],
+            existing?.layerStack?.layers.map((layer) => layer.id) ?? [],
+        );
         const touchedReferenceIds = existing?.referenceIds ?? [];
+        const touchedLayerIds = existing?.layerStack?.layers.map((layer) => layer.id) ?? [];
 
         try {
             await this.blobs.remove(getImageBlobKey(id));
             await Promise.all(touchedReferenceIds.map((index) => this.blobs.remove(getReferenceBlobKey(id, index))));
+            await Promise.all(touchedLayerIds.map((layerId) => this.blobs.remove(getLayerBlobKey(id, layerId))));
             await this.metadata.remove(id);
         } catch (error) {
             await this.restoreMetadata(id, existing);
-            await this.restoreSnapshot(id, snapshot, touchedReferenceIds);
+            await this.restoreSnapshot(id, snapshot, touchedReferenceIds, touchedLayerIds);
             throw error;
         }
     }
 
     private async hydrate(record: ArchiveMetadataRecord): Promise<ArchiveImage | null> {
-        const [imageUrl, references] = await Promise.all([
+        const [imageUrl, references, layerStack] = await Promise.all([
             this.blobs.load(getImageBlobKey(record.id)),
             Promise.all(record.referenceIds.map((index) => this.blobs.load(getReferenceBlobKey(record.id, index)))),
+            this.hydrateLayerStack(record.id, record.layerStack),
         ]);
 
         const resolvedImageUrl = imageUrl ?? (record.storedUrl.startsWith('data:') ? record.storedUrl : null);
@@ -176,22 +189,30 @@ class LocalArchiveStore implements ArchiveStore {
             style: record.style,
             lighting: record.lighting,
             palette: record.palette,
+            layerStack,
         };
     }
 
-    private async captureSnapshot(id: string, referenceIds: number[]) {
-        const [image, references] = await Promise.all([
+    private async captureSnapshot(id: string, referenceIds: number[], layerIds: string[]) {
+        const [image, references, layers] = await Promise.all([
             this.blobs.load(getImageBlobKey(id)),
             Promise.all(referenceIds.map(async (index) => [index, await this.blobs.load(getReferenceBlobKey(id, index))] as const)),
+            Promise.all(layerIds.map(async (layerId) => [layerId, await this.blobs.load(getLayerBlobKey(id, layerId))] as const)),
         ]);
 
         return {
             image,
             references: new Map(references.filter((entry): entry is readonly [number, string] => entry[1] !== null)),
+            layers: new Map(layers.filter((entry): entry is readonly [string, string] => entry[1] !== null)),
         };
     }
 
-    private async restoreSnapshot(id: string, snapshot: { image: string | null; references: Map<number, string> }, touchedReferenceIds: number[]) {
+    private async restoreSnapshot(
+        id: string,
+        snapshot: { image: string | null; references: Map<number, string>; layers: Map<string, string> },
+        touchedReferenceIds: number[],
+        touchedLayerIds: string[],
+    ) {
         if (snapshot.image !== null) {
             await this.blobs.save(getImageBlobKey(id), snapshot.image);
         } else {
@@ -207,6 +228,17 @@ class LocalArchiveStore implements ArchiveStore {
             }
 
             await this.blobs.remove(getReferenceBlobKey(id, index));
+        }));
+
+        const layerIds = getTouchedLayerIds(Array.from(snapshot.layers.keys()), touchedLayerIds);
+        await Promise.all(layerIds.map(async (layerId) => {
+            const previousLayer = snapshot.layers.get(layerId);
+            if (previousLayer !== undefined) {
+                await this.blobs.save(getLayerBlobKey(id, layerId), previousLayer);
+                return;
+            }
+
+            await this.blobs.remove(getLayerBlobKey(id, layerId));
         }));
     }
 
@@ -227,13 +259,41 @@ class LocalArchiveStore implements ArchiveStore {
 
         await Promise.all(staleReferenceIds.map((index) => this.blobs.remove(getReferenceBlobKey(id, index))));
     }
+
+    private async syncLayers(id: string, previousLayerIds: string[], nextLayerStack?: ArchiveLayerStack): Promise<void> {
+        await Promise.all((nextLayerStack?.layers ?? []).map((layer) => this.blobs.save(getLayerBlobKey(id, layer.id), layer.assetUrl)));
+
+        const nextLayerIds = new Set((nextLayerStack?.layers ?? []).map((layer) => layer.id));
+        const staleLayerIds = previousLayerIds.filter((layerId) => !nextLayerIds.has(layerId));
+
+        await Promise.all(staleLayerIds.map((layerId) => this.blobs.remove(getLayerBlobKey(id, layerId))));
+    }
+
+    private async hydrateLayerStack(id: string, layerStack?: ArchiveLayerStack): Promise<ArchiveLayerStack | undefined> {
+        if (!layerStack) {
+            return undefined;
+        }
+
+        const layers = await Promise.all(layerStack.layers.map(async (layer) => ({
+            ...layer,
+            assetUrl: await this.blobs.load(getLayerBlobKey(id, layer.id)) ?? layer.assetUrl,
+        })));
+
+        return { ...layerStack, layers };
+    }
 }
 
 const getImageBlobKey = (id: string) => `img_${id}`;
 
 const getReferenceBlobKey = (id: string, index: number) => `ref_${id}_${index}`;
 
+const getLayerBlobKey = (id: string, layerId: string) => `layer_${id}_${layerId}`;
+
 const getTouchedReferenceIds = (left: number[], right: number[]) => {
+    return Array.from(new Set([...left, ...right]));
+};
+
+const getTouchedLayerIds = (left: string[], right: string[]) => {
     return Array.from(new Set([...left, ...right]));
 };
 

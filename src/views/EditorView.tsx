@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Undo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
-import { useEditorCanvas } from '../editor/useEditorCanvas';
+import { EditorCanvas, type EditorCanvasHandle } from '../editor/EditorCanvas';
+import { LayerPanel } from '../editor/LayerPanel';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
@@ -16,6 +17,7 @@ interface EditorViewProps {
 const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
+    const canvasRef = useRef<EditorCanvasHandle>(null);
     const activeModel = resolveImageModelConfig(aiEditModel);
     const activeApiKey = getProviderKey(activeModel.provider);
     const {
@@ -28,17 +30,34 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         filter,
         setFilter,
         adjustments,
-        canvasFilter,
-        currentImageUrl,
-        setCurrentImageUrl,
+        draft,
+        layerStack,
+        selectedLayerIds,
+        primarySelectedLayerId,
         referenceImages,
         referencePreviews,
         addReferenceFiles,
         removeReferenceAt,
+        addLayerFiles,
+        selectLayer,
+        renameLayer,
+        setLayerVisible,
+        setLayerOpacity,
+        updateLayerTransform,
+        duplicateSelectedLayers,
+        deleteSelectedLayers,
+        moveSelectedLayer,
+        commitDraft,
+        undo,
+        redo,
+        canUndo,
+        canRedo,
+        isDirty,
+        revertDraft,
         resetAdjustments,
         serializeReferences,
     } = useEditorSession(image);
-    const { canvasRef, isReady, exportDataUrl, exportBlob } = useEditorCanvas(currentImageUrl, canvasFilter);
+    const isReady = !!layerStack;
     const {
         aiPrompt,
         setAiPrompt,
@@ -55,16 +74,75 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         apiKey: activeApiKey,
         model: aiEditModel,
         isCanvasReady: isReady,
-        currentImageUrl,
-        setCurrentImageUrl,
+        draft,
+        layerStack,
+        selectedLayerIds,
+        commitDraft,
         referenceImages,
         addReferenceFiles,
         serializeReferences,
-        exportDataUrl,
-        exportBlob,
+        exportDataUrl: async () => {
+            if (!canvasRef.current) throw new Error('Canvas not ready');
+            return canvasRef.current.exportDataUrl();
+        },
+        exportBlob: async () => {
+            if (!canvasRef.current) throw new Error('Canvas not ready');
+            return canvasRef.current.exportBlob();
+        },
         adjustments,
         onSave,
     });
+
+    useEffect(() => {
+        const isTextInput = (target: EventTarget | null) => {
+            const element = target as HTMLElement | null;
+            return !!element?.closest('input, textarea, select, [contenteditable="true"]');
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (isTextInput(event.target)) {
+                return;
+            }
+
+            const modifier = event.metaKey || event.ctrlKey;
+            if (modifier && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                void save(false);
+                return;
+            }
+            if (modifier && event.key.toLowerCase() === 'z' && event.shiftKey) {
+                event.preventDefault();
+                redo();
+                return;
+            }
+            if (modifier && event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                undo();
+                return;
+            }
+            if (modifier && event.key.toLowerCase() === 'y') {
+                event.preventDefault();
+                redo();
+                return;
+            }
+            if (modifier && event.key.toLowerCase() === 'd') {
+                event.preventDefault();
+                duplicateSelectedLayers();
+                return;
+            }
+            if (event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault();
+                deleteSelectedLayers();
+                return;
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                selectLayer('base');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [deleteSelectedLayers, duplicateSelectedLayers, redo, save, selectLayer, undo]);
 
     if (!image) {
         return (
@@ -87,10 +165,55 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
 
             <div className="editor-grid">
                 <div className="canvas-area glass-panel">
-                    <canvas id="editor-canvas" ref={canvasRef} />
+                    {layerStack && (
+                        <EditorCanvas
+                            ref={canvasRef}
+                            layerStack={layerStack}
+                            adjustments={adjustments}
+                            selectedLayerIds={selectedLayerIds}
+                            primarySelectedLayerId={primarySelectedLayerId}
+                            onSelectLayer={selectLayer}
+                            onTransformLayer={updateLayerTransform}
+                        />
+                    )}
                 </div>
 
                 <aside className="editor-sidebar glass-panel">
+                    {layerStack && (
+                        <div className="sidebar-group">
+                            <div className="section-title">
+                                <Layers size={18} className="icon-purple" />
+                                <h3>Layers</h3>
+                            </div>
+                            <label className="upload-layer">
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={(e) => {
+                                        void addLayerFiles(Array.from(e.target.files || []));
+                                        e.currentTarget.value = '';
+                                    }}
+                                    style={{ display: 'none' }}
+                                />
+                                <Upload size={16} />
+                                Add image layer
+                            </label>
+                            <LayerPanel
+                                layerStack={layerStack}
+                                selectedLayerIds={selectedLayerIds}
+                                primarySelectedLayerId={primarySelectedLayerId}
+                                onSelectLayer={selectLayer}
+                                onRenameLayer={renameLayer}
+                                onSetVisible={setLayerVisible}
+                                onSetOpacity={setLayerOpacity}
+                                onDuplicate={duplicateSelectedLayers}
+                                onDelete={deleteSelectedLayers}
+                                onMove={moveSelectedLayer}
+                            />
+                        </div>
+                    )}
+
                     <div className="sidebar-group">
                         <div className="section-title">
                             <Sliders size={18} className="icon-purple" />
@@ -252,8 +375,19 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                             <Copy size={18} /> Save as Copy
                         </button>
                         <button className="btn-ghost" onClick={resetAdjustments}>
-                            <Undo2 size={18} /> Reset
+                            <RotateCcw size={18} /> Reset Adjustments
                         </button>
+                        <button className="btn-ghost" onClick={revertDraft}>
+                            <Undo2 size={18} /> {isDirty ? 'Revert Draft' : 'Draft Saved'}
+                        </button>
+                        <div className="history-actions">
+                            <button className="btn-ghost" onClick={undo} disabled={!canUndo}>
+                                <Undo2 size={18} /> Undo
+                            </button>
+                            <button className="btn-ghost" onClick={redo} disabled={!canRedo}>
+                                <Redo2 size={18} /> Redo
+                            </button>
+                        </div>
                     </div>
                 </aside>
             </div>

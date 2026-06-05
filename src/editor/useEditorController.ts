@@ -1,18 +1,30 @@
 import { useCallback, useState } from 'react';
+import type { ArchiveLayerStack } from '../db/types';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
-import type { EditorAdjustments, EditorSaveContext } from './saveEditedImage';
+import { dataURLtoFile } from '../utils/file';
 import type { ImageModelSlug } from '../utils/openaiModels';
+import {
+    getCombinedLayerBounds,
+    hasDurableLayerStack,
+    insertAiResultLayer,
+    type EditorAdjustments,
+    type EditorDraft,
+} from './layers';
+import { renderLayerStackToBlob } from './renderLayerStack';
+import type { EditorSaveContext } from './saveEditedImage';
 
 interface UseEditorControllerOptions {
     apiKey: string | null;
     model: ImageModelSlug;
     isCanvasReady: boolean;
-    currentImageUrl: string | null;
-    setCurrentImageUrl: (url: string) => void;
+    draft: EditorDraft | null;
+    layerStack: ArchiveLayerStack | null;
+    selectedLayerIds: string[];
+    commitDraft: (draft: EditorDraft, recordHistory?: boolean) => void;
     referenceImages: File[];
     addReferenceFiles: (files: File[]) => void;
     serializeReferences: () => Promise<string[]>;
-    exportDataUrl: () => string;
+    exportDataUrl: () => Promise<string>;
     exportBlob: () => Promise<Blob>;
     adjustments: EditorAdjustments;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void | Promise<void>;
@@ -22,8 +34,10 @@ export function useEditorController({
     apiKey,
     model,
     isCanvasReady,
-    currentImageUrl,
-    setCurrentImageUrl,
+    draft,
+    layerStack,
+    selectedLayerIds,
+    commitDraft,
     referenceImages,
     addReferenceFiles,
     serializeReferences,
@@ -38,6 +52,11 @@ export function useEditorController({
     const [isDragging, setIsDragging] = useState(false);
     const [lastAiEditPrompt, setLastAiEditPrompt] = useState<string | null>(null);
     const [lastAiEditModel, setLastAiEditModel] = useState<ImageModelSlug | null>(null);
+    const [lastAiTargetMode, setLastAiTargetMode] = useState<'whole-composition' | 'selected-layers' | null>(null);
+    const [lastAiTargetLayerCount, setLastAiTargetLayerCount] = useState<number | null>(null);
+    const [lastAiTargetIncludesBaseLayer, setLastAiTargetIncludesBaseLayer] = useState<boolean | null>(null);
+    const [lastAiResultLayerId, setLastAiResultLayerId] = useState<string | null>(null);
+    const [lastAiResultLayerName, setLastAiResultLayerName] = useState<string | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
         if (!isCanvasReady) {
@@ -45,22 +64,42 @@ export function useEditorController({
         }
 
         try {
-            const dataUrl = exportDataUrl();
+            const dataUrl = await exportDataUrl();
             const references = await serializeReferences();
             await Promise.resolve(onSave(dataUrl, {
                 isCopy,
                 references,
                 adjustments,
+                layerStack: layerStack && hasDurableLayerStack(layerStack) ? layerStack : null,
                 aiEditPrompt: lastAiEditPrompt,
                 aiEditModel: lastAiEditModel,
+                targetMode: lastAiEditPrompt ? lastAiTargetMode : null,
+                targetLayerCount: lastAiTargetLayerCount,
+                targetIncludesBaseLayer: lastAiTargetIncludesBaseLayer,
+                aiResultLayerId: lastAiResultLayerId,
+                aiResultLayerName: lastAiResultLayerName,
             }));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [adjustments, exportDataUrl, isCanvasReady, lastAiEditModel, lastAiEditPrompt, onSave, serializeReferences]);
+    }, [
+        adjustments,
+        exportDataUrl,
+        isCanvasReady,
+        lastAiEditModel,
+        lastAiEditPrompt,
+        lastAiResultLayerId,
+        lastAiResultLayerName,
+        lastAiTargetIncludesBaseLayer,
+        lastAiTargetLayerCount,
+        lastAiTargetMode,
+        layerStack,
+        onSave,
+        serializeReferences,
+    ]);
 
     const applyAiEdit = useCallback(async () => {
-        if (!apiKey || !aiPrompt.trim() || !currentImageUrl || !isCanvasReady) {
+        if (!apiKey || !aiPrompt.trim() || !draft || !layerStack || !isCanvasReady) {
             return;
         }
 
@@ -68,26 +107,53 @@ export function useEditorController({
         setAiError(null);
 
         try {
-            const blob = await exportBlob();
-            const newUrl = await imageWorkflow.edit({
+            const selectedVisibleLayerIds = selectedLayerIds.filter((layerId) => {
+                const layer = layerStack.layers.find((entry) => entry.id === layerId);
+                return layer?.visible;
+            });
+            const hasSelectedTargets = selectedVisibleLayerIds.length > 0 && !selectedVisibleLayerIds.every((layerId) => layerId === 'base');
+            const bounds = hasSelectedTargets ? getCombinedLayerBounds(layerStack, selectedVisibleLayerIds) : null;
+            const sourceImage = hasSelectedTargets && bounds
+                ? await renderLayerStackToBlob({
+                    ...layerStack,
+                    layers: layerStack.layers.filter((layer) => selectedVisibleLayerIds.includes(layer.id)),
+                }, adjustments, bounds)
+                : await exportBlob();
+            const contextReferences = hasSelectedTargets
+                ? [dataURLtoFile(await exportDataUrl(), 'composition-context.png')]
+                : [];
+            const resultUrl = await imageWorkflow.edit({
                 apiKey,
                 model,
                 prompt: aiPrompt,
-                sourceImage: blob,
-                referenceImages,
+                sourceImage,
+                referenceImages: [...contextReferences, ...referenceImages],
                 quality: 'medium',
             });
+            const targetIds = hasSelectedTargets ? selectedVisibleLayerIds : ['base'];
+            const result = insertAiResultLayer(layerStack, targetIds, resultUrl, () => crypto.randomUUID());
+            const resultLayer = result.layerStack.layers.find((layer) => layer.id === result.layerId);
 
-            setCurrentImageUrl(newUrl);
+            commitDraft({
+                ...draft,
+                layerStack: result.layerStack,
+                selectedLayerIds: [result.layerId],
+                primarySelectedLayerId: result.layerId,
+            });
             setLastAiEditPrompt(aiPrompt.trim());
             setLastAiEditModel(model);
+            setLastAiTargetMode(hasSelectedTargets ? 'selected-layers' : 'whole-composition');
+            setLastAiTargetLayerCount(hasSelectedTargets ? selectedVisibleLayerIds.length : null);
+            setLastAiTargetIncludesBaseLayer(hasSelectedTargets ? selectedVisibleLayerIds.includes('base') : null);
+            setLastAiResultLayerId(result.layerId);
+            setLastAiResultLayerName(resultLayer?.name ?? null);
             setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {
             setAiLoading(false);
         }
-    }, [aiPrompt, apiKey, currentImageUrl, exportBlob, isCanvasReady, model, referenceImages, setCurrentImageUrl]);
+    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, exportBlob, exportDataUrl, isCanvasReady, layerStack, model, referenceImages, selectedLayerIds]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();

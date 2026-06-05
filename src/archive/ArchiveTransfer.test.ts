@@ -102,6 +102,40 @@ describe('ArchiveTransfer', () => {
         ]);
     });
 
+    it('round-trips layered image assets and stable layer ids', async () => {
+        const sourceLineage = createStore();
+        const sourceImages = [createLayeredImage()];
+        const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: sourceLineage });
+        const archiveStore = new InMemoryArchiveStore();
+
+        const summary = await importArchiveZip(zipBytes, {
+            archiveStore,
+            lineageStore: createStore(),
+        });
+
+        expect(summary.missingAssetFiles).toEqual([]);
+        const imported = archiveStore.images.get('layered-image');
+        expect(imported?.layerStack?.layers.map((layer) => [layer.id, layer.assetUrl])).toEqual([
+            ['base', 'data:image/png;base64,aaaa'],
+            ['upload', 'data:image/png;base64,bBBB'],
+        ]);
+    });
+
+    it('reports missing layer assets without rejecting old archive imports', async () => {
+        const zipBytes = await buildArchiveZip([createLayeredImage()], { lineageStore: createStore() });
+        const zip = await JSZip.loadAsync(zipBytes);
+        zip.remove('aura-layered-image-layer-upload.png');
+        const archiveStore = new InMemoryArchiveStore();
+
+        const summary = await importArchiveZip(await zip.generateAsync({ type: 'uint8array' }), {
+            archiveStore,
+            lineageStore: createStore(),
+        });
+
+        expect(summary.missingAssetFiles).toEqual(['aura-layered-image-layer-upload.png']);
+        expect(archiveStore.images.get('layered-image')?.layerStack?.layers.map((layer) => layer.id)).toEqual(['base']);
+    });
+
     it('reports broken parent references during import instead of dropping them', async () => {
         const zip = new JSZip();
         zip.file('aura-image-1.png', Uint8Array.from([105, 109, 103]));
@@ -148,6 +182,55 @@ describe('ArchiveTransfer', () => {
 
 function createStore(): LineageStore {
     return createLineageStore({ metadata: new InMemoryLineageMetadataPort() });
+}
+
+function createLayeredImage(): ArchiveImage {
+    return {
+        id: 'layered-image',
+        url: 'data:image/png;base64,aaaa',
+        prompt: 'layered',
+        quality: 'high',
+        aspectRatio: '1024x1024',
+        background: 'transparent',
+        timestamp: '2026-04-04T12:00:00.000Z',
+        width: 1024,
+        height: 1024,
+        references: [],
+        layerStack: {
+            canvasWidth: 1024,
+            canvasHeight: 1024,
+            layers: [
+                {
+                    id: 'base',
+                    name: 'Base',
+                    kind: 'base',
+                    assetUrl: 'data:image/png;base64,aaaa',
+                    x: 0,
+                    y: 0,
+                    width: 1024,
+                    height: 1024,
+                    rotation: 0,
+                    opacity: 1,
+                    visible: true,
+                    locked: true,
+                },
+                {
+                    id: 'upload',
+                    name: 'Upload',
+                    kind: 'uploaded',
+                    assetUrl: 'data:image/png;base64,bBBB',
+                    x: 200,
+                    y: 200,
+                    width: 400,
+                    height: 400,
+                    rotation: 0,
+                    opacity: 0.7,
+                    visible: true,
+                    locked: false,
+                },
+            ],
+        },
+    };
 }
 
 function createImages(): ArchiveImage[] {

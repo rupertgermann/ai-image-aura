@@ -1,17 +1,17 @@
-import type { ArchiveImage } from '../db/types';
+import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import type { LineageStore } from '../lineage/LineageStore';
-
-export interface EditorAdjustments {
-    brightness: number;
-    contrast: number;
-    saturation: number;
-    filter: string;
-}
+import type { EditorAdjustments } from './layers';
 
 export interface EditorSaveContext {
     isCopy: boolean;
     references?: string[];
     adjustments: EditorAdjustments;
+    layerStack?: ArchiveLayerStack | null;
+    targetMode?: 'whole-composition' | 'selected-layers' | null;
+    targetLayerCount?: number | null;
+    targetIncludesBaseLayer?: boolean | null;
+    aiResultLayerId?: string | null;
+    aiResultLayerName?: string | null;
     aiEditPrompt?: string | null;
     aiEditModel?: string | null;
 }
@@ -60,6 +60,7 @@ function buildSavedImage(
             timestamp,
             references: context.references ?? sourceImage.references,
             model: context.aiEditModel ?? sourceImage.model,
+            layerStack: context.layerStack ?? undefined,
         };
     }
 
@@ -68,6 +69,7 @@ function buildSavedImage(
         url: updatedUrl,
         references: context.references ?? sourceImage.references,
         model: context.aiEditModel ?? sourceImage.model,
+        layerStack: context.layerStack ?? undefined,
     };
 }
 
@@ -88,6 +90,10 @@ function resolveStepType(context: EditorSaveContext) {
 }
 
 function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, context: EditorSaveContext) {
+    const layerStack = context.layerStack ?? savedImage.layerStack;
+    const layerCount = layerStack?.layers.length ?? null;
+    const visibleLayerCount = layerStack?.layers.filter((layer) => layer.visible).length ?? null;
+
     return {
         sourceArchiveImageId: sourceImage.id,
         outputArchiveImageId: savedImage.id,
@@ -101,5 +107,13 @@ function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, cont
             saturation: context.adjustments.saturation,
             filter: context.adjustments.filter,
         },
+        isLayered: !!layerStack && layerStack.layers.some((layer) => layer.kind !== 'base'),
+        layerCount,
+        visibleLayerCount,
+        targetMode: context.targetMode ?? null,
+        targetLayerCount: context.targetLayerCount ?? null,
+        targetIncludesBaseLayer: context.targetIncludesBaseLayer ?? null,
+        aiResultLayerId: context.aiResultLayerId ?? null,
+        aiResultLayerName: context.aiResultLayerName ?? null,
     } satisfies Record<string, unknown>;
 }

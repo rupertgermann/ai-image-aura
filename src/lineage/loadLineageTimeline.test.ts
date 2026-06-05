@@ -211,6 +211,49 @@ describe('loadLineageTimeline', () => {
             }),
         ]);
     });
+
+    it('summarizes layered save and targeted AI metadata without layer assets', async () => {
+        const timeline = await loadLineageTimeline('image-1', createStore({
+            byArchiveImageId: {
+                'image-1': [
+                    createStep({
+                        id: 'step-1',
+                        archiveImageId: 'image-1',
+                        stepType: 'overwrite',
+                        timestamp: '2026-04-04T09:00:00.000Z',
+                        metadata: {
+                            isLayered: true,
+                            layerCount: 3,
+                            visibleLayerCount: 2,
+                        },
+                    }),
+                    createStep({
+                        id: 'step-2',
+                        archiveImageId: 'image-1',
+                        stepType: 'ai-edit',
+                        timestamp: '2026-04-04T10:00:00.000Z',
+                        metadata: {
+                            isLayered: true,
+                            editPrompt: 'replace the sky',
+                            targetMode: 'selected-layers',
+                            targetLayerCount: 1,
+                            aiResultLayerName: 'AI result',
+                        },
+                    }),
+                ],
+            },
+            byId: {},
+            children: {
+                'step-1': [],
+                'step-2': [],
+            },
+        }));
+
+        expect(timeline.entries.map((entry) => entry.summary)).toEqual([
+            'Saved layered image · 3 layers · 2 visible',
+            'AI edit: replace the sky · targeted 1 layer · result: AI result',
+        ]);
+    });
 });
 
 function createStore(data: {

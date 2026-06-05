@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import type { ArchiveStore } from './ArchiveStore';
-import type { ArchiveImage } from '../db/types';
+import type { ArchiveImage, ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { LineageStep } from '../lineage/types';
 import type { LineageStore } from '../lineage/LineageStore';
 
@@ -28,6 +28,15 @@ interface ArchiveManifestImage {
     palette?: string;
     imageFileName: string;
     references: ArchiveManifestReference[];
+    layerStack?: ArchiveManifestLayerStack;
+}
+
+interface ArchiveManifestLayer extends Omit<ArchiveLayer, 'assetUrl'> {
+    assetFileName: string;
+}
+
+interface ArchiveManifestLayerStack extends Omit<ArchiveLayerStack, 'layers'> {
+    layers: ArchiveManifestLayer[];
 }
 
 interface ArchiveManifest {
@@ -72,6 +81,7 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
             zip.file(fileName, await imageUrlToBytes(reference));
             return { fileName };
         }));
+        const layerStack = image.layerStack ? await addLayerStackToZip(zip, image.id, image.layerStack) : undefined;
 
         archiveManifestImages.push({
             id: image.id,
@@ -88,6 +98,7 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
             palette: image.palette,
             imageFileName,
             references,
+            layerStack,
         });
     }
 
@@ -131,6 +142,7 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
 
             references.push(await blobToDataUrl(await referenceFile.async('blob')));
         }
+        const layerStack = await importLayerStack(zip, image.layerStack, missingAssetFiles);
 
         await deps.archiveStore.save({
             id: image.id,
@@ -147,6 +159,7 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
             lighting: image.lighting,
             palette: image.palette,
             references,
+            layerStack,
         });
         importedImageIds.push(image.id);
     }
@@ -235,6 +248,7 @@ function parseArchiveManifestImage(value: unknown): ArchiveManifestImage {
         palette: optionalString(value.palette),
         imageFileName: requireString(value.imageFileName, 'archive image fileName'),
         references: Array.isArray(value.references) ? value.references.map(parseArchiveManifestReference) : [],
+        layerStack: parseOptionalLayerStack(value.layerStack),
     };
 }
 
@@ -321,6 +335,123 @@ function getImageFileName(id: string) {
 
 function getReferenceFileName(id: string, index: number) {
     return `aura-${id}-reference-${index}.png`;
+}
+
+function getLayerFileName(imageId: string, layerId: string) {
+    return `aura-${imageId}-layer-${layerId}.png`;
+}
+
+async function addLayerStackToZip(zip: JSZip, imageId: string, layerStack: ArchiveLayerStack): Promise<ArchiveManifestLayerStack> {
+    const layers = await Promise.all(layerStack.layers.map(async (layer) => {
+        const assetFileName = getLayerFileName(imageId, layer.id);
+        zip.file(assetFileName, await imageUrlToBytes(layer.assetUrl));
+        return {
+            id: layer.id,
+            name: layer.name,
+            kind: layer.kind,
+            x: layer.x,
+            y: layer.y,
+            width: layer.width,
+            height: layer.height,
+            rotation: layer.rotation,
+            opacity: layer.opacity,
+            visible: layer.visible,
+            locked: layer.locked,
+            assetFileName,
+        };
+    }));
+
+    return {
+        canvasWidth: layerStack.canvasWidth,
+        canvasHeight: layerStack.canvasHeight,
+        layers,
+    };
+}
+
+async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStack | undefined, missingAssetFiles: string[]): Promise<ArchiveLayerStack | undefined> {
+    if (!layerStack) {
+        return undefined;
+    }
+
+    const layers: ArchiveLayer[] = [];
+    for (const layer of layerStack.layers) {
+        const file = zip.file(layer.assetFileName);
+        if (!file) {
+            missingAssetFiles.push(layer.assetFileName);
+            continue;
+        }
+
+        layers.push({
+            ...layer,
+            assetUrl: await blobToDataUrl(await file.async('blob')),
+        });
+    }
+
+    return {
+        canvasWidth: layerStack.canvasWidth,
+        canvasHeight: layerStack.canvasHeight,
+        layers,
+    };
+}
+
+function parseOptionalLayerStack(value: unknown): ArchiveManifestLayerStack | undefined {
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+    if (!isRecord(value) || !Array.isArray(value.layers)) {
+        throw new Error('Invalid archive layer stack');
+    }
+
+    return {
+        canvasWidth: requireNumber(value.canvasWidth, 'layer stack canvasWidth'),
+        canvasHeight: requireNumber(value.canvasHeight, 'layer stack canvasHeight'),
+        layers: value.layers.map(parseLayer),
+    };
+}
+
+function parseLayer(value: unknown): ArchiveManifestLayer {
+    if (!isRecord(value)) {
+        throw new Error('Invalid archive layer entry');
+    }
+
+    return {
+        id: requireString(value.id, 'layer id'),
+        name: requireString(value.name, 'layer name'),
+        kind: requireLayerKind(value.kind),
+        assetFileName: requireString(value.assetFileName, 'layer assetFileName'),
+        x: requireNumber(value.x, 'layer x'),
+        y: requireNumber(value.y, 'layer y'),
+        width: requireNumber(value.width, 'layer width'),
+        height: requireNumber(value.height, 'layer height'),
+        rotation: requireNumber(value.rotation, 'layer rotation'),
+        opacity: requireNumber(value.opacity, 'layer opacity'),
+        visible: requireBoolean(value.visible, 'layer visible'),
+        locked: requireBoolean(value.locked, 'layer locked'),
+    };
+}
+
+function requireLayerKind(value: unknown): ArchiveLayer['kind'] {
+    if (value === 'base' || value === 'uploaded' || value === 'ai-result') {
+        return value;
+    }
+
+    throw new Error('Invalid layer kind');
+}
+
+function requireNumber(value: unknown, label: string) {
+    if (typeof value !== 'number') {
+        throw new Error(`Invalid ${label}`);
+    }
+
+    return value;
+}
+
+function requireBoolean(value: unknown, label: string) {
+    if (typeof value !== 'boolean') {
+        throw new Error(`Invalid ${label}`);
+    }
+
+    return value;
 }
 
 async function blobToDataUrl(blob: Blob) {

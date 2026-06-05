@@ -183,6 +183,41 @@ describe('saveEditedImage', () => {
         }));
     });
 
+    it('persists layered save metadata without putting the full stack in lineage', async () => {
+        const lineage = createStore();
+        await seedSourceLineage(lineage);
+
+        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,layered', {
+            ...createSaveContext(),
+            isCopy: true,
+            layerStack: createLayerStack(),
+            aiEditPrompt: 'replace the sky',
+            targetMode: 'selected-layers',
+            targetLayerCount: 1,
+            targetIncludesBaseLayer: false,
+            aiResultLayerId: 'ai-layer',
+            aiResultLayerName: 'AI result',
+        }, {
+            saveImage: vi.fn(async (image) => image),
+            lineageStore: lineage,
+            makeId: () => 'layered-copy',
+        });
+
+        expect(savedImage.layerStack?.layers.map((layer) => layer.id)).toEqual(['base', 'upload', 'ai-layer']);
+        const steps = await lineage.getByArchiveImageId('layered-copy');
+        expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
+            isLayered: true,
+            layerCount: 3,
+            visibleLayerCount: 2,
+            targetMode: 'selected-layers',
+            targetLayerCount: 1,
+            targetIncludesBaseLayer: false,
+            aiResultLayerId: 'ai-layer',
+            aiResultLayerName: 'AI result',
+        }));
+        expect(steps.at(-1)?.metadata).not.toHaveProperty('layerStack');
+    });
+
 
     it('uses an explicit parent step id when forking from an older lineage step', async () => {
         const lineage = createStore();
@@ -237,6 +272,57 @@ function createStore() {
             return `step-${nextId}`;
         },
     });
+}
+
+function createLayerStack() {
+    return {
+        canvasWidth: 1024,
+        canvasHeight: 1024,
+        layers: [
+            {
+                id: 'base',
+                name: 'Base',
+                kind: 'base' as const,
+                assetUrl: 'data:image/png;base64,source',
+                x: 0,
+                y: 0,
+                width: 1024,
+                height: 1024,
+                rotation: 0,
+                opacity: 1,
+                visible: true,
+                locked: true,
+            },
+            {
+                id: 'upload',
+                name: 'Upload',
+                kind: 'uploaded' as const,
+                assetUrl: 'data:image/png;base64,upload',
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 400,
+                rotation: 0,
+                opacity: 0.8,
+                visible: false,
+                locked: false,
+            },
+            {
+                id: 'ai-layer',
+                name: 'AI result',
+                kind: 'ai-result' as const,
+                assetUrl: 'data:image/png;base64,ai',
+                x: 100,
+                y: 100,
+                width: 400,
+                height: 400,
+                rotation: 0,
+                opacity: 1,
+                visible: true,
+                locked: false,
+            },
+        ],
+    };
 }
 
 async function seedSourceLineage(lineage: ReturnType<typeof createStore>) {

@@ -154,16 +154,50 @@ function getStepSummary(step: LineageStep) {
 
             return prompt ? `Prompt: ${prompt}` : 'Generated from saved references';
         case 'ai-edit':
-            return editPrompt ? `AI edit: ${editPrompt}` : 'AI edit applied';
+            return summarizeLayeredAiEdit(metadata, editPrompt);
         case 'manual-edit':
             return summarizeAdjustments(metadata.editorAdjustments) ?? 'Manual adjustments applied';
         case 'overwrite':
-            return summarizeAdjustments(metadata.editorAdjustments) ?? 'Saved over current image';
+            return summarizeLayeredSave(metadata, 'Saved layered image') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Saved over current image';
         case 'save-as-copy':
-            return summarizeAdjustments(metadata.editorAdjustments) ?? 'Branched from previous version';
+            return summarizeLayeredSave(metadata, 'Saved layered copy') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Branched from previous version';
         case 'autopilot-iteration':
             return summarizeAutopilot(metadata);
     }
+}
+
+function summarizeLayeredAiEdit(metadata: Record<string, unknown>, editPrompt: string | null) {
+    const base = editPrompt ? `AI edit: ${editPrompt}` : 'AI edit applied';
+    if (metadata.isLayered !== true) {
+        return base;
+    }
+
+    const targetMode = asString(metadata.targetMode);
+    const targetLayerCount = asNumberOrNull(metadata.targetLayerCount);
+    const aiResultLayerName = excerpt(asString(metadata.aiResultLayerName), 32);
+    const parts = [
+        base,
+        targetMode === 'selected-layers' && targetLayerCount !== null ? `targeted ${targetLayerCount} layer${targetLayerCount === 1 ? '' : 's'}` : 'whole composition',
+        aiResultLayerName ? `result: ${aiResultLayerName}` : null,
+    ].filter(Boolean);
+
+    return parts.join(' · ');
+}
+
+function summarizeLayeredSave(metadata: Record<string, unknown>, fallback: string) {
+    if (metadata.isLayered !== true) {
+        return null;
+    }
+
+    const layerCount = asNumberOrNull(metadata.layerCount);
+    const visibleLayerCount = asNumberOrNull(metadata.visibleLayerCount);
+    const parts = [
+        fallback,
+        layerCount !== null ? `${layerCount} layer${layerCount === 1 ? '' : 's'}` : null,
+        visibleLayerCount !== null ? `${visibleLayerCount} visible` : null,
+    ].filter(Boolean);
+
+    return parts.length > 1 ? parts.join(' · ') : fallback;
 }
 
 function summarizeAutopilot(metadata: Record<string, unknown>) {

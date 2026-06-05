@@ -1,12 +1,13 @@
 import { SQLocal } from 'sqlocal';
-import type { ArchiveImage } from '../db/types';
+import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
-type ArchiveImageRow = ArchiveImage & { ref_ids?: string };
+type ArchiveImageRow = ArchiveImage & { ref_ids?: string; layer_stack?: string };
 
 type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
     storedUrl: string;
     referenceIds: number[];
+    layerStack?: ArchiveLayerStack;
 };
 
 export class SQLiteArchiveMetadataPort {
@@ -41,6 +42,7 @@ export class SQLiteArchiveMetadataPort {
         await this.sql.sql`ALTER TABLE images ADD COLUMN style TEXT`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN lighting TEXT`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN palette TEXT`.catch(() => null);
+        await this.sql.sql`ALTER TABLE images ADD COLUMN layer_stack TEXT`.catch(() => null);
 
         this.initialized = true;
     }
@@ -49,7 +51,7 @@ export class SQLiteArchiveMetadataPort {
         await this.init();
 
         await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style, lighting, palette)
+            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style, lighting, palette, layer_stack)
             VALUES (
                 ${record.id},
                 ${record.storedUrl},
@@ -64,7 +66,8 @@ export class SQLiteArchiveMetadataPort {
                 ${JSON.stringify(record.referenceIds)},
                 ${record.style || null},
                 ${record.lighting || null},
-                ${record.palette || null}
+                ${record.palette || null},
+                ${record.layerStack ? JSON.stringify(stripLayerAssets(record.layerStack)) : null}
             )
         `;
     }
@@ -89,6 +92,7 @@ export class SQLiteArchiveMetadataPort {
             lighting: image.lighting,
             palette: image.palette,
             referenceIds: parseReferenceIds(image.ref_ids),
+            layerStack: parseLayerStack(image.layer_stack),
         }));
     }
 
@@ -116,6 +120,7 @@ export class SQLiteArchiveMetadataPort {
             lighting: row.lighting,
             palette: row.palette,
             referenceIds: parseReferenceIds(row.ref_ids),
+            layerStack: parseLayerStack(row.layer_stack),
         };
     }
 
@@ -136,3 +141,28 @@ const parseReferenceIds = (value?: string): number[] => {
         return [];
     }
 };
+
+const parseLayerStack = (value?: string): ArchiveLayerStack | undefined => {
+    if (!value) {
+        return undefined;
+    }
+
+    try {
+        const parsed = JSON.parse(value) as ArchiveLayerStack;
+        if (!parsed || !Array.isArray(parsed.layers)) {
+            return undefined;
+        }
+
+        return parsed;
+    } catch {
+        return undefined;
+    }
+};
+
+const stripLayerAssets = (layerStack: ArchiveLayerStack): ArchiveLayerStack => ({
+    ...layerStack,
+    layers: layerStack.layers.map((layer) => ({
+        ...layer,
+        assetUrl: '',
+    })),
+});
