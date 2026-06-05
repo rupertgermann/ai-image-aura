@@ -60,6 +60,18 @@ describe('saveGeneratedImage', () => {
                 metadata: expect.objectContaining({
                     prompt: savedImage.prompt,
                     model: OPENAI_IMAGE_MODEL,
+                    imageModel: {
+                        slug: OPENAI_IMAGE_MODEL,
+                        controls: {
+                            quality: savedImage.quality,
+                            size: savedImage.aspectRatio,
+                            background: savedImage.background,
+                        },
+                    },
+                    dimensions: {
+                        width: 1024,
+                        height: 1024,
+                    },
                     quality: savedImage.quality,
                     aspectRatio: savedImage.aspectRatio,
                     background: savedImage.background,
@@ -67,7 +79,12 @@ describe('saveGeneratedImage', () => {
                     height: 1024,
                     imageSize: null,
                     sourceArchiveImageId: null,
+                    referenceImages: {
+                        count: 0,
+                        ids: [],
+                    },
                     referenceIds: [],
+                    referenceCount: 0,
                 }),
             }),
         ]);
@@ -92,6 +109,13 @@ describe('saveGeneratedImage', () => {
             expect.objectContaining({
                 stepType: 'reference-generation',
                 metadata: expect.objectContaining({
+                    referenceImages: {
+                        count: 2,
+                        ids: [
+                            'generated-2:reference:0',
+                            'generated-2:reference:1',
+                        ],
+                    },
                     referenceCount: 2,
                     referenceIds: [
                         'generated-2:reference:0',
@@ -126,6 +150,17 @@ describe('saveGeneratedImage', () => {
                 stepType: 'generation',
                 metadata: expect.objectContaining({
                     model: NANO_BANANA_PRO_IMAGE_MODEL,
+                    imageModel: {
+                        slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                        controls: {
+                            aspectRatio: '16:9',
+                            imageSize: '2K',
+                        },
+                    },
+                    dimensions: {
+                        width: 2048,
+                        height: 1152,
+                    },
                     quality: '2K',
                     aspectRatio: '16:9',
                     background: 'auto',

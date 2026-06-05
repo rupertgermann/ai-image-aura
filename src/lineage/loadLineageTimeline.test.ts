@@ -254,6 +254,45 @@ describe('loadLineageTimeline', () => {
             'AI edit: replace the sky · targeted 1 layer · result: AI result',
         ]);
     });
+
+    it('summarizes typed Generate reference metadata and preserves older sparse fallbacks', async () => {
+        const timeline = await loadLineageTimeline('image-1', createStore({
+            byArchiveImageId: {
+                'image-1': [
+                    createStep({
+                        id: 'step-typed',
+                        archiveImageId: 'image-1',
+                        stepType: 'reference-generation',
+                        timestamp: '2026-04-04T09:00:00.000Z',
+                        metadata: {
+                            prompt: 'lantern-lit greenhouse',
+                            referenceImages: {
+                                count: 2,
+                                ids: ['image-1:reference:0', 'image-1:reference:1'],
+                            },
+                        },
+                    }),
+                    createStep({
+                        id: 'step-old',
+                        archiveImageId: 'image-1',
+                        stepType: 'generation',
+                        timestamp: '2026-04-04T10:00:00.000Z',
+                        metadata: {},
+                    }),
+                ],
+            },
+            byId: {},
+            children: {
+                'step-typed': [],
+                'step-old': [],
+            },
+        }));
+
+        expect(timeline.entries.map((entry) => entry.summary)).toEqual([
+            'Prompt: lantern-lit greenhouse with 2 references',
+            'Generated from saved settings',
+        ]);
+    });
 });
 
 function createStore(data: {

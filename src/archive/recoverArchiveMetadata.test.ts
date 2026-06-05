@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { LineageStep } from '../lineage/types';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { recoverArchiveMetadataFromManifests } from './recoverArchiveMetadata';
 
 describe('recoverArchiveMetadataFromManifests', () => {
@@ -10,6 +11,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
             ['ref_image-1_0', 'data:image/png;base64,reference'],
         ]);
         const lineage = new InMemoryLineage();
+        const generateMetadata = createTypedGenerateMetadata();
 
         const summary = await recoverArchiveMetadataFromManifests({
             version: 1,
@@ -84,7 +86,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
                     parentStepId: null,
                     stepType: 'generation',
                     timestamp: '2026-05-30T16:10:56.590Z',
-                    metadata: { prompt: 'original prompt' },
+                    metadata: generateMetadata,
                 },
             ],
         }, { metadata, blobs, lineage });
@@ -112,6 +114,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
         expect(lineage.steps.get('step-1')).toEqual(expect.objectContaining({
             archiveImageId: 'image-1',
             stepType: 'generation',
+            metadata: generateMetadata,
         }));
     });
 
@@ -216,4 +219,39 @@ class InMemoryLineage {
         this.steps.set(step.id, step);
         return step;
     }
+}
+
+function createTypedGenerateMetadata() {
+    return {
+        prompt: 'original prompt',
+        model: OPENAI_IMAGE_MODEL,
+        imageModel: {
+            slug: OPENAI_IMAGE_MODEL,
+            controls: {
+                quality: 'medium',
+                size: '1536x1024',
+                background: 'auto',
+            },
+        },
+        dimensions: {
+            width: 1536,
+            height: 1024,
+        },
+        quality: 'medium',
+        aspectRatio: '1536x1024',
+        background: 'auto',
+        width: 1536,
+        height: 1024,
+        imageSize: null,
+        style: 'none',
+        lighting: 'none',
+        palette: 'none',
+        sourceArchiveImageId: null,
+        referenceImages: {
+            count: 1,
+            ids: ['image-1:reference:0'],
+        },
+        referenceCount: 1,
+        referenceIds: ['image-1:reference:0'],
+    };
 }

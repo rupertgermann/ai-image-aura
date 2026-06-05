@@ -1,4 +1,5 @@
 import type { LineageStore, LineageStep } from './LineageStore';
+import { readGenerateLineageReferenceCount } from './generateLineageMetadata';
 
 export interface LineageTimelineEntry {
     id: string;
@@ -142,7 +143,7 @@ function getStepSummary(step: LineageStep) {
     const metadata = step.metadata;
     const prompt = excerpt(asString(metadata.prompt));
     const editPrompt = excerpt(asString(metadata.editPrompt));
-    const referenceCount = asNumber(metadata.referenceCount);
+    const referenceCount = readGenerateLineageReferenceCount(metadata);
 
     switch (step.stepType) {
         case 'generation':
@@ -265,10 +266,6 @@ function excerpt(value: string | null, maxLength: number = 72) {
 
 function asString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value : null;
-}
-
-function asNumber(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 function asNumberOrNull(value: unknown) {

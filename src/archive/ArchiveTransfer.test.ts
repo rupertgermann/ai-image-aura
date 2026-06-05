@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage } from '../db/types';
-import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE } from './ArchiveTransfer';
+import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE, LINEAGE_MANIFEST_VERSION } from './ArchiveTransfer';
 import { createLineageStore, type LineageMetadataPort, type LineageStep, type LineageStore } from '../lineage/LineageStore';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
@@ -68,6 +68,48 @@ describe('ArchiveTransfer', () => {
                 expect.objectContaining({ id: 'step-4', stepType: 'save-as-copy' }),
             ],
         });
+    });
+
+    it('round-trips typed Generate lineage metadata without changing the lineage manifest version', async () => {
+        const sourceLineage = createStore();
+        const metadata = createTypedGenerateMetadata();
+        await sourceLineage.save({
+            id: 'typed-generate-step',
+            archiveImageId: 'image-1',
+            parentStepId: null,
+            stepType: 'reference-generation',
+            timestamp: '2026-04-04T09:00:00.000Z',
+            metadata,
+        });
+
+        const zipBytes = await buildArchiveZip([createImages()[0]!], { lineageStore: sourceLineage });
+        const zip = await JSZip.loadAsync(zipBytes);
+        const manifest = JSON.parse(await zip.file(LINEAGE_MANIFEST_FILE)!.async('text')) as {
+            version: number;
+            steps: LineageStep[];
+        };
+
+        expect(manifest.version).toBe(LINEAGE_MANIFEST_VERSION);
+        expect(manifest.steps).toEqual([
+            expect.objectContaining({
+                id: 'typed-generate-step',
+                metadata,
+            }),
+        ]);
+
+        const importedLineage = createStore();
+        const summary = await importArchiveZip(zipBytes, {
+            archiveStore: new InMemoryArchiveStore(),
+            lineageStore: importedLineage,
+        });
+
+        expect(summary.importedStepIds).toEqual(['typed-generate-step']);
+        await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
+            expect.objectContaining({
+                id: 'typed-generate-step',
+                metadata,
+            }),
+        ]);
     });
 
     it('round-trips archive images and lineage relationships through ZIP import', async () => {
@@ -320,6 +362,41 @@ function createImages(): ArchiveImage[] {
             references: [],
         },
     ];
+}
+
+function createTypedGenerateMetadata() {
+    return {
+        prompt: 'glass city at dawn',
+        model: OPENAI_IMAGE_MODEL,
+        imageModel: {
+            slug: OPENAI_IMAGE_MODEL,
+            controls: {
+                quality: 'high',
+                size: '1024x1024',
+                background: 'transparent',
+            },
+        },
+        dimensions: {
+            width: 1024,
+            height: 1024,
+        },
+        quality: 'high',
+        aspectRatio: '1024x1024',
+        background: 'transparent',
+        width: 1024,
+        height: 1024,
+        imageSize: null,
+        style: 'none',
+        lighting: 'none',
+        palette: 'none',
+        sourceArchiveImageId: 'source-image',
+        referenceImages: {
+            count: 1,
+            ids: ['image-1:reference:0'],
+        },
+        referenceCount: 1,
+        referenceIds: ['image-1:reference:0'],
+    };
 }
 
 async function seedLineage(lineage: LineageStore) {
