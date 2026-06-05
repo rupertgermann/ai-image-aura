@@ -299,6 +299,63 @@ export interface LayerBounds {
     height: number;
 }
 
+export type AiTransformTargetMode = 'whole-composition' | 'selected-layers';
+
+export interface AiTransformTargetMetadata {
+    targetMode: AiTransformTargetMode;
+    targetLayerCount: number | null;
+    targetIncludesBaseLayer: boolean | null;
+}
+
+export interface AiTransformTargetPlan {
+    mode: AiTransformTargetMode;
+    targetLayerIds: string[];
+    targetBounds: LayerBounds;
+    requiresCompositionContext: boolean;
+    metadata: AiTransformTargetMetadata;
+}
+
+export function planAiTransformTarget(draft: EditorDraft): AiTransformTargetPlan {
+    const selectedIds = new Set(draft.selectedLayerIds);
+    const selectedVisibleLayers = draft.layerStack.layers.filter((layer) => selectedIds.has(layer.id) && layer.visible);
+    const hasSelectedNonBaseLayer = selectedVisibleLayers.some((layer) => layer.kind !== 'base');
+
+    if (hasSelectedNonBaseLayer) {
+        const targetLayerIds = selectedVisibleLayers.map((layer) => layer.id);
+        const targetBounds = getCombinedLayerBounds(draft.layerStack, targetLayerIds);
+
+        if (targetBounds) {
+            return {
+                mode: 'selected-layers',
+                targetLayerIds,
+                targetBounds,
+                requiresCompositionContext: true,
+                metadata: {
+                    targetMode: 'selected-layers',
+                    targetLayerCount: targetLayerIds.length,
+                    targetIncludesBaseLayer: selectedVisibleLayers.some((layer) => layer.kind === 'base'),
+                },
+            };
+        }
+    }
+
+    const targetLayerIds = draft.layerStack.layers
+        .filter((layer) => layer.visible)
+        .map((layer) => layer.id);
+
+    return {
+        mode: 'whole-composition',
+        targetLayerIds,
+        targetBounds: getWholeCompositionBounds(draft.layerStack),
+        requiresCompositionContext: false,
+        metadata: {
+            targetMode: 'whole-composition',
+            targetLayerCount: null,
+            targetIncludesBaseLayer: null,
+        },
+    };
+}
+
 export function getCombinedLayerBounds(layerStack: ArchiveLayerStack, layerIds: string[]): LayerBounds | null {
     const ids = new Set(layerIds);
     const targetLayers = layerStack.layers.filter((layer) => ids.has(layer.id) && layer.visible);
@@ -316,6 +373,15 @@ export function getCombinedLayerBounds(layerStack: ArchiveLayerStack, layerIds: 
         y: minY,
         width: maxX - minX,
         height: maxY - minY,
+    };
+}
+
+function getWholeCompositionBounds(layerStack: ArchiveLayerStack): LayerBounds {
+    return {
+        x: 0,
+        y: 0,
+        width: layerStack.canvasWidth,
+        height: layerStack.canvasHeight,
     };
 }
 

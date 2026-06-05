@@ -4,9 +4,9 @@ import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import { dataURLtoFile } from '../utils/file';
 import type { ImageModelSlug } from '../utils/openaiModels';
 import {
-    getCombinedLayerBounds,
     hasDurableLayerStack,
     insertAiResultLayer,
+    planAiTransformTarget,
     type EditorAdjustments,
     type EditorDraft,
 } from './layers';
@@ -36,7 +36,6 @@ export function useEditorController({
     isCanvasReady,
     draft,
     layerStack,
-    selectedLayerIds,
     commitDraft,
     referenceImages,
     addReferenceFiles,
@@ -107,19 +106,15 @@ export function useEditorController({
         setAiError(null);
 
         try {
-            const selectedVisibleLayerIds = selectedLayerIds.filter((layerId) => {
-                const layer = layerStack.layers.find((entry) => entry.id === layerId);
-                return layer?.visible;
-            });
-            const hasSelectedTargets = selectedVisibleLayerIds.length > 0 && !selectedVisibleLayerIds.every((layerId) => layerId === 'base');
-            const bounds = hasSelectedTargets ? getCombinedLayerBounds(layerStack, selectedVisibleLayerIds) : null;
-            const sourceImage = hasSelectedTargets && bounds
+            const targetPlan = planAiTransformTarget(draft);
+            const sourceLayerStack = draft.layerStack;
+            const sourceImage = targetPlan.mode === 'selected-layers'
                 ? await renderLayerStackToBlob({
-                    ...layerStack,
-                    layers: layerStack.layers.filter((layer) => selectedVisibleLayerIds.includes(layer.id)),
-                }, adjustments, bounds)
+                    ...sourceLayerStack,
+                    layers: sourceLayerStack.layers.filter((layer) => targetPlan.targetLayerIds.includes(layer.id)),
+                }, adjustments, targetPlan.targetBounds)
                 : await exportBlob();
-            const contextReferences = hasSelectedTargets
+            const contextReferences = targetPlan.requiresCompositionContext
                 ? [dataURLtoFile(await exportDataUrl(), 'composition-context.png')]
                 : [];
             const resultUrl = await imageWorkflow.edit({
@@ -130,8 +125,7 @@ export function useEditorController({
                 referenceImages: [...contextReferences, ...referenceImages],
                 quality: 'medium',
             });
-            const targetIds = hasSelectedTargets ? selectedVisibleLayerIds : ['base'];
-            const result = insertAiResultLayer(layerStack, targetIds, resultUrl, () => crypto.randomUUID());
+            const result = insertAiResultLayer(sourceLayerStack, targetPlan.targetLayerIds, resultUrl, () => crypto.randomUUID());
             const resultLayer = result.layerStack.layers.find((layer) => layer.id === result.layerId);
 
             commitDraft({
@@ -142,9 +136,9 @@ export function useEditorController({
             });
             setLastAiEditPrompt(aiPrompt.trim());
             setLastAiEditModel(model);
-            setLastAiTargetMode(hasSelectedTargets ? 'selected-layers' : 'whole-composition');
-            setLastAiTargetLayerCount(hasSelectedTargets ? selectedVisibleLayerIds.length : null);
-            setLastAiTargetIncludesBaseLayer(hasSelectedTargets ? selectedVisibleLayerIds.includes('base') : null);
+            setLastAiTargetMode(targetPlan.metadata.targetMode);
+            setLastAiTargetLayerCount(targetPlan.metadata.targetLayerCount);
+            setLastAiTargetIncludesBaseLayer(targetPlan.metadata.targetIncludesBaseLayer);
             setLastAiResultLayerId(result.layerId);
             setLastAiResultLayerName(resultLayer?.name ?? null);
             setAiPrompt('');
@@ -153,7 +147,7 @@ export function useEditorController({
         } finally {
             setAiLoading(false);
         }
-    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, exportBlob, exportDataUrl, isCanvasReady, layerStack, model, referenceImages, selectedLayerIds]);
+    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, exportBlob, exportDataUrl, isCanvasReady, layerStack, model, referenceImages]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
