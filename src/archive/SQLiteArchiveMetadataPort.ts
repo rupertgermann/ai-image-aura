@@ -1,6 +1,7 @@
 import { SQLocal } from 'sqlocal';
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { createDurableLayerStackMetadata } from './ArchiveAssets';
 
 type ArchiveImageRow = ArchiveImage & { ref_ids?: string; layer_stack?: string };
 
@@ -67,7 +68,7 @@ export class SQLiteArchiveMetadataPort {
                 ${record.style || null},
                 ${record.lighting || null},
                 ${record.palette || null},
-                ${record.layerStack ? JSON.stringify(stripLayerAssets(record.layerStack)) : null}
+                ${record.layerStack ? JSON.stringify(createDurableLayerStackMetadata(record.layerStack)) : null}
             )
         `;
     }
@@ -162,11 +163,3 @@ const parseLayerStack = (value?: string): ArchiveLayerStack | undefined => {
         return undefined;
     }
 };
-
-const stripLayerAssets = (layerStack: ArchiveLayerStack): ArchiveLayerStack => ({
-    ...layerStack,
-    layers: layerStack.layers.map((layer) => ({
-        ...layer,
-        assetUrl: '',
-    })),
-});

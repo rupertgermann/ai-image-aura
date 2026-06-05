@@ -1,5 +1,10 @@
 import type { ArchiveImage } from '../db/types';
+import {
+    buildImageModelArchiveFields,
+    sanitizeArchiveImageModelControls,
+} from '../image-models/ImageModelControls';
 import type { LineageStore } from '../lineage/LineageStore';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, isImageModelSlug } from '../utils/openaiModels';
 import type { GenerateLineageSource, GenerateSessionStore } from './GenerateSession';
 
 export interface SaveGeneratedImageDeps {
@@ -42,12 +47,19 @@ async function resolveParentStepId(
 }
 
 function buildGenerationMetadata(image: ArchiveImage, lineageSource: GenerateLineageSource | null) {
+    const model = isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL;
+    const imageModelControls = sanitizeArchiveImageModelControls(model, image);
+    const imageModelArchiveFields = buildImageModelArchiveFields(model, imageModelControls);
+
     return {
         prompt: image.prompt,
         model: image.model ?? null,
         quality: image.quality,
         aspectRatio: image.aspectRatio,
         background: image.background,
+        width: image.width ?? imageModelArchiveFields.width,
+        height: image.height ?? imageModelArchiveFields.height,
+        imageSize: model === NANO_BANANA_PRO_IMAGE_MODEL ? imageModelArchiveFields.quality : null,
         style: image.style ?? 'none',
         lighting: image.lighting ?? 'none',
         palette: image.palette ?? 'none',

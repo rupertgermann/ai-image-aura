@@ -5,7 +5,7 @@ import { createGoogleImageProvider, extractGoogleImageData } from './ImageProvid
 
 describe('ImageWorkflow', () => {
     it('routes generate requests through the configured provider for the selected model', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (_input: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
         const providers: ImageProviderRegistry = {
             openai: {
                 generate,
@@ -70,11 +70,13 @@ describe('ImageWorkflow', () => {
             }),
             prompt: 'make it cinematic',
             quality: 'medium',
+            size: '1024x1024',
+            background: 'auto',
         }));
     });
 
     it('falls back to the default generation size when aspect ratio value is unsupported', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (_request: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
         const workflow = createImageWorkflow({
             openai: {
                 generate,
@@ -247,6 +249,54 @@ describe('ImageWorkflow', () => {
             'user-reference.png',
         ]);
     });
+
+    it('maps nano-banana-pro Editor AI transforms with source handling and Reference image limits', async () => {
+        const edit = vi.fn(async (_request: Parameters<ImageProvider['edit']>[0]) => ({ b64_json: 'edited-nano' }));
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate: vi.fn(),
+                edit,
+            },
+        });
+        const references = Array.from({ length: 15 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
+        );
+
+        await workflow.edit({
+            apiKey: 'google-key',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'make it cinematic',
+            sourceImage: new Blob(['source'], { type: 'image/png' }),
+            referenceImages: references,
+        });
+
+        const request = edit.mock.calls[0]?.[0];
+        expect(request).toEqual(expect.objectContaining({
+            aspectRatio: '1:1',
+            imageSize: '1K',
+            preserveSourceDimensions: true,
+        }));
+        expect(request?.referenceImages?.map((file) => file.name)).toEqual([
+            'edit-input.png',
+            'ref-0.png',
+            'ref-1.png',
+            'ref-2.png',
+            'ref-3.png',
+            'ref-4.png',
+            'ref-5.png',
+            'ref-6.png',
+            'ref-7.png',
+            'ref-8.png',
+            'ref-9.png',
+            'ref-10.png',
+            'ref-11.png',
+            'ref-12.png',
+        ]);
+    });
 });
 
 describe('googleImageProvider', () => {
@@ -302,7 +352,7 @@ describe('googleImageProvider', () => {
     });
 
     it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (_request: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -333,7 +383,7 @@ describe('googleImageProvider', () => {
     });
 
     it('uses only the first 14 references for Nano Banana generation requests', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (_input: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -361,7 +411,7 @@ describe('googleImageProvider', () => {
             referenceImages: references,
         });
 
-        const calledWith = generate.mock.calls[0]?.[0] as { referenceImages: File[] };
+        const calledWith = generate.mock.calls[0]?.[0] as unknown as { referenceImages: File[] };
         expect(calledWith.referenceImages).toHaveLength(14);
         expect(calledWith.referenceImages.map((file) => file.name)).toEqual([
             'ref-0.png',

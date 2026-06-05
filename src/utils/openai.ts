@@ -6,6 +6,7 @@ export type ImageBackground = 'transparent' | 'opaque' | 'auto';
 
 export interface OpenAiImageRequest {
     apiKey: string;
+    model?: string;
     apiModel?: string;
     endpoints?: {
         generate: string;
@@ -44,7 +45,7 @@ export interface OpenAiResponsesClient {
 export const openAiImageClient: OpenAiImageClient = {
     async createImage(request) {
         const isEdit = request.referenceImages && request.referenceImages.length > 0;
-        const apiModel = request.apiModel ?? OPENAI_IMAGE_MODEL;
+        const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
         const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
         const endpoint = isEdit ? endpoints.edit : endpoints.generate;
 

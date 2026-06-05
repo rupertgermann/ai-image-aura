@@ -3,14 +3,15 @@ import {
     type ImageBackground,
     type ImageQuality,
 } from '../utils/openai';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
+import {
+    mapImageModelEditProviderRequest,
+    mapImageModelGenerateProviderRequest,
+} from '../image-models/ImageModelControls';
+import { DEFAULT_IMAGE_MODEL, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
 import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, type ImageProviderResponse } from './ImageProvider';
 
 export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
-
-const VALID_GENERATION_SIZES = new Set(['1024x1024', '1536x1024', '1024x1536', 'auto']);
-const VALID_NANO_ASPECT_RATIOS = new Set<NanoBananaAspectRatio>(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']);
-export const NANO_REFERENCE_LIMIT = 14;
+export { NANO_REFERENCE_LIMIT } from '../image-models/ImageModelControls';
 
 export interface GenerateImageInput {
     apiKey: string;
@@ -47,33 +48,38 @@ export interface ImageWorkflow {
 export function createImageWorkflow(providers: ImageProviderRegistry = imageProviderRegistry): ImageWorkflow {
     return {
         async generate(input) {
-            const { model, provider } = resolveImageProvider(input.model, providers);
+            const { model, modelSlug, provider } = resolveImageProvider(input.model, providers);
+            const providerRequest = mapImageModelGenerateProviderRequest(modelSlug, {
+                quality: input.quality,
+                aspectRatio: input.aspectRatio,
+                background: input.background,
+                imageSize: input.imageSize,
+                referenceImages: input.referenceImages,
+            });
 
             return requestImageDataUrl(provider.generate({
                 apiKey: input.apiKey,
                 model,
                 prompt: buildGenerationPrompt(input),
-                quality: input.quality,
-                size: sanitizeGenerationSize(input.aspectRatio),
-                background: input.background,
-                aspectRatio: model.slug === NANO_BANANA_PRO_IMAGE_MODEL ? normalizeNanoAspectRatio(input.aspectRatio) : undefined,
-                imageSize: input.imageSize,
-                referenceImages: trimNanoReferences(model.slug, input.referenceImages),
+                ...providerRequest,
             }));
         },
 
         async edit(input) {
-            const { model, provider } = resolveImageProvider(input.model, providers);
+            const { model, modelSlug, provider } = resolveImageProvider(input.model, providers);
+            const providerRequest = mapImageModelEditProviderRequest(modelSlug, {
+                sourceImage: createEditSourceFile(input.sourceImage),
+                referenceImages: input.referenceImages,
+                quality: input.quality,
+                aspectRatio: input.aspectRatio,
+                imageSize: input.imageSize,
+            });
 
             return requestImageDataUrl(provider.edit({
                 apiKey: input.apiKey,
                 model,
                 prompt: input.prompt,
-                quality: input.quality ?? 'medium',
-                aspectRatio: input.aspectRatio,
-                imageSize: input.imageSize,
-                preserveSourceDimensions: model.slug === NANO_BANANA_PRO_IMAGE_MODEL,
-                referenceImages: [createEditSourceFile(input.sourceImage), ...input.referenceImages],
+                ...providerRequest,
             }));
         },
 
@@ -86,28 +92,6 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
         },
     };
 }
-
-const trimNanoReferences = (modelSlug: ImageModelSlug, referenceImages: File[]) => {
-    return modelSlug === NANO_BANANA_PRO_IMAGE_MODEL
-        ? referenceImages.slice(0, NANO_REFERENCE_LIMIT)
-        : referenceImages;
-};
-
-function isNanoAspectRatio(value: string): value is NanoBananaAspectRatio {
-    return VALID_NANO_ASPECT_RATIOS.has(value as NanoBananaAspectRatio);
-}
-
-const normalizeNanoAspectRatio = (size: string): NanoBananaAspectRatio => {
-    const normalizedSize = size.trim();
-    const mapped = (
-        normalizedSize === '1536x1024' ? '3:2' :
-            normalizedSize === '1024x1536' ? '2:3' :
-                normalizedSize === 'auto' || normalizedSize === '1024x1024' ? '1:1' :
-                    normalizedSize
-    );
-
-    return isNanoAspectRatio(mapped) ? mapped : '1:1';
-};
 
 export const imageWorkflow = createImageWorkflow();
 
@@ -123,11 +107,6 @@ const buildGenerationPrompt = (input: GenerateImageInput) => {
         : input.prompt;
 };
 
-const sanitizeGenerationSize = (size: string) => {
-    const normalizedSize = size.trim();
-    return VALID_GENERATION_SIZES.has(normalizedSize) ? normalizedSize : '1024x1024';
-};
-
 const createEditSourceFile = (sourceImage: Blob) => {
     return new File([sourceImage], 'edit-input.png', {
         type: sourceImage.type || 'image/png',
@@ -136,6 +115,7 @@ const createEditSourceFile = (sourceImage: Blob) => {
 
 const resolveImageProvider = (slug: ImageModelSlug = DEFAULT_IMAGE_MODEL, providers: ImageProviderRegistry): {
     model: ReturnType<typeof resolveImageModelConfig>;
+    modelSlug: ImageModelSlug;
     provider: ImageProvider;
 } => {
     const model = resolveImageModelConfig(slug);
@@ -145,7 +125,7 @@ const resolveImageProvider = (slug: ImageModelSlug = DEFAULT_IMAGE_MODEL, provid
         throw new Error(`No image provider configured for ${model.provider}`);
     }
 
-    return { model, provider };
+    return { model, modelSlug: slug, provider };
 };
 
 const requestImageDataUrl = async (request: Promise<ImageProviderResponse>) => {

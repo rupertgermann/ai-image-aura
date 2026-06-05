@@ -3,7 +3,7 @@ import { createLineageStore, type LineageMetadataPort, type LineageStep } from '
 import { saveGeneratedImage } from './saveGeneratedImage';
 import type { ArchiveImage } from '../db/types';
 import type { GenerateLineageSource } from './GenerateSession';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -59,8 +59,13 @@ describe('saveGeneratedImage', () => {
                 timestamp: savedImage.timestamp,
                 metadata: expect.objectContaining({
                     prompt: savedImage.prompt,
+                    model: OPENAI_IMAGE_MODEL,
                     quality: savedImage.quality,
                     aspectRatio: savedImage.aspectRatio,
+                    background: savedImage.background,
+                    width: 1024,
+                    height: 1024,
+                    imageSize: null,
                     sourceArchiveImageId: null,
                     referenceIds: [],
                 }),
@@ -92,6 +97,41 @@ describe('saveGeneratedImage', () => {
                         'generated-2:reference:0',
                         'generated-2:reference:1',
                     ],
+                }),
+            }),
+        ]);
+    });
+
+    it('records nano-banana-pro archive metadata dimensions through shared Image model controls', async () => {
+        const lineage = createStore();
+        const sessionStore = createSessionStore();
+        const image = createArchiveImage({
+            id: 'generated-nano',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            quality: '2K',
+            aspectRatio: '16:9',
+            background: 'auto',
+            width: 2048,
+            height: 1152,
+        });
+
+        await saveGeneratedImage(image, {
+            saveImage: vi.fn(async (nextImage) => nextImage),
+            lineageStore: lineage,
+            sessionStore,
+        });
+
+        await expect(lineage.getByArchiveImageId('generated-nano')).resolves.toEqual([
+            expect.objectContaining({
+                stepType: 'generation',
+                metadata: expect.objectContaining({
+                    model: NANO_BANANA_PRO_IMAGE_MODEL,
+                    quality: '2K',
+                    aspectRatio: '16:9',
+                    background: 'auto',
+                    width: 2048,
+                    height: 1152,
+                    imageSize: '2K',
                 }),
             }),
         ]);

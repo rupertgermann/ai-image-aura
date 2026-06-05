@@ -1,0 +1,80 @@
+import { describe, expect, it } from 'vitest';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
+import { buildGeneratedArchiveImage } from './useGenerateController';
+
+describe('Generate controller Image model archive metadata', () => {
+    it('builds gpt-image-2 archive metadata from shared Image model controls', () => {
+        const draft = createDraft({
+            model: OPENAI_IMAGE_MODEL,
+            gptImage2: {
+                quality: 'high',
+                size: '1536x1024',
+                background: 'transparent',
+            },
+        });
+
+        expect(buildGeneratedArchiveImage({
+            id: 'generated-openai',
+            url: 'data:image/png;base64,gpt',
+            timestamp: '2026-06-05T12:00:00.000Z',
+            draft,
+            references: ['data:image/png;base64,ref'],
+        })).toMatchObject({
+            id: 'generated-openai',
+            model: OPENAI_IMAGE_MODEL,
+            quality: 'high',
+            aspectRatio: '1536x1024',
+            background: 'transparent',
+            width: 1536,
+            height: 1024,
+            references: ['data:image/png;base64,ref'],
+        });
+    });
+
+    it('builds nano-banana-pro archive metadata from shared Image model controls', () => {
+        const draft = createDraft({
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            nanoBananaPro: {
+                aspectRatio: '16:9',
+                imageSize: '4K',
+            },
+        });
+
+        expect(buildGeneratedArchiveImage({
+            id: 'generated-nano',
+            url: 'data:image/png;base64,nano',
+            timestamp: '2026-06-05T12:00:00.000Z',
+            draft,
+            references: [],
+        })).toMatchObject({
+            id: 'generated-nano',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            quality: '4K',
+            aspectRatio: '16:9',
+            background: 'auto',
+            width: 4096,
+            height: 2304,
+            references: [],
+        });
+    });
+});
+
+function createDraft(overrides: Partial<GenerateDraft>): GenerateDraft {
+    return {
+        ...DEFAULT_GENERATE_DRAFT,
+        prompt: 'studio prompt',
+        style: 'none',
+        lighting: 'none',
+        palette: 'none',
+        ...overrides,
+        gptImage2: {
+            ...DEFAULT_GENERATE_DRAFT.gptImage2,
+            ...overrides.gptImage2,
+        },
+        nanoBananaPro: {
+            ...DEFAULT_GENERATE_DRAFT.nanoBananaPro,
+            ...overrides.nanoBananaPro,
+        },
+    };
+}
