@@ -1627,7 +1627,8 @@ textarea.aura-input {
     .sidebar {
         width: 100%;
         height: auto;
-        flex-direction: row;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
         align-items: center;
         padding: var(--spacing-16);
     }
@@ -1646,8 +1647,17 @@ textarea.aura-input {
     }
 
     .sidebar-nav {
-        flex-direction: row;
-        overflow-x: auto;
+        display: grid;
+        flex: none;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--spacing-8);
+        min-width: 0;
+    }
+
+    .nav-item {
+        justify-content: center;
+        min-width: 0;
+        text-align: center;
     }
 
     .view-wrapper {
