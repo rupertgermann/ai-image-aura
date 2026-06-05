@@ -4,7 +4,7 @@ import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage } from '../db/types';
 import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE, LINEAGE_MANIFEST_VERSION } from './ArchiveTransfer';
 import { createLineageStore, type LineageMetadataPort, type LineageStep, type LineageStore } from '../lineage/LineageStore';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -70,16 +70,34 @@ describe('ArchiveTransfer', () => {
         });
     });
 
-    it('round-trips typed Generate lineage metadata without changing the lineage manifest version', async () => {
+    it('round-trips typed Generate, Editor, and Autopilot lineage metadata without changing the lineage manifest version', async () => {
         const sourceLineage = createStore();
-        const metadata = createTypedGenerateMetadata();
+        const generateMetadata = createTypedGenerateMetadata();
+        const editorMetadata = createTypedEditorMetadata();
+        const autopilotMetadata = createTypedAutopilotMetadata();
         await sourceLineage.save({
             id: 'typed-generate-step',
             archiveImageId: 'image-1',
             parentStepId: null,
             stepType: 'reference-generation',
             timestamp: '2026-04-04T09:00:00.000Z',
-            metadata,
+            metadata: generateMetadata,
+        });
+        await sourceLineage.save({
+            id: 'typed-editor-step',
+            archiveImageId: 'image-1',
+            parentStepId: 'typed-generate-step',
+            stepType: 'ai-edit',
+            timestamp: '2026-04-04T10:00:00.000Z',
+            metadata: editorMetadata,
+        });
+        await sourceLineage.save({
+            id: 'typed-autopilot-step',
+            archiveImageId: 'image-1',
+            parentStepId: 'typed-editor-step',
+            stepType: 'autopilot-iteration',
+            timestamp: '2026-04-04T11:00:00.000Z',
+            metadata: autopilotMetadata,
         });
 
         const zipBytes = await buildArchiveZip([createImages()[0]!], { lineageStore: sourceLineage });
@@ -93,7 +111,15 @@ describe('ArchiveTransfer', () => {
         expect(manifest.steps).toEqual([
             expect.objectContaining({
                 id: 'typed-generate-step',
-                metadata,
+                metadata: generateMetadata,
+            }),
+            expect.objectContaining({
+                id: 'typed-editor-step',
+                metadata: editorMetadata,
+            }),
+            expect.objectContaining({
+                id: 'typed-autopilot-step',
+                metadata: autopilotMetadata,
             }),
         ]);
 
@@ -103,11 +129,19 @@ describe('ArchiveTransfer', () => {
             lineageStore: importedLineage,
         });
 
-        expect(summary.importedStepIds).toEqual(['typed-generate-step']);
+        expect(summary.importedStepIds).toEqual(['typed-generate-step', 'typed-editor-step', 'typed-autopilot-step']);
         await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
             expect.objectContaining({
                 id: 'typed-generate-step',
-                metadata,
+                metadata: generateMetadata,
+            }),
+            expect.objectContaining({
+                id: 'typed-editor-step',
+                metadata: editorMetadata,
+            }),
+            expect.objectContaining({
+                id: 'typed-autopilot-step',
+                metadata: autopilotMetadata,
             }),
         ]);
     });
@@ -396,6 +430,123 @@ function createTypedGenerateMetadata() {
         },
         referenceCount: 1,
         referenceIds: ['image-1:reference:0'],
+    };
+}
+
+function createTypedEditorMetadata() {
+    return {
+        sourceImage: {
+            archiveImageId: 'image-1',
+        },
+        outputImage: {
+            archiveImageId: 'image-1',
+        },
+        save: {
+            overwrite: true,
+            copy: false,
+        },
+        editorAdjustment: {
+            brightness: 110,
+            contrast: 100,
+            saturation: 120,
+            filter: 'none',
+        },
+        aiEdit: {
+            prompt: 'add neon reflections',
+            imageModel: {
+                slug: OPENAI_IMAGE_MODEL,
+            },
+            referenceImages: {
+                count: 1,
+            },
+            transformTarget: {
+                mode: 'selected-layers',
+                layerCount: 1,
+                includesBaseLayer: false,
+            },
+        },
+        layers: {
+            layered: true,
+            count: 3,
+            visibleCount: 2,
+            aiResultLayer: {
+                id: 'ai-layer',
+                name: 'AI result',
+            },
+        },
+        sourceArchiveImageId: 'image-1',
+        outputArchiveImageId: 'image-1',
+        overwrite: true,
+        editPrompt: 'add neon reflections',
+        model: OPENAI_IMAGE_MODEL,
+        referenceCount: 1,
+        editorAdjustments: {
+            brightness: 110,
+            contrast: 100,
+            saturation: 120,
+            filter: 'none',
+        },
+        isLayered: true,
+        layerCount: 3,
+        visibleLayerCount: 2,
+        targetMode: 'selected-layers',
+        targetLayerCount: 1,
+        targetIncludesBaseLayer: false,
+        aiResultLayerId: 'ai-layer',
+        aiResultLayerName: 'AI result',
+    };
+}
+
+function createTypedAutopilotMetadata() {
+    return {
+        goal: {
+            text: 'make the result moodier',
+        },
+        iteration: {
+            number: 1,
+        },
+        evaluation: {
+            score: 86,
+            feedback: ['needs stronger contrast'],
+        },
+        replayImage: {
+            dataUrl: 'data:image/png;base64,auto',
+        },
+        run: {
+            label: 'Autopilot Run · make the result moodier',
+        },
+        reasoningModel: {
+            slug: OPENAI_RESPONSES_MODEL,
+        },
+        imageModel: {
+            slug: OPENAI_IMAGE_MODEL,
+            controls: {
+                quality: 'high',
+                size: '1024x1024',
+                background: 'transparent',
+            },
+        },
+        dimensions: {
+            width: 1024,
+            height: 1024,
+        },
+        prompt: 'glass city at dawn',
+        model: OPENAI_IMAGE_MODEL,
+        quality: 'high',
+        aspectRatio: '1024x1024',
+        background: 'transparent',
+        width: 1024,
+        height: 1024,
+        imageSize: null,
+        style: 'none',
+        lighting: 'none',
+        palette: 'none',
+        goalText: 'make the result moodier',
+        iterationNumber: 1,
+        evaluatorScore: 86,
+        evaluatorFeedback: ['needs stronger contrast'],
+        outputImageDataUrl: 'data:image/png;base64,auto',
+        runLabel: 'Autopilot Run · make the result moodier',
     };
 }
 
