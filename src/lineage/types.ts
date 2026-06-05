@@ -1,4 +1,5 @@
 import type { AutopilotLineageMetadata } from './autopilotLineageMetadata';
+import type { EditorLineageMetadata } from './editorLineageMetadata';
 import type { GenerateLineageMetadata } from './generateLineageMetadata';
 
 export type LineageStepType =
@@ -11,6 +12,7 @@ export type LineageStepType =
     | 'autopilot-iteration';
 
 export type GenerateLineageStepType = 'generation' | 'reference-generation';
+export type EditorLineageStepType = 'ai-edit' | 'manual-edit' | 'overwrite' | 'save-as-copy';
 
 export interface LineageStep<TMetadata extends Record<string, unknown> = Record<string, unknown>> {
     id: string;
@@ -27,6 +29,10 @@ export type GenerateLineageStep = LineageStep<GenerateLineageMetadata> & {
 
 export type AutopilotLineageStep = LineageStep<AutopilotLineageMetadata> & {
     stepType: 'autopilot-iteration';
+};
+
+export type EditorLineageStep = LineageStep<EditorLineageMetadata> & {
+    stepType: EditorLineageStepType;
 };
 
 export type SaveLineageStepInput = Omit<LineageStep, 'id'> & {

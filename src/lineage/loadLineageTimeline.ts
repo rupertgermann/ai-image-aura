@@ -1,5 +1,11 @@
 import type { LineageStore, LineageStep } from './LineageStore';
 import { readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
+import {
+    readEditorTimelineMetadata,
+    type EditorLineageAdjustment,
+    type EditorLineageLayers,
+    type EditorTimelineMetadata,
+} from './editorLineageMetadata';
 import { readGenerateLineageReferenceCount } from './generateLineageMetadata';
 
 export interface LineageTimelineEntry {
@@ -151,8 +157,8 @@ function getStepLabel(step: LineageStep) {
 function getStepSummary(step: LineageStep) {
     const metadata = step.metadata;
     const prompt = excerpt(asString(metadata.prompt));
-    const editPrompt = excerpt(asString(metadata.editPrompt));
     const referenceCount = readGenerateLineageReferenceCount(metadata);
+    const editorMetadata = readEditorTimelineMetadata(metadata);
 
     switch (step.stepType) {
         case 'generation':
@@ -164,27 +170,32 @@ function getStepSummary(step: LineageStep) {
 
             return prompt ? `Prompt: ${prompt}` : 'Generated from saved references';
         case 'ai-edit':
-            return summarizeLayeredAiEdit(metadata, editPrompt);
+            return summarizeLayeredAiEdit(editorMetadata);
         case 'manual-edit':
-            return summarizeAdjustments(metadata.editorAdjustments) ?? 'Manual adjustments applied';
+            return summarizeAdjustments(editorMetadata.editorAdjustment) ?? 'Manual adjustments applied';
         case 'overwrite':
-            return summarizeLayeredSave(metadata, 'Saved layered image') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Saved over current image';
+            return summarizeLayeredSave(editorMetadata.layers, 'Saved layered image')
+                ?? summarizeAdjustments(editorMetadata.editorAdjustment)
+                ?? 'Saved over current image';
         case 'save-as-copy':
-            return summarizeLayeredSave(metadata, 'Saved layered copy') ?? summarizeAdjustments(metadata.editorAdjustments) ?? 'Branched from previous version';
+            return summarizeLayeredSave(editorMetadata.layers, 'Saved layered copy')
+                ?? summarizeAdjustments(editorMetadata.editorAdjustment)
+                ?? 'Branched from previous version';
         case 'autopilot-iteration':
             return summarizeAutopilot(readAutopilotTimelineMetadata(metadata));
     }
 }
 
-function summarizeLayeredAiEdit(metadata: Record<string, unknown>, editPrompt: string | null) {
+function summarizeLayeredAiEdit(metadata: EditorTimelineMetadata) {
+    const editPrompt = excerpt(metadata.editPrompt);
     const base = editPrompt ? `AI edit: ${editPrompt}` : 'AI edit applied';
-    if (metadata.isLayered !== true) {
+    if (!metadata.layers.layered) {
         return base;
     }
 
-    const targetMode = asString(metadata.targetMode);
-    const targetLayerCount = asNumberOrNull(metadata.targetLayerCount);
-    const aiResultLayerName = excerpt(asString(metadata.aiResultLayerName), 32);
+    const targetMode = metadata.aiTransformTarget.mode;
+    const targetLayerCount = metadata.aiTransformTarget.layerCount;
+    const aiResultLayerName = excerpt(metadata.layers.aiResultLayer?.name ?? null, 32);
     const parts = [
         base,
         targetMode === 'selected-layers' && targetLayerCount !== null ? `targeted ${targetLayerCount} layer${targetLayerCount === 1 ? '' : 's'}` : 'whole composition',
@@ -194,13 +205,13 @@ function summarizeLayeredAiEdit(metadata: Record<string, unknown>, editPrompt: s
     return parts.join(' · ');
 }
 
-function summarizeLayeredSave(metadata: Record<string, unknown>, fallback: string) {
-    if (metadata.isLayered !== true) {
+function summarizeLayeredSave(metadata: EditorLineageLayers, fallback: string) {
+    if (!metadata.layered) {
         return null;
     }
 
-    const layerCount = asNumberOrNull(metadata.layerCount);
-    const visibleLayerCount = asNumberOrNull(metadata.visibleLayerCount);
+    const layerCount = metadata.count;
+    const visibleLayerCount = metadata.visibleCount;
     const parts = [
         fallback,
         layerCount !== null ? `${layerCount} layer${layerCount === 1 ? '' : 's'}` : null,
@@ -221,12 +232,11 @@ function summarizeAutopilot(metadata: AutopilotTimelineMetadata) {
     return parts.length > 0 ? parts.join(' · ') : 'Autopilot iteration recorded';
 }
 
-function summarizeAdjustments(value: unknown) {
-    if (!value || typeof value !== 'object') {
+function summarizeAdjustments(adjustments: EditorLineageAdjustment | null) {
+    if (!adjustments) {
         return null;
     }
 
-    const adjustments = value as Record<string, unknown>;
     const changed: string[] = [];
 
     if (adjustments.brightness !== 100) {
@@ -264,8 +274,4 @@ function excerpt(value: string | null, maxLength: number = 72) {
 
 function asString(value: unknown) {
     return typeof value === 'string' && value.trim() ? value : null;
-}
-
-function asNumberOrNull(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }

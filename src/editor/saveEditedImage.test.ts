@@ -59,6 +59,30 @@ describe('saveEditedImage', () => {
                 stepType: 'ai-edit',
                 timestamp: '2026-04-04T12:00:00.000Z',
                 metadata: expect.objectContaining({
+                    sourceImage: {
+                        archiveImageId: 'source-image',
+                    },
+                    outputImage: {
+                        archiveImageId: 'branch-image',
+                    },
+                    save: {
+                        overwrite: false,
+                        copy: true,
+                    },
+                    aiEdit: {
+                        prompt: 'add a moonlit skyline',
+                        imageModel: {
+                            slug: OPENAI_IMAGE_MODEL,
+                        },
+                        referenceImages: {
+                            count: 1,
+                        },
+                        transformTarget: {
+                            mode: null,
+                            layerCount: null,
+                            includesBaseLayer: null,
+                        },
+                    },
                     sourceArchiveImageId: 'source-image',
                     outputArchiveImageId: 'branch-image',
                     editPrompt: 'add a moonlit skyline',
@@ -95,6 +119,23 @@ describe('saveEditedImage', () => {
                 parentStepId: 'step-2',
                 stepType: 'save-as-copy',
                 metadata: expect.objectContaining({
+                    sourceImage: {
+                        archiveImageId: 'source-image',
+                    },
+                    outputImage: {
+                        archiveImageId: 'manual-branch',
+                    },
+                    save: {
+                        overwrite: false,
+                        copy: true,
+                    },
+                    editorAdjustment: {
+                        brightness: 110,
+                        contrast: 95,
+                        saturation: 125,
+                        filter: 'sepia(100%)',
+                    },
+                    aiEdit: null,
                     sourceArchiveImageId: 'source-image',
                     outputArchiveImageId: 'manual-branch',
                     overwrite: false,
@@ -126,6 +167,23 @@ describe('saveEditedImage', () => {
                 stepType: 'overwrite',
                 timestamp: '2026-04-04T13:00:00.000Z',
                 metadata: expect.objectContaining({
+                    sourceImage: {
+                        archiveImageId: 'source-image',
+                    },
+                    outputImage: {
+                        archiveImageId: 'source-image',
+                    },
+                    save: {
+                        overwrite: true,
+                        copy: false,
+                    },
+                    editorAdjustment: {
+                        brightness: 110,
+                        contrast: 95,
+                        saturation: 125,
+                        filter: 'sepia(100%)',
+                    },
+                    aiEdit: null,
                     sourceArchiveImageId: 'source-image',
                     outputArchiveImageId: 'source-image',
                     overwrite: true,
@@ -180,6 +238,11 @@ describe('saveEditedImage', () => {
         const steps = await lineage.getByArchiveImageId('nano-edit-copy');
         expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
             model: NANO_BANANA_PRO_IMAGE_MODEL,
+            aiEdit: expect.objectContaining({
+                imageModel: {
+                    slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                },
+            }),
         }));
     });
 
@@ -206,6 +269,17 @@ describe('saveEditedImage', () => {
         expect(savedImage.layerStack?.layers.map((layer) => layer.id)).toEqual(['base', 'upload', 'ai-layer']);
         const steps = await lineage.getByArchiveImageId('layered-copy');
         expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
+            editPrompt: 'replace the sky',
+            model: OPENAI_IMAGE_MODEL,
+            layers: {
+                layered: true,
+                count: 3,
+                visibleCount: 2,
+                aiResultLayer: {
+                    id: 'ai-layer',
+                    name: 'AI result',
+                },
+            },
             isLayered: true,
             layerCount: 3,
             visibleLayerCount: 2,
@@ -216,6 +290,7 @@ describe('saveEditedImage', () => {
             aiResultLayerName: 'AI result',
         }));
         expect(steps.at(-1)?.metadata).not.toHaveProperty('layerStack');
+        expect(JSON.stringify(steps.at(-1)?.metadata)).not.toContain('data:image/png;base64');
     });
 
     it('counts only saved user Reference images in AI edit lineage metadata', async () => {
@@ -245,6 +320,20 @@ describe('saveEditedImage', () => {
             metadata: expect.objectContaining({
                 referenceCount: 2,
                 targetMode: 'selected-layers',
+                aiEdit: {
+                    prompt: 'blend the selected subject into the scene',
+                    imageModel: {
+                        slug: OPENAI_IMAGE_MODEL,
+                    },
+                    referenceImages: {
+                        count: 2,
+                    },
+                    transformTarget: {
+                        mode: 'selected-layers',
+                        layerCount: 1,
+                        includesBaseLayer: false,
+                    },
+                },
             }),
         }));
         expect(savedImage.references).toEqual([

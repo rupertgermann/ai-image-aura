@@ -289,6 +289,86 @@ describe('loadLineageTimeline', () => {
         ]);
     });
 
+    it('summarizes typed Editor metadata without legacy flat fields', async () => {
+        const timeline = await loadLineageTimeline('image-1', createStore({
+            byArchiveImageId: {
+                'image-1': [
+                    createStep({
+                        id: 'step-1',
+                        archiveImageId: 'image-1',
+                        stepType: 'overwrite',
+                        timestamp: '2026-04-04T09:00:00.000Z',
+                        metadata: {
+                            editorAdjustment: {
+                                brightness: 115,
+                                contrast: 100,
+                                saturation: 125,
+                                filter: 'sepia(100%)',
+                            },
+                        },
+                    }),
+                    createStep({
+                        id: 'step-2',
+                        archiveImageId: 'image-1',
+                        stepType: 'save-as-copy',
+                        timestamp: '2026-04-04T09:30:00.000Z',
+                        metadata: {
+                            layers: {
+                                layered: true,
+                                count: 3,
+                                visibleCount: 2,
+                                aiResultLayer: null,
+                            },
+                        },
+                    }),
+                    createStep({
+                        id: 'step-3',
+                        archiveImageId: 'image-1',
+                        stepType: 'ai-edit',
+                        timestamp: '2026-04-04T10:00:00.000Z',
+                        metadata: {
+                            aiEdit: {
+                                prompt: 'replace the sky',
+                                imageModel: {
+                                    slug: 'gpt-image-2',
+                                },
+                                referenceImages: {
+                                    count: 2,
+                                },
+                                transformTarget: {
+                                    mode: 'selected-layers',
+                                    layerCount: 1,
+                                    includesBaseLayer: false,
+                                },
+                            },
+                            layers: {
+                                layered: true,
+                                count: 3,
+                                visibleCount: 2,
+                                aiResultLayer: {
+                                    id: 'ai-layer',
+                                    name: 'AI result',
+                                },
+                            },
+                        },
+                    }),
+                ],
+            },
+            byId: {},
+            children: {
+                'step-1': [],
+                'step-2': [],
+                'step-3': [],
+            },
+        }));
+
+        expect(timeline.entries.map((entry) => entry.summary)).toEqual([
+            'Adjusted brightness, saturation, filter',
+            'Saved layered copy · 3 layers · 2 visible',
+            'AI edit: replace the sky · targeted 1 layer · result: AI result',
+        ]);
+    });
+
     it('summarizes typed Generate reference metadata and preserves older sparse fallbacks', async () => {
         const timeline = await loadLineageTimeline('image-1', createStore({
             byArchiveImageId: {

@@ -1,4 +1,5 @@
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
+import { buildEditorLineageMetadata } from '../lineage/editorLineageMetadata';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { EditorAdjustments } from './layers';
 
@@ -90,30 +91,18 @@ function resolveStepType(context: EditorSaveContext) {
 }
 
 function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, context: EditorSaveContext) {
-    const layerStack = context.layerStack ?? savedImage.layerStack;
-    const layerCount = layerStack?.layers.length ?? null;
-    const visibleLayerCount = layerStack?.layers.filter((layer) => layer.visible).length ?? null;
-
-    return {
-        sourceArchiveImageId: sourceImage.id,
-        outputArchiveImageId: savedImage.id,
-        overwrite: !context.isCopy,
-        editPrompt: context.aiEditPrompt?.trim() || null,
-        model: context.aiEditModel ?? sourceImage.model ?? null,
-        referenceCount: savedImage.references?.length ?? 0,
-        editorAdjustments: {
-            brightness: context.adjustments.brightness,
-            contrast: context.adjustments.contrast,
-            saturation: context.adjustments.saturation,
-            filter: context.adjustments.filter,
-        },
-        isLayered: !!layerStack && layerStack.layers.some((layer) => layer.kind !== 'base'),
-        layerCount,
-        visibleLayerCount,
-        targetMode: context.targetMode ?? null,
-        targetLayerCount: context.targetLayerCount ?? null,
-        targetIncludesBaseLayer: context.targetIncludesBaseLayer ?? null,
-        aiResultLayerId: context.aiResultLayerId ?? null,
-        aiResultLayerName: context.aiResultLayerName ?? null,
-    } satisfies Record<string, unknown>;
+    return buildEditorLineageMetadata({
+        sourceImage,
+        savedImage,
+        isCopy: context.isCopy,
+        adjustments: context.adjustments,
+        layerStack: context.layerStack,
+        targetMode: context.targetMode,
+        targetLayerCount: context.targetLayerCount,
+        targetIncludesBaseLayer: context.targetIncludesBaseLayer,
+        aiResultLayerId: context.aiResultLayerId,
+        aiResultLayerName: context.aiResultLayerName,
+        aiEditPrompt: context.aiEditPrompt,
+        aiEditModel: context.aiEditModel,
+    });
 }
