@@ -1,8 +1,10 @@
 import type { ArchiveLayerStack } from '../db/types';
+import type { ImageModelSlug } from '../utils/openaiModels';
 import {
     insertAiResultLayer,
     planAiTransformTarget,
     type AiTransformTargetPlan,
+    type AiTransformTargetMetadata,
     type EditorAdjustments,
     type EditorDraft,
     type LayerBounds,
@@ -33,6 +35,19 @@ export interface AppliedAiTransformResult {
     draft: EditorDraft;
     resultLayerId: string;
     resultLayerName: string | null;
+    provenance: AiTransformSaveProvenance | null;
+}
+
+export interface AiTransformSaveProvenance extends AiTransformTargetMetadata {
+    aiEditPrompt: string;
+    aiEditModel: ImageModelSlug;
+    aiResultLayerId: string;
+    aiResultLayerName: string | null;
+}
+
+export interface AiTransformProvenanceInput {
+    prompt: string;
+    model: ImageModelSlug;
 }
 
 export async function renderAiTransformEditInput({
@@ -64,9 +79,11 @@ export function applyAiTransformResultToDraft(
     targetPlan: AiTransformTargetPlan,
     resultUrl: string,
     makeId: () => string,
+    provenanceInput?: AiTransformProvenanceInput,
 ): AppliedAiTransformResult {
     const result = insertAiResultLayer(draft.layerStack, targetPlan.targetLayerIds, resultUrl, makeId);
     const resultLayer = result.layerStack.layers.find((layer) => layer.id === result.layerId);
+    const resultLayerName = resultLayer?.name ?? null;
 
     return {
         draft: {
@@ -76,7 +93,37 @@ export function applyAiTransformResultToDraft(
             primarySelectedLayerId: result.layerId,
         },
         resultLayerId: result.layerId,
-        resultLayerName: resultLayer?.name ?? null,
+        resultLayerName,
+        provenance: provenanceInput
+            ? {
+                aiEditPrompt: provenanceInput.prompt,
+                aiEditModel: provenanceInput.model,
+                targetMode: targetPlan.metadata.targetMode,
+                targetLayerCount: targetPlan.metadata.targetLayerCount,
+                targetIncludesBaseLayer: targetPlan.metadata.targetIncludesBaseLayer,
+                aiResultLayerId: result.layerId,
+                aiResultLayerName: resultLayerName,
+            }
+            : null,
+    };
+}
+
+export function getAiTransformSaveProvenance(
+    draft: EditorDraft | null,
+    provenance: AiTransformSaveProvenance | null,
+): AiTransformSaveProvenance | null {
+    if (!draft || !provenance) {
+        return null;
+    }
+
+    const resultLayer = draft.layerStack.layers.find((layer) => layer.id === provenance.aiResultLayerId);
+    if (!resultLayer || resultLayer.kind !== 'ai-result') {
+        return null;
+    }
+
+    return {
+        ...provenance,
+        aiResultLayerName: resultLayer.name,
     };
 }
 

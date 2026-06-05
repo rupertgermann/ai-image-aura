@@ -1,8 +1,13 @@
 import { useCallback, useState } from 'react';
-import type { ArchiveLayerStack } from '../db/types';
-import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { imageWorkflow, type EditImageInput } from '../image-workflow/ImageWorkflow';
 import type { ImageModelSlug } from '../utils/openaiModels';
-import { applyAiTransformResultToDraft, renderAiTransformEditInput } from './aiTransform';
+import {
+    applyAiTransformResultToDraft,
+    getAiTransformSaveProvenance,
+    renderAiTransformEditInput,
+    type AiTransformRenderer,
+    type AiTransformSaveProvenance,
+} from './aiTransform';
 import {
     hasDurableLayerStack,
     type EditorAdjustments,
@@ -15,8 +20,6 @@ interface UseEditorControllerOptions {
     model: ImageModelSlug;
     isCanvasReady: boolean;
     draft: EditorDraft | null;
-    layerStack: ArchiveLayerStack | null;
-    selectedLayerIds: string[];
     commitDraft: (draft: EditorDraft, recordHistory?: boolean) => void;
     referenceImages: File[];
     addReferenceFiles: (files: File[]) => void;
@@ -31,7 +34,6 @@ export function useEditorController({
     model,
     isCanvasReady,
     draft,
-    layerStack,
     commitDraft,
     referenceImages,
     addReferenceFiles,
@@ -44,13 +46,7 @@ export function useEditorController({
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [lastAiEditPrompt, setLastAiEditPrompt] = useState<string | null>(null);
-    const [lastAiEditModel, setLastAiEditModel] = useState<ImageModelSlug | null>(null);
-    const [lastAiTargetMode, setLastAiTargetMode] = useState<'whole-composition' | 'selected-layers' | null>(null);
-    const [lastAiTargetLayerCount, setLastAiTargetLayerCount] = useState<number | null>(null);
-    const [lastAiTargetIncludesBaseLayer, setLastAiTargetIncludesBaseLayer] = useState<boolean | null>(null);
-    const [lastAiResultLayerId, setLastAiResultLayerId] = useState<string | null>(null);
-    const [lastAiResultLayerName, setLastAiResultLayerName] = useState<string | null>(null);
+    const [aiTransformProvenance, setAiTransformProvenance] = useState<AiTransformSaveProvenance | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
         if (!isCanvasReady) {
@@ -60,40 +56,28 @@ export function useEditorController({
         try {
             const dataUrl = await exportDataUrl();
             const references = await serializeReferences();
-            await Promise.resolve(onSave(dataUrl, {
+            await Promise.resolve(onSave(dataUrl, buildEditorSaveContext({
                 isCopy,
                 references,
                 adjustments,
-                layerStack: layerStack && hasDurableLayerStack(layerStack) ? layerStack : null,
-                aiEditPrompt: lastAiEditPrompt,
-                aiEditModel: lastAiEditModel,
-                targetMode: lastAiEditPrompt ? lastAiTargetMode : null,
-                targetLayerCount: lastAiTargetLayerCount,
-                targetIncludesBaseLayer: lastAiTargetIncludesBaseLayer,
-                aiResultLayerId: lastAiResultLayerId,
-                aiResultLayerName: lastAiResultLayerName,
-            }));
+                draft,
+                aiTransformProvenance,
+            })));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
         }
     }, [
         adjustments,
+        aiTransformProvenance,
+        draft,
         exportDataUrl,
         isCanvasReady,
-        lastAiEditModel,
-        lastAiEditPrompt,
-        lastAiResultLayerId,
-        lastAiResultLayerName,
-        lastAiTargetIncludesBaseLayer,
-        lastAiTargetLayerCount,
-        lastAiTargetMode,
-        layerStack,
         onSave,
         serializeReferences,
     ]);
 
     const applyAiEdit = useCallback(async () => {
-        if (!apiKey || !aiPrompt.trim() || !draft || !layerStack || !isCanvasReady) {
+        if (!apiKey || !aiPrompt.trim() || !draft || !isCanvasReady) {
             return;
         }
 
@@ -101,42 +85,25 @@ export function useEditorController({
         setAiError(null);
 
         try {
-            const editInput = await renderAiTransformEditInput({
-                draft,
-                adjustments,
-                referenceImages,
-            });
-            const resultUrl = await imageWorkflow.edit({
+            const result = await runEditorAiTransform({
                 apiKey,
                 model,
                 prompt: aiPrompt,
-                sourceImage: editInput.sourceImage,
-                compositionContextImage: editInput.compositionContextImage,
-                referenceImages: editInput.referenceImages,
-                quality: 'medium',
-            });
-            const result = applyAiTransformResultToDraft(
                 draft,
-                editInput.targetPlan,
-                resultUrl,
-                () => crypto.randomUUID(),
-            );
+                adjustments,
+                referenceImages,
+                makeId: () => crypto.randomUUID(),
+            });
 
             commitDraft(result.draft);
-            setLastAiEditPrompt(aiPrompt.trim());
-            setLastAiEditModel(model);
-            setLastAiTargetMode(editInput.targetPlan.metadata.targetMode);
-            setLastAiTargetLayerCount(editInput.targetPlan.metadata.targetLayerCount);
-            setLastAiTargetIncludesBaseLayer(editInput.targetPlan.metadata.targetIncludesBaseLayer);
-            setLastAiResultLayerId(result.resultLayerId);
-            setLastAiResultLayerName(result.resultLayerName);
+            setAiTransformProvenance(result.provenance);
             setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {
             setAiLoading(false);
         }
-    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, isCanvasReady, layerStack, model, referenceImages]);
+    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, isCanvasReady, model, referenceImages]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -170,5 +137,91 @@ export function useEditorController({
         handleDragOver,
         handleDragLeave,
         handleDrop,
+    };
+}
+
+type EditImage = (input: EditImageInput) => Promise<string>;
+
+export interface RunEditorAiTransformOptions {
+    apiKey: string;
+    model: ImageModelSlug;
+    prompt: string;
+    draft: EditorDraft;
+    adjustments: EditorAdjustments;
+    referenceImages: File[];
+    makeId: () => string;
+    editImage?: EditImage;
+    render?: AiTransformRenderer;
+}
+
+export async function runEditorAiTransform({
+    apiKey,
+    model,
+    prompt,
+    draft,
+    adjustments,
+    referenceImages,
+    makeId,
+    editImage = imageWorkflow.edit,
+    render,
+}: RunEditorAiTransformOptions) {
+    const trimmedPrompt = prompt.trim();
+    const editInput = await renderAiTransformEditInput({
+        draft,
+        adjustments,
+        referenceImages,
+        render,
+    });
+    const resultUrl = await editImage({
+        apiKey,
+        model,
+        prompt: trimmedPrompt,
+        sourceImage: editInput.sourceImage,
+        compositionContextImage: editInput.compositionContextImage,
+        referenceImages: editInput.referenceImages,
+        quality: 'medium',
+    });
+
+    return applyAiTransformResultToDraft(
+        draft,
+        editInput.targetPlan,
+        resultUrl,
+        makeId,
+        {
+            prompt: trimmedPrompt,
+            model,
+        },
+    );
+}
+
+export interface BuildEditorSaveContextOptions {
+    isCopy: boolean;
+    references: string[];
+    adjustments: EditorAdjustments;
+    draft: EditorDraft | null;
+    aiTransformProvenance: AiTransformSaveProvenance | null;
+}
+
+export function buildEditorSaveContext({
+    isCopy,
+    references,
+    adjustments,
+    draft,
+    aiTransformProvenance,
+}: BuildEditorSaveContextOptions): EditorSaveContext {
+    const saveProvenance = getAiTransformSaveProvenance(draft, aiTransformProvenance);
+
+    return {
+        isCopy,
+        references,
+        adjustments,
+        layerStack: draft && hasDurableLayerStack(draft.layerStack) ? draft.layerStack : null,
+        aiEditPrompt: saveProvenance?.aiEditPrompt,
+        aiEditModel: saveProvenance?.aiEditModel,
+        targetMode: saveProvenance?.targetMode,
+        targetLayerCount: saveProvenance?.targetLayerCount,
+        targetIncludesBaseLayer: saveProvenance?.targetIncludesBaseLayer,
+        aiResultLayerId: saveProvenance?.aiResultLayerId,
+        aiResultLayerName: saveProvenance?.aiResultLayerName,
     };
 }

@@ -80,8 +80,6 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         model: aiEditModel,
         isCanvasReady: isReady,
         draft,
-        layerStack,
-        selectedLayerIds,
         commitDraft,
         referenceImages,
         addReferenceFiles,
