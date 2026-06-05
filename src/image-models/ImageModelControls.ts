@@ -54,6 +54,11 @@ export interface ImageModelGenerateControl {
     options: ImageModelControlOption[];
 }
 
+export interface ImageModelGenerateReferenceRunPlan<T> {
+    providerReferenceImages: T[];
+    referenceLimitMessage: string | null;
+}
+
 interface ImageModelControlFacts {
     defaults: ImageModelControls;
     generateControls: ImageModelGenerateControl[];
@@ -317,6 +322,8 @@ export function mapImageModelGenerateProviderRequest(
         referenceImages: File[];
     },
 ) {
+    const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(model, input.referenceImages);
+
     if (model === NANO_BANANA_PRO_IMAGE_MODEL) {
         const controls = sanitizeImageModelControls(model, {
             aspectRatio: input.aspectRatio,
@@ -325,7 +332,7 @@ export function mapImageModelGenerateProviderRequest(
         return {
             aspectRatio: controls.aspectRatio,
             imageSize: controls.imageSize,
-            referenceImages: limitReferenceImagesForImageModel(model, input.referenceImages),
+            referenceImages: referenceRunPlan.providerReferenceImages,
         };
     }
 
@@ -333,7 +340,7 @@ export function mapImageModelGenerateProviderRequest(
         quality: coerceImageQuality(input.quality, 'medium'),
         size: coerceGptImageSize(input.aspectRatio, '1024x1024'),
         background: coerceImageBackground(input.background, 'auto'),
-        referenceImages: input.referenceImages,
+        referenceImages: referenceRunPlan.providerReferenceImages,
     };
 }
 
@@ -371,6 +378,16 @@ export function mapImageModelEditProviderRequest(
 export function limitReferenceImagesForImageModel<T>(model: ImageModelSlug, referenceImages: T[]): T[] {
     const limit = IMAGE_MODEL_CONTROL_FACTS[model].referenceLimit;
     return limit === null ? referenceImages : referenceImages.slice(0, limit);
+}
+
+export function buildImageModelGenerateReferenceRunPlan<T>(
+    model: ImageModelSlug,
+    referenceImages: T[],
+): ImageModelGenerateReferenceRunPlan<T> {
+    return {
+        providerReferenceImages: limitReferenceImagesForImageModel(model, referenceImages),
+        referenceLimitMessage: getImageModelReferenceLimitMessage(model, referenceImages.length, 'generation'),
+    };
 }
 
 export function getImageModelReferenceLimitMessage(

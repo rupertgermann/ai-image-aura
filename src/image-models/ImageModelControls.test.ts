@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     IMAGE_MODEL_CONTROL_FACTS,
+    buildImageModelGenerateReferenceRunPlan,
     buildImageModelArchiveFields,
     coerceImageModelControlValue,
     getDefaultImageModelControls,
@@ -145,6 +146,83 @@ describe('Image model controls', () => {
             imageSize: '4K',
             referenceImages: references.slice(0, 14),
         });
+    });
+
+    it('keeps Generate Reference run plans aligned with Provider requests when the Image model changes', () => {
+        const references = Array.from({ length: 15 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
+        );
+
+        const openAiRunPlan = buildImageModelGenerateReferenceRunPlan(OPENAI_IMAGE_MODEL, references);
+        const openAiProviderRequest = mapImageModelGenerateProviderRequest(OPENAI_IMAGE_MODEL, {
+            quality: 'high',
+            aspectRatio: '1536x1024',
+            background: 'transparent',
+            referenceImages: references,
+        });
+
+        expect(openAiRunPlan.referenceLimitMessage).toBeNull();
+        expect(openAiProviderRequest.referenceImages).toEqual(openAiRunPlan.providerReferenceImages);
+        expect(openAiProviderRequest.referenceImages).toHaveLength(15);
+
+        const nanoRunPlan = buildImageModelGenerateReferenceRunPlan(NANO_BANANA_PRO_IMAGE_MODEL, references);
+        const nanoProviderRequest = mapImageModelGenerateProviderRequest(NANO_BANANA_PRO_IMAGE_MODEL, {
+            quality: 'high',
+            aspectRatio: '1024x1536',
+            background: 'transparent',
+            imageSize: '4K',
+            referenceImages: references,
+        });
+
+        expect(nanoRunPlan.referenceLimitMessage).toBe(
+            'Nano Banana Pro uses the first 14 reference images for generation.',
+        );
+        expect(nanoProviderRequest.referenceImages).toEqual(nanoRunPlan.providerReferenceImages);
+        expect(nanoProviderRequest.referenceImages.map((file) => file.name)).toEqual([
+            'ref-0.png',
+            'ref-1.png',
+            'ref-2.png',
+            'ref-3.png',
+            'ref-4.png',
+            'ref-5.png',
+            'ref-6.png',
+            'ref-7.png',
+            'ref-8.png',
+            'ref-9.png',
+            'ref-10.png',
+            'ref-11.png',
+            'ref-12.png',
+            'ref-13.png',
+        ]);
+    });
+
+    it('applies future gpt-image-2 Reference limits from Image model facts consistently', () => {
+        const references = Array.from({ length: 3 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
+        );
+        const openAiFacts = IMAGE_MODEL_CONTROL_FACTS[OPENAI_IMAGE_MODEL] as {
+            referenceLimit: number | null;
+        };
+        const originalReferenceLimit = openAiFacts.referenceLimit;
+
+        try {
+            openAiFacts.referenceLimit = 2;
+            const runPlan = buildImageModelGenerateReferenceRunPlan(OPENAI_IMAGE_MODEL, references);
+            const providerRequest = mapImageModelGenerateProviderRequest(OPENAI_IMAGE_MODEL, {
+                quality: 'high',
+                aspectRatio: '1536x1024',
+                background: 'transparent',
+                referenceImages: references,
+            });
+
+            expect(runPlan.referenceLimitMessage).toBe(
+                'GPT Image 2 uses the first 2 reference images for generation.',
+            );
+            expect(providerRequest.referenceImages).toEqual(runPlan.providerReferenceImages);
+            expect(providerRequest.referenceImages.map((file) => file.name)).toEqual(['ref-0.png', 'ref-1.png']);
+        } finally {
+            openAiFacts.referenceLimit = originalReferenceLimit;
+        }
     });
 
     it('maps Editor Provider requests with source and Reference image limits for each Image model', () => {

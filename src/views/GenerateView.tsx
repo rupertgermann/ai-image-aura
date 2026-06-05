@@ -12,11 +12,10 @@ import { createPromptRefiner } from '../autopilot/PromptRefiner';
 import { createSatisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { resolveReasoningClient } from '../autopilot/ReasoningClient';
 import {
+    buildImageModelGenerateReferenceRunPlan,
     coerceImageModelControlValue,
     getImageModelGenerateControls,
-    getImageModelReferenceLimitMessage,
     getImageModelUiChoices,
-    limitReferenceImagesForImageModel,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
 import {
@@ -181,7 +180,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
     const promptRefiner = useMemo(() => createPromptRefiner(reasoningClient), [reasoningClient]);
     const referenceCollection = useReferenceImageCollection();
     const referenceImages = referenceCollection.files;
-    const activeReferenceImages = limitReferenceImagesForImageModel(model, referenceImages);
+    const referenceRunPlan = useMemo(
+        () => buildImageModelGenerateReferenceRunPlan(model, referenceImages),
+        [model, referenceImages],
+    );
     const referencePreviews = referenceCollection.previews;
     const addReferenceFiles = referenceCollection.addFiles;
     const removeReferenceAt = referenceCollection.removeAt;
@@ -203,7 +205,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
         reasoningModel,
         draft,
         setDraft,
-        referenceImages: activeReferenceImages,
+        referenceImages: referenceRunPlan.providerReferenceImages,
         replaceReferences: referenceCollection.replaceWithDataUrls,
         serializeReferences: referenceCollection.serialize,
         onSaveImage,
@@ -291,7 +293,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
 
     const maxApiCalls = maxIterations * 3;
     const isAutopilotMode = mode === 'autopilot';
-    const imageModelReferenceWarning = getImageModelReferenceLimitMessage(model, referenceImages.length, 'generation');
+    const imageModelReferenceWarning = referenceRunPlan.referenceLimitMessage;
     const activeModelDraftKey = getImageModelDraftKey(model);
     const activeModelControls = draft[activeModelDraftKey] as Record<string, string>;
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
