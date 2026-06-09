@@ -4,7 +4,11 @@ export type EditorShortcut =
     | 'redo'
     | 'duplicate'
     | 'delete'
-    | 'clear-selection';
+    | 'clear-selection'
+    | 'nudge-up'
+    | 'nudge-down'
+    | 'nudge-left'
+    | 'nudge-right';
 
 export interface EditorShortcutInput {
     key: string;
@@ -42,6 +46,18 @@ export function resolveEditorShortcut(input: EditorShortcutInput): EditorShortcu
     }
     if (key === 'escape') {
         return 'clear-selection';
+    }
+    if (!modifier && key === 'arrowup') {
+        return 'nudge-up';
+    }
+    if (!modifier && key === 'arrowdown') {
+        return 'nudge-down';
+    }
+    if (!modifier && key === 'arrowleft') {
+        return 'nudge-left';
+    }
+    if (!modifier && key === 'arrowright') {
+        return 'nudge-right';
     }
 
     return null;

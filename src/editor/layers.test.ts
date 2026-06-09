@@ -11,7 +11,10 @@ import {
     hydrateLayerStack,
     insertAiResultLayer,
     moveLayer,
+    normalizeLayerStack,
+    nudgeLayers,
     planAiTransformTarget,
+    reorderLayer,
     pushHistory,
     repairEditorDraftForImage,
     redoHistory,
@@ -191,6 +194,69 @@ describe('layer editor helpers', () => {
 
         expect(getEditableLayerIds(stack, ['base', 'layer-1', 'missing'])).toEqual(['layer-1']);
         expect(getEditableLayerIds(lockedStack, ['base', 'layer-1'])).toEqual([]);
+    });
+
+    it('keeps locked layers transform-frozen but still allows rename, visibility, and unlock', () => {
+        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+        const locked = updateLayer(stack, 'layer-1', { locked: true });
+        const patched = updateLayer(locked, 'layer-1', {
+            name: 'Frozen',
+            visible: false,
+            x: 999,
+            opacity: 0.2,
+            blendMode: 'multiply',
+        });
+        const unlocked = updateLayer(patched, 'layer-1', { locked: false });
+
+        expect(patched.layers[1]).toEqual(expect.objectContaining({
+            name: 'Frozen',
+            visible: false,
+            x: 204.8,
+            opacity: 1,
+            blendMode: 'normal',
+            locked: true,
+        }));
+        expect(unlocked.layers[1]).toEqual(expect.objectContaining({ locked: false }));
+    });
+
+    it('updates layer blend modes and defaults legacy stacks to normal', () => {
+        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+        const blended = updateLayer(stack, 'layer-1', { blendMode: 'screen' });
+        const legacyLayer = Object.fromEntries(
+            Object.entries(stack.layers[1]).filter(([key]) => key !== 'blendMode'),
+        ) as typeof stack.layers[1];
+        const normalized = normalizeLayerStack({
+            ...stack,
+            layers: [stack.layers[0], legacyLayer],
+        });
+
+        expect(blended.layers[1].blendMode).toBe('screen');
+        expect(normalized.layers[1].blendMode).toBe('normal');
+    });
+
+    it('reorders unlocked layers to a clamped target index above the base layer', () => {
+        const withFirst = addUploadedLayer(createStack(), 'data:image/png;base64,a', () => 'layer-1').layerStack;
+        const stack = addUploadedLayer(withFirst, 'data:image/png;base64,b', () => 'layer-2').layerStack;
+
+        expect(reorderLayer(stack, 'layer-2', 1).layers.map((layer) => layer.id)).toEqual(['base', 'layer-2', 'layer-1']);
+        expect(reorderLayer(stack, 'layer-1', 99).layers.map((layer) => layer.id)).toEqual(['base', 'layer-2', 'layer-1']);
+        expect(reorderLayer(stack, 'layer-2', 0).layers.map((layer) => layer.id)).toEqual(['base', 'layer-2', 'layer-1']);
+        expect(reorderLayer(stack, 'layer-1', 0)).toBe(stack);
+        expect(reorderLayer(stack, 'base', 2)).toBe(stack);
+        expect(reorderLayer(updateLayer(stack, 'layer-1', { locked: true }), 'layer-1', 2).layers.map((layer) => layer.id))
+            .toEqual(['base', 'layer-1', 'layer-2']);
+    });
+
+    it('nudges selected editable layers and leaves base and locked layers in place', () => {
+        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
+        const lockedStack = updateLayer(stack, 'layer-1', { locked: true });
+
+        const nudged = nudgeLayers(stack, ['base', 'layer-1'], 10, -5);
+        expect(nudged.layers[0]).toEqual(expect.objectContaining({ x: 0, y: 0 }));
+        expect(nudged.layers[1]).toEqual(expect.objectContaining({ x: 214.8, y: 199.8 }));
+        expect(nudgeLayers(lockedStack, ['layer-1'], 10, 10)).toBe(lockedStack);
+        expect(nudgeLayers(stack, [], 10, 10)).toBe(stack);
+        expect(nudgeLayers(stack, ['layer-1'], 0, 0)).toBe(stack);
     });
 
     it('does not create a new stack for invalid layer reorders', () => {

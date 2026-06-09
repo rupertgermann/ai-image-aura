@@ -1,4 +1,4 @@
-import type { ArchiveLayer, ArchiveLayerKind, ArchiveLayerStack } from '../db/types';
+import { isLayerBlendMode, type ArchiveLayer, type ArchiveLayerBlendMode, type ArchiveLayerKind, type ArchiveLayerStack } from '../db/types';
 import { parseLineageMetadata } from '../lineage/lineageMetadata';
 import type { LineageStep } from '../lineage/types';
 
@@ -110,6 +110,7 @@ export function createArchiveManifestLayerStack(
             height: layer.height,
             rotation: layer.rotation,
             opacity: layer.opacity,
+            blendMode: layer.blendMode,
             visible: layer.visible,
             locked: layer.locked,
             assetFileName: getLayerAssetFileName(imageId, layer.id),
@@ -131,6 +132,7 @@ export function createLayerStackMetadata(layerStack: ArchiveManifestLayerStack):
             height: layer.height,
             rotation: layer.rotation,
             opacity: layer.opacity,
+            blendMode: layer.blendMode,
             visible: layer.visible,
             locked: layer.locked,
             assetUrl: '',
@@ -230,6 +232,7 @@ function parseArchiveManifestLayer(value: unknown): ArchiveManifestLayer {
         height: requireNumber(value.height, 'layer height'),
         rotation: requireNumber(value.rotation, 'layer rotation'),
         opacity: requireNumber(value.opacity, 'layer opacity'),
+        blendMode: optionalLayerBlendMode(value.blendMode),
         visible: requireBoolean(value.visible, 'layer visible'),
         locked: requireBoolean(value.locked, 'layer locked'),
     };
@@ -255,6 +258,10 @@ function requireLineageStepType(value: unknown): LineageStep['stepType'] {
     }
 
     throw new Error('Invalid lineage step type');
+}
+
+function optionalLayerBlendMode(value: unknown): ArchiveLayerBlendMode {
+    return isLayerBlendMode(value) ? value : 'normal';
 }
 
 function requireLayerKind(value: unknown): ArchiveLayerKind {

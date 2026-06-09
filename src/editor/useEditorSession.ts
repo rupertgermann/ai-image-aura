@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ArchiveImage } from '../db/types';
+import type { ArchiveImage, ArchiveLayerBlendMode } from '../db/types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import { fileToDataURL } from '../utils/file';
@@ -12,7 +12,9 @@ import {
     getEditableLayerIds,
     hasDurableLayerStack,
     moveLayer,
+    nudgeLayers,
     pushHistory,
+    reorderLayer,
     repairEditorDraftForImage,
     redoHistory,
     removeDraftReferenceAt,
@@ -274,6 +276,20 @@ export function useEditorSession(image: ArchiveImage | null) {
         renameLayer: (layerId: string, name: string) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { name })),
         setLayerVisible: (layerId: string, visible: boolean) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { visible })),
         setLayerOpacity: (layerId: string, opacity: number) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { opacity })),
+        setLayerLocked: (layerId: string, locked: boolean) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { locked })),
+        setLayerBlendMode: (layerId: string, blendMode: ArchiveLayerBlendMode) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, { blendMode })),
+        reorderLayerTo: (layerId: string, targetIndex: number) => {
+            if (!draft) return;
+            const nextLayerStack = reorderLayer(draft.layerStack, layerId, targetIndex);
+            if (nextLayerStack === draft.layerStack) return;
+            mutateLayerStack(nextLayerStack);
+        },
+        nudgeSelectedLayers: (dx: number, dy: number) => {
+            if (!draft) return;
+            const nextLayerStack = nudgeLayers(draft.layerStack, draft.selectedLayerIds, dx, dy);
+            if (nextLayerStack === draft.layerStack) return;
+            mutateLayerStack(nextLayerStack);
+        },
         updateLayerTransform: (layerId: string, patch: { x?: number; y?: number; width?: number; height?: number; rotation?: number }) => draft && mutateLayerStack(updateLayer(draft.layerStack, layerId, patch)),
         duplicateSelectedLayers: () => {
             if (!draft) return;

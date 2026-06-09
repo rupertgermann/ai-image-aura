@@ -1,4 +1,4 @@
-import type { ArchiveImage, ArchiveLayer, ArchiveLayerStack } from '../db/types';
+import { isLayerBlendMode, type ArchiveImage, type ArchiveLayer, type ArchiveLayerStack } from '../db/types';
 
 export const DEFAULT_HISTORY_LIMIT = 50;
 
@@ -41,6 +41,7 @@ export function createBaseLayerStack(image: ArchiveImage): ArchiveLayerStack {
                 height: canvasHeight,
                 rotation: 0,
                 opacity: 1,
+                blendMode: 'normal',
                 visible: true,
                 locked: true,
             },
@@ -65,6 +66,7 @@ export function normalizeLayerStack(layerStack: ArchiveLayerStack): ArchiveLayer
             name: layer.name || (index === 0 ? 'Base' : `Layer ${index + 1}`),
             rotation: layer.rotation ?? 0,
             opacity: clampOpacity(layer.opacity ?? 1),
+            blendMode: isLayerBlendMode(layer.blendMode) ? layer.blendMode : 'normal',
             visible: layer.visible ?? true,
             locked: layer.kind === 'base' ? true : !!layer.locked,
         })),
@@ -119,6 +121,7 @@ export function addUploadedLayer(
         height,
         rotation: 0,
         opacity: 1,
+        blendMode: 'normal',
         visible: true,
         locked: false,
     };
@@ -170,6 +173,7 @@ export function insertAiResultLayer(
         height: bounds.height,
         rotation: 0,
         opacity: 1,
+        blendMode: 'normal',
         visible: true,
         locked: false,
     };
@@ -220,22 +224,67 @@ export function getEditableLayerIds(layerStack: ArchiveLayerStack, layerIds: str
         .map((layer) => layer.id);
 }
 
+const LOCKED_LAYER_PATCH_KEYS: ReadonlyArray<keyof ArchiveLayer> = ['name', 'visible', 'locked'];
+
 export function updateLayer(layerStack: ArchiveLayerStack, layerId: string, patch: Partial<ArchiveLayer>): ArchiveLayerStack {
     return {
         ...layerStack,
         layers: layerStack.layers.map((layer) => {
-            if (layer.id !== layerId || layer.locked && patch.kind !== 'base') {
+            if (layer.id !== layerId) {
                 return layer;
             }
 
+            const allowedPatch = layer.locked
+                ? Object.fromEntries(
+                    Object.entries(patch).filter(([key]) => LOCKED_LAYER_PATCH_KEYS.includes(key as keyof ArchiveLayer)),
+                ) as Partial<ArchiveLayer>
+                : patch;
+
             return {
                 ...layer,
-                ...patch,
-                opacity: patch.opacity === undefined ? layer.opacity : clampOpacity(patch.opacity),
-                locked: layer.kind === 'base' ? true : (patch.locked ?? layer.locked),
+                ...allowedPatch,
+                opacity: allowedPatch.opacity === undefined ? layer.opacity : clampOpacity(allowedPatch.opacity),
+                locked: layer.kind === 'base' ? true : (allowedPatch.locked ?? layer.locked),
             };
         }),
     };
+}
+
+export function reorderLayer(layerStack: ArchiveLayerStack, layerId: string, targetIndex: number): ArchiveLayerStack {
+    const index = layerStack.layers.findIndex((layer) => layer.id === layerId);
+    const layer = layerStack.layers[index];
+    if (index <= 0 || !layer || layer.locked) {
+        return layerStack;
+    }
+
+    const clampedTarget = Math.min(Math.max(targetIndex, 1), layerStack.layers.length - 1);
+    if (clampedTarget === index) {
+        return layerStack;
+    }
+
+    const layers = [...layerStack.layers];
+    const [removed] = layers.splice(index, 1);
+    layers.splice(clampedTarget, 0, removed);
+    return { ...layerStack, layers };
+}
+
+export function nudgeLayers(layerStack: ArchiveLayerStack, layerIds: string[], dx: number, dy: number): ArchiveLayerStack {
+    const ids = new Set(layerIds);
+    if (!ids.size || (dx === 0 && dy === 0)) {
+        return layerStack;
+    }
+
+    let changed = false;
+    const layers = layerStack.layers.map((layer) => {
+        if (!ids.has(layer.id) || layer.locked || layer.kind === 'base') {
+            return layer;
+        }
+
+        changed = true;
+        return { ...layer, x: layer.x + dx, y: layer.y + dy };
+    });
+
+    return changed ? { ...layerStack, layers } : layerStack;
 }
 
 export function deleteLayers(layerStack: ArchiveLayerStack, layerIds: string[]): ArchiveLayerStack {

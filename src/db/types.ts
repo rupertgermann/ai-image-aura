@@ -18,6 +18,31 @@ export interface ArchiveImage {
 
 export type ArchiveLayerKind = 'base' | 'uploaded' | 'ai-result';
 
+export type ArchiveLayerBlendMode =
+    | 'normal'
+    | 'multiply'
+    | 'screen'
+    | 'overlay'
+    | 'darken'
+    | 'lighten'
+    | 'soft-light'
+    | 'difference';
+
+export const ARCHIVE_LAYER_BLEND_MODES: ArchiveLayerBlendMode[] = [
+    'normal',
+    'multiply',
+    'screen',
+    'overlay',
+    'darken',
+    'lighten',
+    'soft-light',
+    'difference',
+];
+
+export function isLayerBlendMode(value: unknown): value is ArchiveLayerBlendMode {
+    return ARCHIVE_LAYER_BLEND_MODES.includes(value as ArchiveLayerBlendMode);
+}
+
 export interface ArchiveLayer {
     id: string;
     name: string;
@@ -29,6 +54,7 @@ export interface ArchiveLayer {
     height: number;
     rotation: number;
     opacity: number;
+    blendMode: ArchiveLayerBlendMode;
     visible: boolean;
     locked: boolean;
 }

@@ -3,7 +3,7 @@ import { Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konv
 import Konva from 'konva';
 import type { ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from './layers';
-import { renderLayerStackToBlob, renderLayerStackToDataUrl } from './renderLayerStack';
+import { renderLayerStackToBlob, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
 
 export interface EditorCanvasHandle {
     exportDataUrl: () => Promise<string>;
@@ -135,6 +135,7 @@ function CanvasLayerImage({
             height={layer.height}
             rotation={layer.rotation}
             opacity={layer.opacity}
+            globalCompositeOperation={toCompositeOperation(layer.blendMode)}
             draggable={!layer.locked}
             shadowColor={selected ? '#b45f06' : undefined}
             shadowBlur={selected ? 12 : 0}
