@@ -1,4 +1,4 @@
-import type { ArchiveLayerStack } from '../db/types';
+import type { ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments, LayerBounds } from './layers';
 
 export async function renderLayerStackToDataUrl(
@@ -30,6 +30,7 @@ export async function renderLayerStackToDataUrl(
         const image = await loadImage(layer.assetUrl);
         context.save();
         context.globalAlpha = layer.opacity;
+        context.globalCompositeOperation = toCompositeOperation(layer.blendMode);
         context.translate(layer.x + layer.width / 2, layer.y + layer.height / 2);
         context.rotate((layer.rotation * Math.PI) / 180);
         context.drawImage(image, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
@@ -47,6 +48,14 @@ export async function renderLayerStackToBlob(
     const dataUrl = await renderLayerStackToDataUrl(layerStack, adjustments, bounds);
     const response = await fetch(dataUrl);
     return response.blob();
+}
+
+export function toCompositeOperation(blendMode: ArchiveLayer['blendMode'] | undefined): GlobalCompositeOperation {
+    if (!blendMode || blendMode === 'normal') {
+        return 'source-over';
+    }
+
+    return blendMode;
 }
 
 function buildCanvasFilter(adjustments: EditorAdjustments) {

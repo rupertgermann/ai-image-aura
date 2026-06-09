@@ -11,8 +11,18 @@ describe('resolveEditorShortcut', () => {
         [{ key: 'Delete' }, 'delete'],
         [{ key: 'Backspace' }, 'delete'],
         [{ key: 'Escape' }, 'clear-selection'],
+        [{ key: 'ArrowUp' }, 'nudge-up'],
+        [{ key: 'ArrowDown' }, 'nudge-down'],
+        [{ key: 'ArrowLeft' }, 'nudge-left'],
+        [{ key: 'ArrowRight' }, 'nudge-right'],
+        [{ key: 'ArrowUp', shiftKey: true }, 'nudge-up'],
     ] as const)('maps %j to %s', (input, shortcut) => {
         expect(resolveEditorShortcut(input)).toBe(shortcut);
+    });
+
+    it('leaves modifier-arrow combinations alone', () => {
+        expect(resolveEditorShortcut({ key: 'ArrowUp', metaKey: true })).toBeNull();
+        expect(resolveEditorShortcut({ key: 'ArrowLeft', ctrlKey: true })).toBeNull();
     });
 
     it('ignores shortcuts while text fields are active', () => {

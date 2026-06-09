@@ -269,6 +269,7 @@ function createLayerStack(prefix: string, layerIds: string[]): ArchiveLayerStack
             height: index === 0 ? 1024 : 400,
             rotation: index * 5,
             opacity: 1,
+            blendMode: 'normal',
             visible: true,
             locked: index === 0,
         })),

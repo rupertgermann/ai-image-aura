@@ -48,6 +48,10 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         renameLayer,
         setLayerVisible,
         setLayerOpacity,
+        setLayerLocked,
+        setLayerBlendMode,
+        reorderLayerTo,
+        nudgeSelectedLayers,
         updateLayerTransform,
         duplicateSelectedLayers,
         deleteSelectedLayers,
@@ -123,12 +127,22 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                 deleteSelectedLayers();
             } else if (shortcut === 'clear-selection') {
                 clearSelection();
+            } else if (shortcut.startsWith('nudge-')) {
+                const step = event.shiftKey ? 10 : 1;
+                const [dx, dy] = shortcut === 'nudge-up'
+                    ? [0, -step]
+                    : shortcut === 'nudge-down'
+                        ? [0, step]
+                        : shortcut === 'nudge-left'
+                            ? [-step, 0]
+                            : [step, 0];
+                nudgeSelectedLayers(dx, dy);
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [clearSelection, deleteSelectedLayers, duplicateSelectedLayers, redo, save, undo]);
+    }, [clearSelection, deleteSelectedLayers, duplicateSelectedLayers, nudgeSelectedLayers, redo, save, undo]);
 
     if (!image) {
         return (
@@ -193,6 +207,9 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                                 onRenameLayer={renameLayer}
                                 onSetVisible={setLayerVisible}
                                 onSetOpacity={setLayerOpacity}
+                                onSetLocked={setLayerLocked}
+                                onSetBlendMode={setLayerBlendMode}
+                                onReorder={reorderLayerTo}
                                 onDuplicate={duplicateSelectedLayers}
                                 onDelete={deleteSelectedLayers}
                                 onMove={moveSelectedLayer}
