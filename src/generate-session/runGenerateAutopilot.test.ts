@@ -16,6 +16,7 @@ describe('runGenerateAutopilot', () => {
                     iterationNumber: 1,
                     prompt: 'refined prompt',
                     imageDataUrl: 'data:image/png;base64,best',
+                    actualParameters: { elapsedMs: 123, size: '1536x1024' },
                     score: 97,
                     feedback: ['Great match.'],
                 },
@@ -26,13 +27,14 @@ describe('runGenerateAutopilot', () => {
                 iterationNumber: 1,
                 prompt: 'refined prompt',
                 imageDataUrl: 'data:image/png;base64,best',
+                actualParameters: { elapsedMs: 123, size: '1536x1024' },
                 score: 97,
                 feedback: ['Great match.'],
             },
         }));
         const cancel = vi.fn();
         const createSession = vi.fn(() => ({ run, cancel }));
-        const saveCurrentResult = vi.fn(async () => undefined);
+        const saveCurrentBatch = vi.fn(async () => undefined);
         const saveLineageSource = vi.fn();
         const onSessionCreated = vi.fn();
 
@@ -56,13 +58,14 @@ describe('runGenerateAutopilot', () => {
                 nanoBananaPro: {
                     aspectRatio: '1:1',
                     imageSize: '1K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },
             referenceImages: [],
             sessionStore: {
                 loadLineageSource: () => ({ archiveImageId: 'source-image', stepId: 'step-parent' }),
-                saveCurrentResult,
+                saveCurrentBatch,
                 saveLineageSource,
             },
             lineageStore: {
@@ -81,7 +84,19 @@ describe('runGenerateAutopilot', () => {
         }));
         expect(run).toHaveBeenCalledOnce();
         expect(onSessionCreated).toHaveBeenCalledWith(expect.objectContaining({ run, cancel }));
-        expect(saveCurrentResult).toHaveBeenCalledWith('data:image/png;base64,best', []);
+        expect(saveCurrentBatch).toHaveBeenCalledWith({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,best',
+                isSaved: false,
+                actualParameters: { elapsedMs: 123, size: '1536x1024' },
+                archiveImageId: 'autopilot:run:iteration:1',
+            }],
+            references: [],
+            draft: null,
+            lineageSource: { archiveImageId: 'autopilot:run:iteration:1', stepId: 'step-1' },
+        });
         expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'autopilot:run:iteration:1', stepId: 'step-1' });
         expect(outcome.session.cancel).toBe(cancel);
     });
@@ -108,9 +123,13 @@ describe('runGenerateAutopilot', () => {
                 slotIndex: 0,
                 status: 'success' as const,
                 imageUrl: `data:image/png;base64,iteration-${seenReferenceNames.length}`,
+                actualParameters: {
+                    elapsedMs: seenReferenceNames.length * 100,
+                    size: '4096x2304',
+                },
             }];
         });
-        const saveCurrentResult = vi.fn(async () => undefined);
+        const saveCurrentBatch = vi.fn(async () => undefined);
         const serializeReferences = vi.fn(async (files: File[]) =>
             files.map((file) => referenceDataUrlByFile.get(file) ?? 'data:image/png;base64,unknown'),
         );
@@ -146,13 +165,14 @@ describe('runGenerateAutopilot', () => {
                 nanoBananaPro: {
                     aspectRatio: '16:9',
                     imageSize: '4K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },
             referenceImages: selectedReferenceFiles,
             sessionStore: {
                 loadLineageSource: () => null,
-                saveCurrentResult,
+                saveCurrentBatch,
                 saveLineageSource: vi.fn(),
             },
             lineageStore: {
@@ -175,10 +195,25 @@ describe('runGenerateAutopilot', () => {
             expectedProviderReferenceNames,
         ]);
         expect(serializeReferences).toHaveBeenCalledWith(expectedProviderReferenceFiles);
-        expect(saveCurrentResult).toHaveBeenCalledWith(
-            'data:image/png;base64,iteration-2',
-            selectedReferenceDataUrls.slice(0, 14),
-        );
+        expect(saveCurrentBatch).toHaveBeenCalledWith({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,iteration-2',
+                isSaved: false,
+                actualParameters: {
+                    elapsedMs: 200,
+                    size: '4096x2304',
+                },
+                archiveImageId: expect.stringMatching(/^autopilot:/),
+            }],
+            references: selectedReferenceDataUrls.slice(0, 14),
+            draft: null,
+            lineageSource: {
+                archiveImageId: expect.stringMatching(/^autopilot:/),
+                stepId: 'step-2',
+            },
+        });
         expect(outcome.usedReferenceImages.map((file) => file.name)).toEqual(
             expectedProviderReferenceNames,
         );

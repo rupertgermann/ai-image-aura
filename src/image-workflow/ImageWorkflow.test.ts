@@ -34,6 +34,9 @@ describe('ImageWorkflow', () => {
             slotIndex: 0,
             status: 'success',
             imageUrl: 'data:image/png;base64,generated',
+            actualParameters: {
+                elapsedMs: expect.any(Number),
+            },
         }]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             apiKey: 'sk-test',
@@ -78,12 +81,218 @@ describe('ImageWorkflow', () => {
         });
 
         expect(results).toEqual([
-            { slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,generated-0' },
+            {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,generated-0',
+                actualParameters: {
+                    elapsedMs: expect.any(Number),
+                },
+            },
             { slotIndex: 1, status: 'failed', error: 'No image data returned from image provider' },
-            { slotIndex: 2, status: 'success', imageUrl: 'data:image/png;base64,generated-2' },
+            {
+                slotIndex: 2,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,generated-2',
+                actualParameters: {
+                    elapsedMs: expect.any(Number),
+                },
+            },
         ]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             batchSize: 3,
+        }));
+    });
+
+    it('uses provider slot errors when batch generation partially fails', async () => {
+        const generate = vi.fn(async () => [
+            { b64_json: 'generated-0' },
+            { error: 'Google Gemini API Error: overloaded' },
+            { b64_json: 'generated-2' },
+        ]);
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await expect(workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 3,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        })).resolves.toEqual([
+            {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,generated-0',
+                actualParameters: {
+                    elapsedMs: expect.any(Number),
+                },
+            },
+            { slotIndex: 1, status: 'failed', error: 'Google Gemini API Error: overloaded' },
+            {
+                slotIndex: 2,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,generated-2',
+                actualParameters: {
+                    elapsedMs: expect.any(Number),
+                },
+            },
+        ]);
+    });
+
+    it('attaches actual parameters and elapsed time to successful generated results', async () => {
+        const generate = vi.fn(async () => [{
+            b64_json: 'generated',
+            revised_prompt: 'refined mountain prompt',
+            size: '1536x1024',
+            quality: 'high',
+        }]);
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        }, {
+            now: createNowSequence([1000, 1275]),
+        });
+
+        const results = await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'medium',
+            aspectRatio: 'auto',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(results).toEqual([{
+            slotIndex: 0,
+            status: 'success',
+            imageUrl: 'data:image/png;base64,generated',
+            actualParameters: {
+                revisedPrompt: 'refined mountain prompt',
+                size: '1536x1024',
+                quality: 'high',
+                elapsedMs: 275,
+            },
+        }]);
+    });
+
+    it('forwards single-slot OpenAI partial images as data URLs', async () => {
+        const onPartialImage = vi.fn();
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            input.onPartialImage?.({ b64_json: 'partial' });
+            return [{ b64_json: 'generated' }];
+        });
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 1,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+            onPartialImage,
+        });
+
+        expect(onPartialImage).toHaveBeenCalledWith('data:image/png;base64,partial');
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            onPartialImage: expect.any(Function),
+        }));
+    });
+
+    it('does not forward partial image callbacks for batch generation', async () => {
+        const onPartialImage = vi.fn();
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            input.onPartialImage?.({ b64_json: 'partial' });
+            return [
+                { b64_json: 'generated-0' },
+                { b64_json: 'generated-1' },
+            ];
+        });
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 2,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+            onPartialImage,
+        });
+
+        expect(onPartialImage).not.toHaveBeenCalled();
+        expect(generate).toHaveBeenCalledWith(expect.not.objectContaining({
+            onPartialImage: expect.any(Function),
+        }));
+    });
+
+    it('does not forward partial image callbacks for Nano Banana generation', async () => {
+        const onPartialImage = vi.fn();
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            input.onPartialImage?.({ b64_json: 'partial' });
+            return [{ b64_json: 'generated' }];
+        });
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'google-key',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'teapot city',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+            onPartialImage,
+        });
+
+        expect(onPartialImage).not.toHaveBeenCalled();
+        expect(generate).toHaveBeenCalledWith(expect.not.objectContaining({
+            onPartialImage: expect.any(Function),
         }));
     });
 
@@ -408,7 +617,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'a luminous teapot city',
             aspectRatio: '16:9',
@@ -417,6 +626,9 @@ describe('googleImageProvider', () => {
         });
 
         expect(result).toEqual([{ b64_json: 'gemini-image' }]);
+        expect(result[0]).not.toHaveProperty('revised_prompt');
+        expect(result[0]).not.toHaveProperty('size');
+        expect(result[0]).not.toHaveProperty('quality');
         expect(fetchImpl).toHaveBeenCalledWith('https://example.test/generate', expect.objectContaining({
             method: 'POST',
             headers: {
@@ -435,6 +647,44 @@ describe('googleImageProvider', () => {
             aspectRatio: '16:9',
             imageSize: '2K',
         });
+    });
+
+    it('ignores partial image callbacks for Gemini requests', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'gemini-image' } }],
+                },
+            }],
+        })));
+        const provider = createGoogleImageProvider(fetchImpl);
+        const onPartialImage = vi.fn();
+
+        const result = await provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+                capabilities: { transformMask: false, partialImageStreaming: false },
+            },
+            prompt: 'a luminous teapot city',
+            onPartialImage,
+        });
+
+        expect(result).toEqual([{ b64_json: 'gemini-image' }]);
+        expect(onPartialImage).not.toHaveBeenCalled();
+
+        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+        const body = JSON.parse(String(requestInit.body));
+        expect(JSON.stringify(body)).not.toContain('partial');
+        expect(JSON.stringify(body)).not.toContain('stream');
     });
 
     it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
@@ -545,7 +795,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'make it cinematic',
             preserveSourceDimensions: true,
@@ -600,7 +850,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'a luminous teapot city',
             referenceImages: [],
@@ -613,4 +863,57 @@ describe('googleImageProvider', () => {
             imageSize: '1K',
         });
     });
+
+    it('fans out Nano Banana batch generation and keeps failed slots isolated', async () => {
+        const pendingResponses: Array<(response: Response) => void> = [];
+        const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => {
+            pendingResponses.push(resolve);
+        }));
+        const provider = createGoogleImageProvider(fetchImpl);
+
+        const resultPromise = provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+                capabilities: { transformMask: false, partialImageStreaming: false },
+            },
+            prompt: 'a luminous teapot city',
+            aspectRatio: '16:9',
+            imageSize: '2K',
+            batchSize: 3,
+            referenceImages: [],
+        });
+
+        await Promise.resolve();
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+        pendingResponses[0]?.(new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ inlineData: { data: 'gemini-image-0' } }] } }],
+        })));
+        pendingResponses[1]?.(new Response(JSON.stringify({
+            error: { message: 'quota exceeded' },
+        }), { status: 429 }));
+        pendingResponses[2]?.(new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ inlineData: { data: 'gemini-image-2' } }] } }],
+        })));
+
+        await expect(resultPromise).resolves.toEqual([
+            { b64_json: 'gemini-image-0' },
+            { error: 'quota exceeded' },
+            { b64_json: 'gemini-image-2' },
+        ]);
+    });
 });
+
+function createNowSequence(values: number[]) {
+    let index = 0;
+    return () => values[index++] ?? values.at(-1) ?? 0;
+}

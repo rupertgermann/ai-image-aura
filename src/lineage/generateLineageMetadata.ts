@@ -1,4 +1,4 @@
-import type { ArchiveImage } from '../db/types';
+import type { ActualImageParameters, ArchiveImage } from '../db/types';
 import {
     buildImageModelArchiveFields,
     sanitizeArchiveImageModelControls,
@@ -49,6 +49,7 @@ export interface GenerateLineageMetadata extends Record<string, unknown> {
     lighting: string;
     palette: string;
     sourceArchiveImageId: string | null;
+    actualParameters?: ActualImageParameters;
     referenceImages: GenerateLineageReferenceImages;
     referenceCount: number;
     referenceIds: string[];
@@ -83,6 +84,7 @@ export function buildGenerateLineageMetadata(input: {
         lighting: input.image.lighting ?? 'none',
         palette: input.image.palette ?? 'none',
         sourceArchiveImageId: input.sourceArchiveImageId,
+        ...(input.image.actualParameters ? { actualParameters: input.image.actualParameters } : {}),
         referenceImages: {
             count: referenceIds.length,
             ids: referenceIds,

@@ -1,4 +1,4 @@
-import { isLayerBlendMode, type ArchiveLayer, type ArchiveLayerBlendMode, type ArchiveLayerKind, type ArchiveLayerStack } from '../db/types';
+import { isLayerBlendMode, type ActualImageParameters, type ArchiveLayer, type ArchiveLayerBlendMode, type ArchiveLayerKind, type ArchiveLayerStack } from '../db/types';
 import { parseLineageMetadata } from '../lineage/lineageMetadata';
 import type { LineageStep } from '../lineage/types';
 
@@ -25,6 +25,7 @@ export interface ArchiveManifestImage {
     style?: string;
     lighting?: string;
     palette?: string;
+    actualParameters?: ActualImageParameters;
     imageFileName?: string;
     references: ArchiveManifestReference[];
     layerStack?: ArchiveManifestLayerStack;
@@ -160,6 +161,7 @@ function parseArchiveManifestImage(value: unknown): ArchiveManifestImage {
         style: optionalString(value.style),
         lighting: optionalString(value.lighting),
         palette: optionalString(value.palette),
+        actualParameters: optionalActualParameters(value.actualParameters),
         imageFileName: optionalString(value.imageFileName),
         references: Array.isArray(value.references) ? value.references.map(parseArchiveManifestReference) : [],
         layerStack: parseOptionalLayerStack(value.layerStack),
@@ -308,6 +310,21 @@ function optionalNumber(value: unknown) {
 
 function optionalBoolean(value: unknown) {
     return typeof value === 'boolean' ? value : undefined;
+}
+
+function optionalActualParameters(value: unknown): ActualImageParameters | undefined {
+    if (!isRecord(value)) {
+        return undefined;
+    }
+
+    const actualParameters: ActualImageParameters = {
+        ...(typeof value.revisedPrompt === 'string' ? { revisedPrompt: value.revisedPrompt } : {}),
+        ...(typeof value.size === 'string' ? { size: value.size } : {}),
+        ...(typeof value.quality === 'string' ? { quality: value.quality } : {}),
+        ...(typeof value.elapsedMs === 'number' && Number.isFinite(value.elapsedMs) ? { elapsedMs: value.elapsedMs } : {}),
+    };
+
+    return Object.keys(actualParameters).length > 0 ? actualParameters : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

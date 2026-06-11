@@ -72,11 +72,45 @@ describe('LineageNavigator', () => {
 
             const outcome = await navigator.replayIntoEditor('step-4');
 
-            expect(outcome).toEqual({ status: 'replayed', image });
+            expect(outcome).toEqual({ status: 'replayed', image, replay: { prompt: null, model: null } });
             expect(sessionStore.saveLineageSource).toHaveBeenCalledWith({
                 archiveImageId: 'image-4',
                 stepId: 'step-4',
             });
+        });
+
+        it('returns masked editor replay metadata for the Editor to send on the next AI transform', async () => {
+            const step = createStep({
+                id: 'masked-step',
+                archiveImageId: 'masked-image',
+                stepType: 'ai-edit',
+                metadata: {
+                    aiEdit: {
+                        prompt: 'replace the masked area',
+                        imageModel: { slug: 'gpt-image-2' },
+                        transformMask: {
+                            dataUrl: 'data:image/png;base64,bWFzaw==',
+                            mimeType: 'image/png',
+                        },
+                    },
+                },
+            });
+            const image = createImage({ id: 'masked-image' });
+            const { navigator } = setup({ steps: [step], images: [image] });
+
+            const outcome = await navigator.replayIntoEditor('masked-step');
+
+            expect(outcome.status).toBe('replayed');
+            if (outcome.status !== 'replayed') {
+                return;
+            }
+            expect(outcome.image).toBe(image);
+            expect(outcome.replay).toMatchObject({
+                prompt: 'replace the masked area',
+                model: 'gpt-image-2',
+            });
+            expect(outcome.replay.maskImage).toBeInstanceOf(File);
+            await expect(outcome.replay.maskImage?.text()).resolves.toBe('mask');
         });
 
         it('reports unavailable when the image is missing from the archive', async () => {

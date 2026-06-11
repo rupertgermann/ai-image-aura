@@ -26,6 +26,7 @@ function validateGenerateMetadata(metadata: Record<string, unknown>) {
     validateImageModel(metadata.imageModel);
     validateDimensions(metadata.dimensions);
     validateReferenceImages(metadata.referenceImages);
+    validateActualParameters(metadata.actualParameters);
 }
 
 function validateEditorMetadata(metadata: Record<string, unknown>) {
@@ -35,6 +36,7 @@ function validateEditorMetadata(metadata: Record<string, unknown>) {
     validateEditorAdjustment(metadata.editorAdjustment);
     validateEditorAiEdit(metadata.aiEdit);
     validateEditorLayers(metadata.layers);
+    validateTransformMaskAsset(metadata.transformMaskAsset);
 }
 
 function validateAutopilotMetadata(metadata: Record<string, unknown>) {
@@ -82,6 +84,26 @@ function validateReferenceImages(value: unknown) {
     requireFiniteNumber(referenceImages.count, 'lineage referenceImages count');
     if (!Array.isArray(referenceImages.ids) || !referenceImages.ids.every((id) => typeof id === 'string')) {
         throw new Error('Invalid lineage referenceImages ids');
+    }
+}
+
+function validateActualParameters(value: unknown) {
+    if (value === undefined) {
+        return;
+    }
+
+    const actualParameters = requireRecord(value, 'lineage actualParameters');
+    if (actualParameters.revisedPrompt !== undefined) {
+        requireString(actualParameters.revisedPrompt, 'lineage actualParameters revisedPrompt');
+    }
+    if (actualParameters.size !== undefined) {
+        requireString(actualParameters.size, 'lineage actualParameters size');
+    }
+    if (actualParameters.quality !== undefined) {
+        requireString(actualParameters.quality, 'lineage actualParameters quality');
+    }
+    if (actualParameters.elapsedMs !== undefined) {
+        requireFiniteNumber(actualParameters.elapsedMs, 'lineage actualParameters elapsedMs');
     }
 }
 
@@ -133,6 +155,7 @@ function validateEditorAiEdit(value: unknown) {
         requireFiniteNumber(referenceImages.count, 'lineage aiEdit referenceImages count');
     }
     validateEditorTransformTarget(aiEdit.transformTarget);
+    validateTransformMaskAsset(aiEdit.transformMask);
 }
 
 function validateEditorTransformTarget(value: unknown) {
@@ -154,6 +177,24 @@ function validateEditorTransformTarget(value: unknown) {
     if (transformTarget.includesBaseLayer !== null) {
         requireBoolean(transformTarget.includesBaseLayer, 'lineage transformTarget includesBaseLayer');
     }
+}
+
+function validateTransformMaskAsset(value: unknown) {
+    if (value === undefined || value === null) {
+        return;
+    }
+
+    const asset = requireRecord(value, 'lineage transformMask');
+    if (asset.assetId !== null) {
+        requireString(asset.assetId, 'lineage transformMask assetId');
+    }
+    if (asset.dataUrl !== undefined) {
+        requireString(asset.dataUrl, 'lineage transformMask dataUrl');
+    }
+    if (asset.fileName !== undefined) {
+        requireString(asset.fileName, 'lineage transformMask fileName');
+    }
+    requireString(asset.mimeType, 'lineage transformMask mimeType');
 }
 
 function validateEditorLayers(value: unknown) {

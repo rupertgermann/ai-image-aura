@@ -1,9 +1,9 @@
 import { promptRefiner } from './PromptRefiner';
 import { satisfactionEvaluator } from './SatisfactionEvaluator';
 import type { LineageStore } from '../lineage/LineageStore';
+import type { ActualImageParameters } from '../db/types';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
-import { getFirstSuccessfulGeneratedImage } from '../image-workflow/ImageWorkflow';
 import { buildAutopilotLineageMetadata } from '../lineage/autopilotLineageMetadata';
 
 export const DEFAULT_AUTOPILOT_MAX_ITERATIONS = 4;
@@ -16,8 +16,14 @@ export interface AutopilotIteration {
     iterationNumber: number;
     prompt: string;
     imageDataUrl: string;
+    actualParameters?: ActualImageParameters;
     score: number;
     feedback: string[];
+}
+
+export interface AutopilotGeneratedImage {
+    imageDataUrl: string;
+    actualParameters?: ActualImageParameters;
 }
 
 export interface AutopilotSessionResult {
@@ -47,7 +53,7 @@ interface CreateAutopilotSessionInput {
     initialParentStepId?: string | null;
     maxIterations?: number;
     satisfactionThreshold?: number;
-    generate?: (input: GenerateImageInput) => Promise<string>;
+    generate?: (input: GenerateImageInput) => Promise<string | AutopilotGeneratedImage>;
     evaluate?: (input: { imageDataUrl: string; goal: string; apiKey: string }) => Promise<{ score: number; feedback: string[] }>;
     refine?: (input: { goal: string; currentPrompt: string; feedback: string[]; apiKey: string }) => Promise<string>;
     lineageStore: Pick<LineageStore, 'save'>;
@@ -84,11 +90,12 @@ class DefaultAutopilotSession implements AutopilotSession {
         for (let iterationNumber = 1; iterationNumber <= maxIterations; iterationNumber += 1) {
             try {
                 const iterationSettings = snapshotAutopilotSettings(runSettings);
-                const imageDataUrl = await generate({
+                const generatedImage = normalizeAutopilotGeneratedImage(await generate({
                     ...iterationSettings,
                     apiKey: this.input.apiKey,
                     prompt: currentPrompt,
-                });
+                }));
+                const imageDataUrl = generatedImage.imageDataUrl;
 
                 const evaluation = await evaluate({
                     imageDataUrl,
@@ -119,6 +126,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                     iterationNumber,
                     prompt: currentPrompt,
                     imageDataUrl,
+                    actualParameters: generatedImage.actualParameters,
                     score: evaluation.score,
                     feedback: evaluation.feedback,
                 };
@@ -191,18 +199,27 @@ export function createAutopilotSession(input: CreateAutopilotSessionInput): Auto
     return new DefaultAutopilotSession(input);
 }
 
-async function generateSingleImage(input: GenerateImageInput): Promise<string> {
+async function generateSingleImage(input: GenerateImageInput): Promise<AutopilotGeneratedImage> {
     const results = await imageWorkflow.generate({
         ...input,
         batchSize: 1,
     });
-    const imageDataUrl = getFirstSuccessfulGeneratedImage(results);
+    const result = results.find((result) => result.status === 'success');
 
-    if (!imageDataUrl) {
+    if (!result) {
         throw new Error('No image data returned from image provider');
     }
 
-    return imageDataUrl;
+    return {
+        imageDataUrl: result.imageUrl,
+        actualParameters: result.actualParameters,
+    };
+}
+
+function normalizeAutopilotGeneratedImage(result: string | AutopilotGeneratedImage): AutopilotGeneratedImage {
+    return typeof result === 'string'
+        ? { imageDataUrl: result }
+        : result;
 }
 
 function snapshotAutopilotSettings(

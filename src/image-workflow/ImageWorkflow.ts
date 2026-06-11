@@ -1,4 +1,5 @@
 import { dataURLtoFile, fileToDataURL } from '../utils/file';
+import type { ActualImageParameters } from '../db/types';
 import {
     type ImageBackground,
     type ImageQuality,
@@ -26,6 +27,7 @@ export interface GenerateImageInput {
     lighting: string;
     palette: string;
     referenceImages: File[];
+    onPartialImage?: (imageUrl: string) => void;
 }
 
 export interface EditImageInput {
@@ -46,6 +48,7 @@ export type GenerateBatchResult =
         slotIndex: number;
         status: 'success';
         imageUrl: string;
+        actualParameters?: ActualImageParameters;
     }
     | {
         slotIndex: number;
@@ -60,7 +63,16 @@ export interface ImageWorkflow {
     hydrateReferences(dataUrls: string[]): File[];
 }
 
-export function createImageWorkflow(providers: ImageProviderRegistry = imageProviderRegistry): ImageWorkflow {
+interface CreateImageWorkflowDeps {
+    now?: () => number;
+}
+
+export function createImageWorkflow(
+    providers: ImageProviderRegistry = imageProviderRegistry,
+    deps: CreateImageWorkflowDeps = {},
+): ImageWorkflow {
+    const now = deps.now ?? (() => performance.now());
+
     return {
         async generate(input) {
             const { model, modelSlug, provider } = resolveImageProvider(input.model, providers);
@@ -74,15 +86,21 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
             });
 
             const batchSize = providerRequest.batchSize ?? 1;
+            const onPartialImage = batchSize === 1 && model.capabilities.partialImageStreaming
+                ? createPartialImageHandler(input.onPartialImage)
+                : undefined;
 
             try {
+                const startedAt = now();
                 const responses = await provider.generate({
                     apiKey: input.apiKey,
                     model,
                     prompt: buildGenerationPrompt(input),
                     ...providerRequest,
+                    ...(onPartialImage ? { onPartialImage } : {}),
                 });
-                const results = mapGenerateBatchResults(responses, batchSize);
+                const elapsedMs = Math.max(0, Math.round(now() - startedAt));
+                const results = mapGenerateBatchResults(responses, batchSize, elapsedMs);
 
                 if (!hasSuccessfulGeneratedImage(results) && batchSize === 1) {
                     const [result] = results;
@@ -149,6 +167,24 @@ const buildGenerationPrompt = (input: GenerateImageInput) => {
         : input.prompt;
 };
 
+function createPartialImageHandler(onPartialImage: GenerateImageInput['onPartialImage']) {
+    if (!onPartialImage) {
+        return undefined;
+    }
+
+    return (partial: ImageProviderResponse) => {
+        if (!partial.b64_json) {
+            return;
+        }
+
+        try {
+            onPartialImage(`data:image/png;base64,${partial.b64_json}`);
+        } catch {
+            // Partial previews should not interrupt the final generation result.
+        }
+    };
+}
+
 const createEditSourceFile = (sourceImage: Blob) => {
     return new File([sourceImage], 'edit-input.png', {
         type: sourceImage.type || 'image/png',
@@ -188,7 +224,11 @@ function hasSuccessfulGeneratedImage(results: GenerateBatchResult[]): boolean {
     return getFirstSuccessfulGeneratedImage(results) !== null;
 }
 
-function mapGenerateBatchResults(responses: ImageProviderResponse[], batchSize: number): GenerateBatchResult[] {
+function mapGenerateBatchResults(
+    responses: ImageProviderResponse[],
+    batchSize: number,
+    elapsedMs: number,
+): GenerateBatchResult[] {
     return Array.from({ length: batchSize }, (_, slotIndex) => {
         const response = responses[slotIndex];
 
@@ -197,13 +237,23 @@ function mapGenerateBatchResults(responses: ImageProviderResponse[], batchSize: 
                 slotIndex,
                 status: 'success',
                 imageUrl: `data:image/png;base64,${response.b64_json}`,
+                actualParameters: buildActualImageParameters(response, elapsedMs),
             };
         }
 
         return {
             slotIndex,
             status: 'failed',
-            error: 'No image data returned from image provider',
+            error: response?.error ?? 'No image data returned from image provider',
         };
     });
+}
+
+function buildActualImageParameters(response: ImageProviderResponse, elapsedMs: number): ActualImageParameters {
+    return {
+        ...(response.revised_prompt ? { revisedPrompt: response.revised_prompt } : {}),
+        ...(response.size ? { size: response.size } : {}),
+        ...(response.quality ? { quality: response.quality } : {}),
+        elapsedMs,
+    };
 }

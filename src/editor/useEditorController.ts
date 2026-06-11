@@ -3,6 +3,7 @@ import { imageWorkflow, type EditImageInput } from '../image-workflow/ImageWorkf
 import type { ImageModelSlug } from '../utils/openaiModels';
 import {
     applyAiTransformResultToDraft,
+    blobToTransformMaskAsset,
     getAiTransformSaveProvenance,
     renderAiTransformEditInput,
     type AiTransformRenderer,
@@ -187,6 +188,9 @@ export async function runEditorAiTransform({
         maskImage,
         quality: 'medium',
     });
+    const transformMask = maskImage
+        ? await blobToTransformMaskAsset(maskImage)
+        : null;
 
     return applyAiTransformResultToDraft(
         draft,
@@ -196,6 +200,7 @@ export async function runEditorAiTransform({
         {
             prompt: trimmedPrompt,
             model,
+            transformMask,
         },
     );
 }
@@ -224,6 +229,7 @@ export function buildEditorSaveContext({
         layerStack: draft && hasDurableLayerStack(draft.layerStack) ? draft.layerStack : null,
         aiEditPrompt: saveProvenance?.aiEditPrompt,
         aiEditModel: saveProvenance?.aiEditModel,
+        transformMask: saveProvenance?.transformMask ?? undefined,
         targetMode: saveProvenance?.targetMode,
         targetLayerCount: saveProvenance?.targetLayerCount,
         targetIncludesBaseLayer: saveProvenance?.targetIncludesBaseLayer,

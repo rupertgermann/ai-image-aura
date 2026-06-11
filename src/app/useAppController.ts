@@ -10,6 +10,7 @@ import { initializeAuraPersistence } from '../db/AuraPersistence';
 import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
 import { lineageStore } from '../lineage/LineageStore';
 import { createLineageNavigator } from '../lineage/LineageNavigator';
+import type { EditorReplay } from '../lineage/replayLineageStep';
 import { browserCompletionNotificationPort, type CompletionNotificationReadiness } from './CompletionNotificationPort';
 
 export function useAppController() {
@@ -32,6 +33,7 @@ export function useAppController() {
         onError: handleArchiveError,
     });
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
+    const [editorReplay, setEditorReplay] = useState<EditorReplay | null>(null);
     const [completionNotificationReadiness, setCompletionNotificationReadiness] = useState<CompletionNotificationReadiness>(
         () => browserCompletionNotificationPort.getReadiness(),
     );
@@ -128,6 +130,7 @@ export function useAppController() {
 
     const editImage = useCallback((image: ArchiveImage) => {
         setEditingImage(image);
+        setEditorReplay(null);
         changeView('editor');
     }, [changeView]);
 
@@ -152,6 +155,7 @@ export function useAppController() {
 
         changeView('archive');
         setEditingImage(null);
+        setEditorReplay(null);
     }, [addImage, addToast, changeView, editingImage]);
 
     const createSimilar = useCallback(async (image: ArchiveImage) => {
@@ -192,6 +196,7 @@ export function useAppController() {
                 return;
             }
             setEditingImage(outcome.image);
+            setEditorReplay(outcome.replay);
             changeView('editor');
             addToast('Lineage step loaded into Editor', 'info');
         } catch (error) {
@@ -254,6 +259,7 @@ export function useAppController() {
         },
         editorViewProps: {
             image: editingImage,
+            replay: editorReplay,
             getProviderKey: getKey,
             onSave: handleSaveEditedImage,
         },

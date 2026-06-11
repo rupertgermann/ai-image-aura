@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StorageProvider } from '../services/StorageService';
-import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft } from './GenerateSession';
+import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateBatchSnapshot } from './GenerateSession';
 
 describe('GenerateSession draft migration', () => {
     it('migrates legacy flat controls into the gpt-image-2 block', () => {
@@ -28,6 +28,7 @@ describe('GenerateSession draft migration', () => {
             nanoBananaPro: {
                 aspectRatio: '3:2',
                 imageSize: '1K',
+                batchSize: 1,
             },
             isSaved: true,
         });
@@ -46,6 +47,7 @@ describe('GenerateSession draft migration', () => {
             nanoBananaPro: {
                 aspectRatio: '16:9',
                 imageSize: '4K',
+                batchSize: 9,
             },
         })).toMatchObject({
             model: 'nano-banana-pro',
@@ -58,6 +60,7 @@ describe('GenerateSession draft migration', () => {
             nanoBananaPro: {
                 aspectRatio: '16:9',
                 imageSize: '4K',
+                batchSize: 4,
             },
         });
     });
@@ -84,6 +87,110 @@ describe('GenerateSession draft migration', () => {
 
         await expect(store.loadCurrentResult()).resolves.toBeNull();
         await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
+    });
+
+    it('clears stale current generation results when transferring an archive image into Generate', async () => {
+        const store = createGenerateSessionStore({
+            blobStorage: new InMemoryStorageProvider(),
+        });
+        await store.saveCurrentBatch({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,stale-result',
+                isSaved: false,
+            }],
+            references: ['data:image/png;base64,stale-ref'],
+            draft: DEFAULT_GENERATE_DRAFT,
+            lineageSource: { archiveImageId: 'old-source' },
+        });
+
+        await store.transferFromArchive({
+            id: 'archive-image',
+            url: 'data:image/png;base64,archive',
+            prompt: 'use this image',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            timestamp: '2026-06-05T12:00:00.000Z',
+            width: 1024,
+            height: 1024,
+            model: 'gpt-image-2',
+            references: ['data:image/png;base64,archive-ref'],
+        });
+
+        await expect(store.loadCurrentBatch()).resolves.toBeNull();
+        await expect(store.loadCurrentResult()).resolves.toBeNull();
+        await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
+        await expect(store.consumeTransferredReferences()).resolves.toEqual(['data:image/png;base64,archive-ref']);
+    });
+
+    it('round-trips the current generation batch with slot state and run context', async () => {
+        const store = createGenerateSessionStore({
+            blobStorage: new InMemoryStorageProvider(),
+        });
+        const batch: GenerateBatchSnapshot = {
+            results: [
+                {
+                    slotIndex: 0,
+                    status: 'success',
+                    imageUrl: 'data:image/png;base64,result-0',
+                    isSaved: true,
+                    archiveImageId: 'archive-0',
+                },
+                {
+                    slotIndex: 1,
+                    status: 'failed',
+                    error: 'content filter',
+                },
+                {
+                    slotIndex: 2,
+                    status: 'success',
+                    imageUrl: 'data:image/png;base64,result-2',
+                    isSaved: false,
+                },
+            ],
+            references: ['data:image/png;base64,used-ref'],
+            draft: {
+                ...DEFAULT_GENERATE_DRAFT,
+                prompt: 'stored run prompt',
+                gptImage2: {
+                    ...DEFAULT_GENERATE_DRAFT.gptImage2,
+                    batchSize: 3,
+                },
+            },
+            lineageSource: {
+                archiveImageId: 'source-image',
+                stepId: 'source-step',
+            },
+        };
+
+        await store.saveCurrentBatch(batch);
+
+        await expect(store.loadCurrentBatch()).resolves.toEqual(batch);
+        await expect(store.loadCurrentResult()).resolves.toBe('data:image/png;base64,result-0');
+        await expect(store.loadCurrentResultReferences()).resolves.toEqual(['data:image/png;base64,used-ref']);
+    });
+
+    it('migrates legacy single-result storage into a one-item generation batch', async () => {
+        const blobStorage = new InMemoryStorageProvider();
+        await blobStorage.save('generate_current_result', 'data:image/png;base64,legacy-result');
+        await blobStorage.save('generate_current_result_references', JSON.stringify([
+            'data:image/png;base64,legacy-ref',
+        ]));
+        const store = createGenerateSessionStore({ blobStorage });
+
+        await expect(store.loadCurrentBatch()).resolves.toEqual({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,legacy-result',
+                isSaved: false,
+            }],
+            references: ['data:image/png;base64,legacy-ref'],
+            draft: null,
+            lineageSource: null,
+        });
     });
 });
 

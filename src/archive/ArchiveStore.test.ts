@@ -232,6 +232,45 @@ describe('ArchiveStore layer asset ownership', () => {
         ]));
     });
 
+    it('persists actual parameter metadata and treats legacy metadata as absent', async () => {
+        const { store, metadata } = createStore();
+        const actualParameters = {
+            revisedPrompt: 'refined prompt',
+            size: '1536x1024',
+            quality: 'high',
+            elapsedMs: 930,
+        };
+
+        await store.save(createImageInput({
+            id: 'actual-image',
+            actualParameters,
+        }));
+        metadata.records.set('legacy-image', {
+            id: 'legacy-image',
+            storedUrl: 'data:image/png;base64,legacy',
+            prompt: 'legacy prompt',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            timestamp: '2026-06-05T08:00:00.000Z',
+            width: 1024,
+            height: 1024,
+            referenceIds: [],
+        });
+
+        expect(metadata.records.get('actual-image')?.actualParameters).toEqual(actualParameters);
+        await expect(store.list()).resolves.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                id: 'actual-image',
+                actualParameters,
+            }),
+            expect.not.objectContaining({
+                id: 'legacy-image',
+                actualParameters: expect.anything(),
+            }),
+        ]));
+    });
+
     it('recovers orphaned image blobs when metadata is missing', async () => {
         const { store, metadata, blobs } = createStore();
         blobs.blobs.set('img_orphaned-image', 'data:image/png;base64,orphaned');
@@ -283,6 +322,7 @@ function createImageInput(overrides: Partial<ArchiveImage> = {}) {
         height: 1024,
         favorite: overrides.favorite,
         references: overrides.references,
+        actualParameters: overrides.actualParameters,
         layerStack: overrides.layerStack,
     };
 }

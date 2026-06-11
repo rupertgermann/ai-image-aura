@@ -1,5 +1,5 @@
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
-import { buildEditorLineageMetadata } from '../lineage/editorLineageMetadata';
+import { buildEditorLineageMetadata, type EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { EditorAdjustments } from './layers';
 
@@ -15,6 +15,7 @@ export interface EditorSaveContext {
     aiResultLayerName?: string | null;
     aiEditPrompt?: string | null;
     aiEditModel?: string | null;
+    transformMask?: EditorLineageTransformMaskAsset | null;
 }
 
 export interface SaveEditedImageDeps {
@@ -104,5 +105,6 @@ function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, cont
         aiResultLayerName: context.aiResultLayerName,
         aiEditPrompt: context.aiEditPrompt,
         aiEditModel: context.aiEditModel,
+        transformMask: context.transformMask,
     });
 }

@@ -1,12 +1,18 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
+import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
-import { getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
-import { useGenerateController } from '../generate-session/useGenerateController';
+import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
+import { addGeneratedResultAsReferenceFromAction, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
+import ActualParametersPanel from '../components/ActualParametersPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import {
+    buildActualParameterDetails,
+    getRequestedGenerateParameters,
+    hasActualParameterDetails,
+} from '../generate-session/actualParameters';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
@@ -17,6 +23,7 @@ import {
     buildImageModelGenerateReferenceRunPlan,
     coerceImageModelControlValue,
     getImageModelGenerateControls,
+    getImageModelReferenceCapacityMessage,
     getImageModelUiChoices,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
@@ -200,7 +207,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const removeReferenceAt = referenceCollection.removeAt;
     const {
         currentResult,
+        currentPartialResult,
         currentBatchResults,
+        currentRunDraft,
         loading,
         error,
         autopilot,
@@ -210,6 +219,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         cancelAutopilot,
         save,
         saveResult,
+        saveAllResults,
         download,
         downloadResult,
         clear,
@@ -321,11 +331,23 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const maxApiCalls = maxIterations * 3;
     const isAutopilotMode = mode === 'autopilot';
     const imageModelReferenceWarning = referenceRunPlan.referenceLimitMessage;
+    const resultReferenceCapacityMessage = getImageModelReferenceCapacityMessage(model, referenceImages.length, 'generation');
     const activeModelDraftKey = getImageModelDraftKey(model);
     const activeModelControls = draft[activeModelDraftKey] as Record<string, string | number>;
     const successfulBatchResults = currentBatchResults.filter((result) => result.status === 'success');
+    const hasUnsavedSuccessfulBatchResults = successfulBatchResults.some((result) => !result.isSaved);
     const showBatchGrid = currentBatchResults.length > 1 || currentBatchResults.some((result) => result.status === 'failed');
     const singleResultSlot = !showBatchGrid ? successfulBatchResults[0] : null;
+    const requestedParameters = getRequestedGenerateParameters(currentRunDraft ?? draft);
+    const singleResultActualDetails = singleResultSlot
+        ? buildActualParameterDetails({
+            actualParameters: singleResultSlot.actualParameters,
+            requestedParameters,
+        })
+        : null;
+    const hasSingleResultActualDetails = singleResultActualDetails
+        ? hasActualParameterDetails(singleResultActualDetails)
+        : false;
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
         updateDraft({
             [activeModelDraftKey]: {
@@ -333,6 +355,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                 [controlId]: coerceImageModelControlValue(model, controlId, value),
             },
         } as Partial<GenerateDraft>);
+    };
+
+    const handleUseResultAsReference = (result: Extract<GenerateResultSlot, { status: 'success' }>) => {
+        addGeneratedResultAsReferenceFromAction({
+            slot: result,
+            addReferenceFiles,
+            session: generateSessionStore,
+            capacityMessage: resultReferenceCapacityMessage,
+            setNotice: setAutopilotNotice,
+        });
     };
 
 
@@ -647,12 +679,22 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div className="error-message">{activeReasoningModel.label} API key missing. Go to Settings to configure.</div>
                     )}
                     {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
+                    {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}
                     {error && <div className="error-message">{error}</div>}
                     {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>
 
-                <section className={`preview-panel glass-panel${showBatchGrid ? ' batch-preview-panel' : ''}`}>
-                    {showBatchGrid ? (
+                <section className={`preview-panel glass-panel${showBatchGrid && !currentPartialResult ? ' batch-preview-panel' : ''}`}>
+                    {currentPartialResult ? (
+                        <div className="result-container partial-result-container">
+                            <img src={currentPartialResult} alt="In-progress generation preview" className="result-image partial-result-image" />
+                            <div className="partial-result-banner glass-panel">
+                                <Loader2 className="spin" size={18} />
+                                <strong>Generating preview</strong>
+                                <span>Final result is still rendering.</span>
+                            </div>
+                        </div>
+                    ) : showBatchGrid ? (
                         <div className="result-batch-container">
                             <div className="result-batch-grid">
                                 {currentBatchResults.map((result) => (
@@ -665,6 +707,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         {result.status === 'success' ? (
                                             <>
                                                 <img src={result.imageUrl} alt={`Generated result ${result.slotIndex + 1}`} className="result-slot-image" />
+                                                <ActualParametersPanel
+                                                    compact
+                                                    details={buildActualParameterDetails({
+                                                        actualParameters: result.actualParameters,
+                                                        requestedParameters,
+                                                    })}
+                                                />
                                                 <div className="result-slot-actions">
                                                     <button
                                                         onClick={() => { void saveResult(result.slotIndex); }}
@@ -675,6 +724,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                                     </button>
                                                     <button className="btn-ghost" onClick={() => downloadResult(result.slotIndex)}>
                                                         <Download size={16} /> Download
+                                                    </button>
+                                                    <button
+                                                        className="btn-ghost"
+                                                        onClick={() => handleUseResultAsReference(result)}
+                                                        disabled={!!resultReferenceCapacityMessage}
+                                                        title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
+                                                    >
+                                                        <ImagePlus size={16} /> Use as Reference
                                                     </button>
                                                 </div>
                                             </>
@@ -687,13 +744,25 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => { void clear(); }} className="btn-ghost result-batch-clear">
-                                <Trash2 size={18} /> Clear Results
-                            </button>
+                            <div className="result-batch-actions">
+                                <button
+                                    onClick={() => { void saveAllResults(); }}
+                                    className="btn-amber"
+                                    disabled={!hasUnsavedSuccessfulBatchResults}
+                                >
+                                    <Archive size={18} /> Save All
+                                </button>
+                                <button onClick={() => { void clear(); }} className="btn-ghost result-batch-clear">
+                                    <Trash2 size={18} /> Clear Results
+                                </button>
+                            </div>
                         </div>
                     ) : currentResult ? (
-                        <div className="result-container">
+                        <div className={`result-container${hasSingleResultActualDetails ? ' has-actual-parameters' : ''}`}>
                             <img src={currentResult} alt="Generated result" className="result-image" />
+                            {singleResultActualDetails && (
+                                <ActualParametersPanel details={singleResultActualDetails} />
+                            )}
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
                                 <div className="autopilot-result-banner glass-panel">
                                     <strong>
@@ -719,6 +788,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 <button className="btn-ghost" onClick={download}>
                                     <Download size={18} /> Download
                                 </button>
+                                {singleResultSlot && (
+                                    <button
+                                        className="btn-ghost"
+                                        onClick={() => handleUseResultAsReference(singleResultSlot)}
+                                        disabled={!!resultReferenceCapacityMessage}
+                                        title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
+                                    >
+                                        <ImagePlus size={18} /> Use as Reference
+                                    </button>
+                                )}
                                 <button onClick={() => { void clear(); }} className="btn-ghost">
                                     <Trash2 size={18} />
                                 </button>

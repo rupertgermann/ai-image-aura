@@ -22,6 +22,7 @@ export type GptImage2Controls = {
 export type NanoBananaProControls = {
     aspectRatio: NanoBananaAspectRatio;
     imageSize: NanoBananaImageSize;
+    batchSize: number;
 };
 
 export type ImageModelControls = GptImage2Controls | NanoBananaProControls;
@@ -133,6 +134,7 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
         defaults: {
             aspectRatio: '1:1',
             imageSize: '1K',
+            batchSize: 1,
         },
         generateControls: [
             {
@@ -160,6 +162,17 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
                     { value: '1K', label: '1K' },
                     { value: '2K', label: '2K' },
                     { value: '4K', label: '4K' },
+                ],
+            },
+            {
+                id: 'batchSize',
+                label: 'BATCH SIZE',
+                kind: 'toggle',
+                options: [
+                    { value: '1', label: '1' },
+                    { value: '2', label: '2' },
+                    { value: '3', label: '3' },
+                    { value: '4', label: '4' },
                 ],
             },
         ],
@@ -230,6 +243,7 @@ export function sanitizeImageModelControls(
         return {
             aspectRatio: coerceNanoAspectRatio(record?.aspectRatio, fallbackControls.aspectRatio),
             imageSize: coerceNanoImageSize(record?.imageSize, fallbackControls.imageSize),
+            batchSize: coerceGptBatchSize(record?.batchSize, fallbackControls.batchSize),
         };
     }
 
@@ -270,6 +284,9 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
         if (controlId === 'imageSize') {
             return coerceNanoImageSize(value, defaults.imageSize);
         }
+        if (controlId === 'batchSize') {
+            return String(coerceGptBatchSize(value, defaults.batchSize));
+        }
         return '';
     }
 
@@ -298,7 +315,7 @@ export function getActiveImageModelGenerateControls(model: ImageModelSlug, contr
             imageSize: sanitized.imageSize,
             quality: gptDefaults.quality,
             background: gptDefaults.background,
-            batchSize: 1,
+            batchSize: sanitized.batchSize,
         };
     }
 
@@ -355,10 +372,12 @@ export function mapImageModelGenerateProviderRequest(
         const controls = sanitizeImageModelControls(model, {
             aspectRatio: input.aspectRatio,
             imageSize: input.imageSize,
+            batchSize: input.batchSize,
         }) as NanoBananaProControls;
         return {
             aspectRatio: controls.aspectRatio,
             imageSize: controls.imageSize,
+            batchSize: controls.batchSize,
             referenceImages: referenceRunPlan.providerReferenceImages,
         };
     }
@@ -435,6 +454,19 @@ export function getImageModelReferenceLimitMessage(
     }
 
     return `${IMAGE_MODEL_REGISTRY[model].label} uses the first ${limit} reference images for ${context}.`;
+}
+
+export function getImageModelReferenceCapacityMessage(
+    model: ImageModelSlug,
+    referenceCount: number,
+    context: string,
+): string | null {
+    const limit = IMAGE_MODEL_CONTROL_FACTS[model].referenceLimit;
+    if (limit === null || referenceCount < limit) {
+        return null;
+    }
+
+    return `${IMAGE_MODEL_REGISTRY[model].label} already has ${limit} reference images for ${context}. Remove one before adding another.`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

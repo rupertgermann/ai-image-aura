@@ -1,9 +1,8 @@
-import { createAutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
+import { createAutopilotSession, type AutopilotGeneratedImage, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput, ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
-import { getFirstSuccessfulGeneratedImage } from '../image-workflow/ImageWorkflow';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
@@ -15,7 +14,7 @@ interface RunGenerateAutopilotInput {
     reasoningModel?: string;
     draft: GenerateDraft;
     referenceImages: File[];
-    sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'saveCurrentResult' | 'saveLineageSource'>;
+    sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'saveCurrentBatch' | 'saveLineageSource'>;
     lineageStore: Pick<LineageStore, 'save'>;
     createSession?: typeof createAutopilotSession;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
@@ -77,11 +76,24 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
 
     if (result.bestIteration) {
         usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
-        await input.sessionStore.saveCurrentResult(result.bestIteration.imageDataUrl, usedReferences);
-        input.sessionStore.saveLineageSource({
+        const lineageSource = {
             archiveImageId: result.bestIteration.archiveImageId,
             stepId: result.bestIteration.stepId,
+        };
+        await input.sessionStore.saveCurrentBatch({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: result.bestIteration.imageDataUrl,
+                isSaved: false,
+                actualParameters: result.bestIteration.actualParameters,
+                archiveImageId: result.bestIteration.archiveImageId,
+            }],
+            references: usedReferences,
+            draft: null,
+            lineageSource,
         });
+        input.sessionStore.saveLineageSource(lineageSource);
     }
 
     return {
@@ -95,16 +107,19 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
 async function generateSingleImage(
     workflow: Pick<ImageWorkflow, 'generate'>,
     request: GenerateImageInput,
-): Promise<string> {
+): Promise<AutopilotGeneratedImage> {
     const results = await workflow.generate({
         ...request,
         batchSize: 1,
     });
-    const imageDataUrl = getFirstSuccessfulGeneratedImage(results);
+    const result = results.find((result) => result.status === 'success');
 
-    if (!imageDataUrl) {
+    if (!result) {
         throw new Error('No image data returned from image provider');
     }
 
-    return imageDataUrl;
+    return {
+        imageDataUrl: result.imageUrl,
+        actualParameters: result.actualParameters,
+    };
 }

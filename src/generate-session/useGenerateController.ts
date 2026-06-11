@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import type { ArchiveImage } from '../db/types';
+import type { ActualImageParameters, ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, getActiveGenerateArchiveFields, getActiveGenerateControls, type GenerateDraft, type GenerateLineageSource, type GenerateSessionStore } from './GenerateSession';
+import {
+    generateSessionStore,
+    getActiveGenerateArchiveFields,
+    getActiveGenerateControls,
+    type GenerateBatchSnapshot,
+    type GenerateDraft,
+    type GenerateLineageSource,
+    type GenerateResultSlot,
+    type GenerateSessionStore,
+} from './GenerateSession';
 import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
-import { createAutopilotSession, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
+import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import {
@@ -14,6 +23,10 @@ import {
     type CompletionNotificationPayload,
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
+import { dataURLtoFile } from '../utils/file';
+import { resolveImageModelConfig } from '../utils/openaiModels';
+
+export type { GenerateResultSlot };
 
 interface AutopilotProgressState {
     running: boolean;
@@ -31,20 +44,6 @@ interface AutopilotProgressState {
     lastErrorIteration: number | null;
 }
 
-export type GenerateResultSlot =
-    | {
-        slotIndex: number;
-        status: 'success';
-        imageUrl: string;
-        isSaved: boolean;
-        archiveImageId?: string;
-    }
-    | {
-        slotIndex: number;
-        status: 'failed';
-        error: string;
-    };
-
 interface UseGenerateControllerOptions {
     apiKey: string | null;
     reasoningApiKey?: string | null;
@@ -56,7 +55,7 @@ interface UseGenerateControllerOptions {
     serializeReferences: () => Promise<string[]>;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
-    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'loadCurrentResultReferences' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
+    session?: Pick<GenerateSessionStore, 'loadCurrentBatch' | 'saveCurrentBatch' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     createAutopilot?: typeof createAutopilotSession;
     evaluate?: typeof satisfactionEvaluator.evaluate;
@@ -72,6 +71,7 @@ interface BuildGeneratedArchiveImageInput {
     timestamp: string;
     draft: GenerateDraft;
     references: string[];
+    actualParameters?: ActualImageParameters;
 }
 
 interface SnapshotGeneratedReferenceImagesInput {
@@ -85,7 +85,65 @@ interface BuildGeneratedArchiveImageForSaveInput {
     timestamp: string;
     draft: GenerateDraft;
     usedReferences: string[] | null;
+    actualParameters?: ActualImageParameters;
     serializeReferences: () => Promise<string[]>;
+}
+
+interface SaveGenerateResultSlotsInput {
+    results: GenerateResultSlot[];
+    slotIndexes?: number[];
+    draft: GenerateDraft;
+    runDraft: GenerateDraft | null;
+    usedReferences: string[] | null;
+    runLineageSource: GenerateLineageSource | null;
+    serializeReferences: () => Promise<string[]>;
+    saveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
+    sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
+    createArchiveImageId?: () => string;
+    now?: () => Date;
+}
+
+interface AddGeneratedResultAsReferenceInput {
+    slot: GenerateResultSlot;
+    addReferenceFiles: (files: File[]) => void;
+    session: Pick<GenerateSessionStore, 'saveLineageSource' | 'clearLineageSource'>;
+}
+
+interface AddGeneratedResultAsReferenceActionInput extends AddGeneratedResultAsReferenceInput {
+    capacityMessage: string | null;
+    setNotice: (message: string | null) => void;
+}
+
+interface StartGeneratePartialPreviewRunInput {
+    getCurrentRunId: () => number;
+    setCurrentRunId: (runId: number) => void;
+    setCurrentPartialResult: (imageUrl: string | null) => void;
+}
+
+export function startGeneratePartialPreviewRun({
+    getCurrentRunId,
+    setCurrentRunId,
+    setCurrentPartialResult,
+}: StartGeneratePartialPreviewRunInput) {
+    const runId = getCurrentRunId() + 1;
+    setCurrentRunId(runId);
+    setCurrentPartialResult(null);
+
+    const isCurrentRun = () => getCurrentRunId() === runId;
+
+    return {
+        update(imageUrl: string) {
+            if (isCurrentRun()) {
+                setCurrentPartialResult(imageUrl);
+            }
+        },
+        clear() {
+            if (isCurrentRun()) {
+                setCurrentPartialResult(null);
+            }
+        },
+    };
 }
 
 export function buildGeneratedArchiveImage({
@@ -94,6 +152,7 @@ export function buildGeneratedArchiveImage({
     timestamp,
     draft,
     references,
+    actualParameters,
 }: BuildGeneratedArchiveImageInput): ArchiveImage {
     const archiveFields = getActiveGenerateArchiveFields(draft);
 
@@ -111,6 +170,7 @@ export function buildGeneratedArchiveImage({
         style: draft.style,
         lighting: draft.lighting,
         palette: draft.palette,
+        actualParameters,
         references,
     };
 }
@@ -128,6 +188,7 @@ export async function buildGeneratedArchiveImageForSave({
     timestamp,
     draft,
     usedReferences,
+    actualParameters,
     serializeReferences,
 }: BuildGeneratedArchiveImageForSaveInput): Promise<ArchiveImage> {
     const references = usedReferences ?? await serializeReferences();
@@ -137,8 +198,98 @@ export async function buildGeneratedArchiveImageForSave({
         url,
         timestamp,
         draft,
+        actualParameters,
         references,
     });
+}
+
+export async function saveGenerateResultSlots({
+    results,
+    slotIndexes,
+    draft,
+    runDraft,
+    usedReferences,
+    runLineageSource,
+    serializeReferences,
+    saveImage,
+    lineageStore,
+    sessionStore,
+    createArchiveImageId = () => crypto.randomUUID(),
+    now = () => new Date(),
+}: SaveGenerateResultSlotsInput): Promise<GenerateResultSlot[]> {
+    const selectedSlotIndexes = new Set(slotIndexes);
+    const shouldSaveSlot = (slot: GenerateResultSlot): slot is Extract<GenerateResultSlot, { status: 'success' }> => (
+        slot.status === 'success' &&
+        !slot.isSaved &&
+        (!slotIndexes || selectedSlotIndexes.has(slot.slotIndex))
+    );
+    let nextResults = results;
+
+    for (const slot of results.filter(shouldSaveSlot)) {
+        const archiveImageId = createArchiveImageId();
+        const image = await buildGeneratedArchiveImageForSave({
+            id: archiveImageId,
+            url: slot.imageUrl,
+            timestamp: now().toISOString(),
+            draft: runDraft ?? draft,
+            usedReferences,
+            actualParameters: slot.actualParameters,
+            serializeReferences,
+        });
+        await saveGeneratedImage(image, {
+            saveImage: async (image) => Promise.resolve(saveImage(image)),
+            lineageStore,
+            sessionStore,
+            lineageSource: runLineageSource,
+        });
+        nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, archiveImageId);
+    }
+
+    return nextResults;
+}
+
+export function addGeneratedResultAsReference({
+    slot,
+    addReferenceFiles,
+    session,
+}: AddGeneratedResultAsReferenceInput) {
+    if (slot.status !== 'success') {
+        return false;
+    }
+
+    addReferenceFiles([
+        dataURLtoFile(slot.imageUrl, `generated-result-${slot.slotIndex + 1}.png`),
+    ]);
+
+    if (slot.archiveImageId) {
+        session.saveLineageSource({ archiveImageId: slot.archiveImageId });
+    } else {
+        session.clearLineageSource();
+    }
+
+    return true;
+}
+
+export function addGeneratedResultAsReferenceFromAction({
+    capacityMessage,
+    setNotice,
+    ...input
+}: AddGeneratedResultAsReferenceActionInput) {
+    if (capacityMessage) {
+        setNotice(capacityMessage);
+        return false;
+    }
+
+    try {
+        const added = addGeneratedResultAsReference(input);
+        if (added) {
+            setNotice(null);
+        }
+        return added;
+    } catch (referenceError) {
+        setNotice(referenceError instanceof Error ? referenceError.message : 'Failed to use result as reference.');
+        return false;
+    }
 }
 
 export function notifyGenerateCompletion({
@@ -214,6 +365,7 @@ export function useGenerateController({
     const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
     const [currentRunDraft, setCurrentRunDraft] = useState<GenerateDraft | null>(null);
     const [currentRunLineageSource, setCurrentRunLineageSource] = useState<GenerateLineageSource | null>(null);
+    const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
@@ -224,26 +376,23 @@ export function useGenerateController({
         lastErrorIteration: null,
     });
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
+    const partialRunIdRef = useRef(0);
 
     const updateDraft = useCallback((patch: Partial<GenerateDraft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
     }, [setDraft]);
 
     useEffect(() => {
-        Promise.all([
-            session.loadCurrentResult(),
-            session.loadCurrentResultReferences(),
-        ]).then(([value, references]) => {
-            if (value) {
-                setCurrentResult(value);
-                setCurrentBatchResults([{
-                    slotIndex: 0,
-                    status: 'success',
-                    imageUrl: value,
-                    isSaved: false,
-                }]);
-                setCurrentResultReferences(references);
+        session.loadCurrentBatch().then((batch) => {
+            if (!batch) {
+                return;
             }
+
+            setCurrentResult(getFirstSuccessfulResultSlot(batch.results)?.imageUrl ?? null);
+            setCurrentBatchResults(batch.results);
+            setCurrentResultReferences(batch.references);
+            setCurrentRunDraft(batch.draft);
+            setCurrentRunLineageSource(batch.lineageSource);
         });
 
         session.consumeTransferredReferences().then((references) => {
@@ -265,6 +414,13 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        const partialPreviewRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => partialRunIdRef.current,
+            setCurrentRunId: (runId) => {
+                partialRunIdRef.current = runId;
+            },
+            setCurrentPartialResult,
+        });
         setAutopilot((current) => ({
             ...current,
             running: false,
@@ -277,6 +433,9 @@ export function useGenerateController({
             const usedReferenceImages = referenceImages.slice();
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
+            const onPartialImage = shouldStreamGeneratePartials(draft)
+                ? partialPreviewRun.update
+                : undefined;
             const usedReferences = await snapshotGeneratedReferenceImages({
                 referenceImages: usedReferenceImages,
                 serializeReferenceFiles: workflow.serializeReferences,
@@ -294,20 +453,28 @@ export function useGenerateController({
                 lighting: draft.lighting,
                 palette: draft.palette,
                 referenceImages: usedReferenceImages,
+                onPartialImage,
             });
             const imageUrl = getFirstSuccessfulGeneratedImage(results);
             const batchResults = buildGenerateResultSlots(results);
+            const batchSnapshot: GenerateBatchSnapshot = {
+                results: batchResults,
+                references: usedReferences,
+                draft: runDraft,
+                lineageSource: runLineageSource,
+            };
 
             setCurrentBatchResults(batchResults);
             setCurrentRunDraft(runDraft);
             setCurrentRunLineageSource(runLineageSource);
             setCurrentResultReferences(usedReferences);
+            partialPreviewRun.clear();
+            await session.saveCurrentBatch(batchSnapshot);
 
             if (!imageUrl) {
                 setCurrentResult(null);
                 updateDraft({ isSaved: false });
                 setError('Generation failed for every batch result.');
-                await session.clearCurrentResult();
                 completionNotification = {
                     title: 'Generation failed',
                     body: 'Every batch result failed.',
@@ -317,13 +484,13 @@ export function useGenerateController({
 
             setCurrentResult(imageUrl);
             updateDraft({ isSaved: false });
-            await session.saveCurrentResult(imageUrl, usedReferences);
             completionNotification = {
                 title: 'Generation complete',
                 body: 'Your image is ready in AURA.',
             };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to generate image';
+            partialPreviewRun.clear();
             setError(message);
             completionNotification = {
                 title: 'Generation failed',
@@ -359,6 +526,7 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        setCurrentPartialResult(null);
         setCurrentResultReferences(null);
         setCurrentBatchResults([]);
         setCurrentRunDraft(null);
@@ -400,13 +568,7 @@ export function useGenerateController({
                         bestIterationNumber: runningBest.iterationNumber,
                     }));
                     setCurrentResult(iteration.imageDataUrl);
-                    setCurrentBatchResults([{
-                        slotIndex: 0,
-                        status: 'success',
-                        imageUrl: iteration.imageDataUrl,
-                        isSaved: false,
-                        archiveImageId: iteration.archiveImageId,
-                    }]);
+                    setCurrentBatchResults([buildAutopilotResultSlot(iteration)]);
                 },
                 onError: (error, iterationNumber) => {
                     setError(error.message);
@@ -422,25 +584,26 @@ export function useGenerateController({
                     referenceImages: outcome.usedReferenceImages,
                     serializeReferenceFiles: workflow.serializeReferences,
                 });
-                setCurrentResult(outcome.result.bestIteration.imageDataUrl);
-                setCurrentBatchResults([{
-                    slotIndex: 0,
-                    status: 'success',
-                    imageUrl: outcome.result.bestIteration.imageDataUrl,
-                    isSaved: false,
-                    archiveImageId: outcome.result.bestIteration.archiveImageId,
-                }]);
-                setCurrentResultReferences(usedReferences);
-                setCurrentRunDraft(null);
-                setCurrentRunLineageSource({
+                const bestSlot = buildAutopilotResultSlot(outcome.result.bestIteration);
+                const lineageSource = {
                     archiveImageId: outcome.result.bestIteration.archiveImageId,
                     stepId: outcome.result.bestIteration.stepId,
-                });
+                };
+                setCurrentResult(outcome.result.bestIteration.imageDataUrl);
+                setCurrentBatchResults([bestSlot]);
+                setCurrentResultReferences(usedReferences);
+                setCurrentRunDraft(null);
+                setCurrentRunLineageSource(lineageSource);
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
                     isSaved: false,
                 });
-                await session.saveCurrentResult(outcome.result.bestIteration.imageDataUrl, usedReferences);
+                await session.saveCurrentBatch({
+                    results: [bestSlot],
+                    references: usedReferences,
+                    draft: null,
+                    lineageSource,
+                });
             }
 
             if (outcome.result.status === 'failed' && outcome.result.error) {
@@ -488,6 +651,13 @@ export function useGenerateController({
         autopilotSessionRef.current?.cancel();
     }, []);
 
+    const persistCurrentBatch = useCallback((results: GenerateResultSlot[]) => session.saveCurrentBatch({
+        results,
+        references: currentResultReferences,
+        draft: currentRunDraft ?? draft,
+        lineageSource: currentRunLineageSource,
+    }), [currentResultReferences, currentRunDraft, currentRunLineageSource, draft, session]);
+
     const saveResult = useCallback(async (slotIndex: number) => {
         const slot = currentBatchResults.find((result) => result.slotIndex === slotIndex);
         if (!slot || slot.status !== 'success' || slot.isSaved) {
@@ -495,34 +665,50 @@ export function useGenerateController({
         }
 
         try {
-            const archiveImageId = crypto.randomUUID();
-            const image = await buildGeneratedArchiveImageForSave({
-                id: archiveImageId,
-                url: slot.imageUrl,
-                timestamp: new Date().toISOString(),
-                draft: currentRunDraft ?? draft,
+            const nextResults = await saveGenerateResultSlots({
+                results: currentBatchResults,
+                slotIndexes: [slot.slotIndex],
+                draft,
+                runDraft: currentRunDraft,
                 usedReferences: currentResultReferences,
+                runLineageSource: currentRunLineageSource,
                 serializeReferences,
-            });
-            await saveGeneratedImage(image, {
-                saveImage: async (image) => Promise.resolve(onSaveImage(image)),
+                saveImage: onSaveImage,
                 lineageStore: lineage,
                 sessionStore: session,
-                lineageSource: currentRunLineageSource,
             });
-            const nextResults = currentBatchResults.map((result) => result.slotIndex === slotIndex && result.status === 'success'
-                ? {
-                    ...result,
-                    isSaved: true,
-                    archiveImageId,
-                }
-                : result);
             setCurrentBatchResults(nextResults);
+            await persistCurrentBatch(nextResults);
             updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
+    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
+
+    const saveAllResults = useCallback(async () => {
+        if (!hasUnsavedSuccessfulResults(currentBatchResults)) {
+            return;
+        }
+
+        try {
+            const nextResults = await saveGenerateResultSlots({
+                results: currentBatchResults,
+                draft,
+                runDraft: currentRunDraft,
+                usedReferences: currentResultReferences,
+                runLineageSource: currentRunLineageSource,
+                serializeReferences,
+                saveImage: onSaveImage,
+                lineageStore: lineage,
+                sessionStore: session,
+            });
+            setCurrentBatchResults(nextResults);
+            await persistCurrentBatch(nextResults);
+            updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to save batch');
+        }
+    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
 
     const save = useCallback(async () => {
         await saveResult(0);
@@ -545,6 +731,7 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         setCurrentResult(null);
+        setCurrentPartialResult(null);
         setCurrentBatchResults([]);
         setCurrentResultReferences(null);
         setCurrentRunDraft(null);
@@ -554,7 +741,9 @@ export function useGenerateController({
 
     return {
         currentResult,
+        currentPartialResult,
         currentBatchResults,
+        currentRunDraft,
         loading,
         error,
         autopilot,
@@ -564,10 +753,18 @@ export function useGenerateController({
         cancelAutopilot,
         save,
         saveResult,
+        saveAllResults,
         download,
         downloadResult,
         clear,
     };
+}
+
+export function shouldStreamGeneratePartials(draft: GenerateDraft) {
+    const model = resolveImageModelConfig(draft.model);
+    const controls = getActiveGenerateControls(draft);
+
+    return model.capabilities.partialImageStreaming && controls.batchSize === 1;
 }
 
 export function buildGenerateResultSlots(results: GenerateBatchResult[]): GenerateResultSlot[] {
@@ -577,6 +774,7 @@ export function buildGenerateResultSlots(results: GenerateBatchResult[]): Genera
             status: 'success',
             imageUrl: result.imageUrl,
             isSaved: false,
+            actualParameters: result.actualParameters,
         }
         : result);
 }
@@ -587,6 +785,41 @@ function areAllSuccessfulResultsSaved(results: GenerateResultSlot[]) {
     );
 
     return successfulResults.length > 0 && successfulResults.every((result) => result.isSaved);
+}
+
+function hasUnsavedSuccessfulResults(results: GenerateResultSlot[]) {
+    return results.some((result) => result.status === 'success' && !result.isSaved);
+}
+
+function getFirstSuccessfulResultSlot(results: GenerateResultSlot[]) {
+    return results.find((result): result is Extract<GenerateResultSlot, { status: 'success' }> =>
+        result.status === 'success',
+    ) ?? null;
+}
+
+function markGenerateResultSlotSaved(
+    results: GenerateResultSlot[],
+    slotIndex: number,
+    archiveImageId: string,
+): GenerateResultSlot[] {
+    return results.map((result) => result.slotIndex === slotIndex && result.status === 'success'
+        ? {
+            ...result,
+            isSaved: true,
+            archiveImageId,
+        }
+        : result);
+}
+
+function buildAutopilotResultSlot(iteration: AutopilotIteration): Extract<GenerateResultSlot, { status: 'success' }> {
+    return {
+        slotIndex: 0,
+        status: 'success',
+        imageUrl: iteration.imageDataUrl,
+        isSaved: false,
+        archiveImageId: iteration.archiveImageId,
+        ...(iteration.actualParameters ? { actualParameters: iteration.actualParameters } : {}),
+    };
 }
 
 function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {
