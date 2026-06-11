@@ -21,7 +21,11 @@ describe('Editor controller AI transform flow', () => {
             new File(['reference'], 'reference.png', { type: 'image/png' }),
         ];
         const render = createRecordingRenderer();
-        const editImage = vi.fn(async (_input: EditImageInput) => 'data:image/png;base64,ai-result');
+        const editImage = vi.fn(async (input: EditImageInput) => {
+            void input;
+            return 'data:image/png;base64,ai-result';
+        });
+        const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
         const result = await runEditorAiTransform({
             apiKey: 'sk-test',
@@ -33,6 +37,7 @@ describe('Editor controller AI transform flow', () => {
             makeId: () => 'ai-layer',
             editImage,
             render,
+            maskImage,
         });
 
         expect(render).toHaveBeenCalledTimes(2);
@@ -43,6 +48,7 @@ describe('Editor controller AI transform flow', () => {
             sourceImage: expect.any(Blob),
             compositionContextImage: expect.any(File),
             referenceImages,
+            maskImage,
             quality: 'medium',
         }));
         expect(result.draft.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([

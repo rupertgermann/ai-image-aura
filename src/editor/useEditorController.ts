@@ -22,6 +22,7 @@ interface UseEditorControllerOptions {
     draft: EditorDraft | null;
     commitDraft: (draft: EditorDraft, recordHistory?: boolean) => void;
     referenceImages: File[];
+    maskImage?: File | Blob | null;
     addReferenceFiles: (files: File[]) => void;
     serializeReferences: () => Promise<string[]>;
     exportDataUrl: () => Promise<string>;
@@ -36,6 +37,7 @@ export function useEditorController({
     draft,
     commitDraft,
     referenceImages,
+    maskImage,
     addReferenceFiles,
     serializeReferences,
     exportDataUrl,
@@ -92,6 +94,7 @@ export function useEditorController({
                 draft,
                 adjustments,
                 referenceImages,
+                maskImage,
                 makeId: () => crypto.randomUUID(),
             });
 
@@ -103,7 +106,7 @@ export function useEditorController({
         } finally {
             setAiLoading(false);
         }
-    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, isCanvasReady, model, referenceImages]);
+    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, isCanvasReady, maskImage, model, referenceImages]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -149,6 +152,7 @@ export interface RunEditorAiTransformOptions {
     draft: EditorDraft;
     adjustments: EditorAdjustments;
     referenceImages: File[];
+    maskImage?: File | Blob | null;
     makeId: () => string;
     editImage?: EditImage;
     render?: AiTransformRenderer;
@@ -161,6 +165,7 @@ export async function runEditorAiTransform({
     draft,
     adjustments,
     referenceImages,
+    maskImage,
     makeId,
     editImage = imageWorkflow.edit,
     render,
@@ -179,6 +184,7 @@ export async function runEditorAiTransform({
         sourceImage: editInput.sourceImage,
         compositionContextImage: editInput.compositionContextImage,
         referenceImages: editInput.referenceImages,
+        maskImage,
         quality: 'medium',
     });
 

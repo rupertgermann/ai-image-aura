@@ -33,6 +33,9 @@ describe('openaiModels image registry', () => {
                 quality: 'quality',
                 background: 'background',
             },
+            capabilities: {
+                transformMask: true,
+            },
         });
     });
 
@@ -48,6 +51,9 @@ describe('openaiModels image registry', () => {
             parameters: {
                 aspectRatio: 'generationConfig.imageConfig.aspectRatio',
                 imageSize: 'generationConfig.imageConfig.imageSize',
+            },
+            capabilities: {
+                transformMask: false,
             },
         });
     });

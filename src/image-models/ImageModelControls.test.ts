@@ -8,6 +8,7 @@ import {
     getImageModelGenerateControls,
     getImageModelReferenceLimitMessage,
     getImageModelUiChoices,
+    imageModelSupportsTransformMask,
     limitReferenceImagesForImageModel,
     mapImageModelEditProviderRequest,
     mapImageModelGenerateProviderRequest,
@@ -58,6 +59,11 @@ describe('Image model controls', () => {
             'aspectRatio',
             'imageSize',
         ]);
+    });
+
+    it('exposes transform mask support per Image model', () => {
+        expect(imageModelSupportsTransformMask(OPENAI_IMAGE_MODEL)).toBe(true);
+        expect(imageModelSupportsTransformMask(NANO_BANANA_PRO_IMAGE_MODEL)).toBe(false);
     });
 
     it('validates defaults and coercion for both Image models', () => {

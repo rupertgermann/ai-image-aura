@@ -22,6 +22,9 @@ export interface ImageModelConfig {
         edit: string;
     };
     parameters: Partial<Record<'size' | 'quality' | 'background' | 'aspectRatio' | 'imageSize', string>>;
+    capabilities: {
+        transformMask: boolean;
+    };
 }
 
 export interface ReasoningModelConfig {
@@ -47,6 +50,9 @@ export const IMAGE_MODEL_REGISTRY = {
             quality: 'quality',
             background: 'background',
         },
+        capabilities: {
+            transformMask: true,
+        },
     },
     [NANO_BANANA_PRO_IMAGE_MODEL]: {
         slug: NANO_BANANA_PRO_IMAGE_MODEL,
@@ -60,6 +66,9 @@ export const IMAGE_MODEL_REGISTRY = {
         parameters: {
             aspectRatio: 'generationConfig.imageConfig.aspectRatio',
             imageSize: 'generationConfig.imageConfig.imageSize',
+        },
+        capabilities: {
+            transformMask: false,
         },
     },
 } as const satisfies Record<string, ImageModelConfig>;

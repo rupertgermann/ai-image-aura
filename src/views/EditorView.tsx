@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight, Paintbrush, Eraser } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { EditorCanvas, type EditorCanvasHandle } from '../editor/EditorCanvas';
 import { LayerPanel } from '../editor/LayerPanel';
@@ -8,8 +8,10 @@ import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
 import { OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
-import { getImageModelReferenceLimitMessage, getImageModelUiChoices } from '../image-models/ImageModelControls';
+import { getImageModelReferenceLimitMessage, getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
 import { getImageFilesFromClipboard } from '../references/clipboard';
+import { renderAiTransformEditInput } from '../editor/aiTransform';
+import { classifyTransformMaskCoverage } from '../editor/transformMask';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
@@ -22,9 +24,19 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
     const [adjustmentsOpen, setAdjustmentsOpen] = useState(true);
     const [filtersOpen, setFiltersOpen] = useState(true);
+    const [maskEditorOpen, setMaskEditorOpen] = useState(false);
+    const [maskTargetUrl, setMaskTargetUrl] = useState<string | null>(null);
+    const [maskLoading, setMaskLoading] = useState(false);
+    const [maskError, setMaskError] = useState<string | null>(null);
+    const [maskTool, setMaskTool] = useState<'brush' | 'eraser'>('brush');
+    const [maskBrushSize, setMaskBrushSize] = useState(32);
+    const [transformMaskFile, setTransformMaskFile] = useState<File | null>(null);
     const canvasRef = useRef<EditorCanvasHandle>(null);
+    const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+    const paintingMaskRef = useRef(false);
     const activeModel = resolveImageModelConfig(aiEditModel);
     const activeApiKey = getProviderKey(activeModel.provider);
+    const supportsTransformMask = imageModelSupportsTransformMask(aiEditModel);
     const {
         brightness,
         setBrightness,
@@ -85,6 +97,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         model: aiEditModel,
         isCanvasReady: isReady,
         draft,
+        maskImage: supportsTransformMask ? transformMaskFile : null,
         commitDraft,
         referenceImages,
         addReferenceFiles,
@@ -97,6 +110,137 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         onSave,
     });
     const aiReferenceWarning = getImageModelReferenceLimitMessage(aiEditModel, referenceImages.length, 'AI transforms');
+
+    useEffect(() => {
+        if (!supportsTransformMask) {
+            setTransformMaskFile(null);
+            setMaskEditorOpen(false);
+        }
+    }, [supportsTransformMask]);
+
+    useEffect(() => () => {
+        if (maskTargetUrl) {
+            URL.revokeObjectURL(maskTargetUrl);
+        }
+    }, [maskTargetUrl]);
+
+    const openMaskEditor = async () => {
+        if (!draft) {
+            return;
+        }
+
+        setMaskEditorOpen(true);
+        setMaskLoading(true);
+        setMaskError(null);
+        try {
+            const input = await renderAiTransformEditInput({
+                draft,
+                adjustments,
+                referenceImages: [],
+            });
+            const url = URL.createObjectURL(input.sourceImage);
+            setMaskTargetUrl((previousUrl) => {
+                if (previousUrl) URL.revokeObjectURL(previousUrl);
+                return url;
+            });
+        } catch (error) {
+            setMaskError(error instanceof Error ? error.message : 'Failed to render transform target');
+        } finally {
+            setMaskLoading(false);
+        }
+    };
+
+    const handleMaskTargetLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
+        const canvas = maskCanvasRef.current;
+        if (!canvas) return;
+
+        const imageElement = event.currentTarget;
+        canvas.width = imageElement.naturalWidth;
+        canvas.height = imageElement.naturalHeight;
+        const context = canvas.getContext('2d');
+        if (!context) return;
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        if (!transformMaskFile) return;
+
+        const maskUrl = URL.createObjectURL(transformMaskFile);
+        const maskImage = new Image();
+        maskImage.onload = () => {
+            context.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(maskUrl);
+        };
+        maskImage.onerror = () => URL.revokeObjectURL(maskUrl);
+        maskImage.src = maskUrl;
+    };
+
+    const paintMaskAt = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        const canvas = maskCanvasRef.current;
+        const context = canvas?.getContext('2d');
+        if (!canvas || !context) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+        context.save();
+        context.globalCompositeOperation = maskTool === 'eraser' ? 'destination-out' : 'source-over';
+        context.fillStyle = 'rgba(255, 255, 255, 1)';
+        context.beginPath();
+        context.arc(x, y, maskBrushSize / 2, 0, Math.PI * 2);
+        context.fill();
+        context.restore();
+    };
+
+    const handleMaskPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        paintingMaskRef.current = true;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        paintMaskAt(event);
+    };
+
+    const stopMaskPainting = () => {
+        paintingMaskRef.current = false;
+    };
+
+    const handleMaskPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+        if (paintingMaskRef.current) {
+            paintMaskAt(event);
+        }
+    };
+
+    const clearTransformMask = () => {
+        const canvas = maskCanvasRef.current;
+        const context = canvas?.getContext('2d');
+        if (canvas && context) {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        setTransformMaskFile(null);
+        setMaskError(null);
+    };
+
+    const applyTransformMask = async () => {
+        const canvas = maskCanvasRef.current;
+        const context = canvas?.getContext('2d');
+        if (!canvas || !context) {
+            setMaskError('Mask editor is not ready.');
+            return;
+        }
+
+        const maskData = context.getImageData(0, 0, canvas.width, canvas.height);
+        if (classifyTransformMaskCoverage(maskData) === 'empty') {
+            setMaskError('Paint a mask before applying it.');
+            return;
+        }
+
+        const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) {
+            setMaskError('Failed to create mask image.');
+            return;
+        }
+
+        setTransformMaskFile(new File([blob], 'transform-mask.png', { type: 'image/png' }));
+        setMaskEditorOpen(false);
+        setMaskError(null);
+    };
 
     const handleReferencePaste = (event: React.ClipboardEvent) => {
         const files = getImageFilesFromClipboard(event);
@@ -348,6 +492,28 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                                 style={{ minHeight: '100px', resize: 'vertical' }}
                                 disabled={aiLoading || !activeApiKey || !isCanvasReady}
                             />
+                            {supportsTransformMask && (
+                                <div className="transform-mask-controls">
+                                    <button
+                                        className={`btn-ghost ${transformMaskFile ? 'active' : ''}`}
+                                        type="button"
+                                        onClick={() => { void openMaskEditor(); }}
+                                        disabled={aiLoading || !isCanvasReady || !draft}
+                                    >
+                                        <Paintbrush size={16} /> {transformMaskFile ? 'Edit Mask' : 'Mask'}
+                                    </button>
+                                    {transformMaskFile && (
+                                        <button
+                                            className="btn-ghost"
+                                            type="button"
+                                            onClick={clearTransformMask}
+                                            disabled={aiLoading}
+                                        >
+                                            <X size={16} /> Clear Mask
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                             <button
                                 className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
@@ -425,6 +591,87 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                     </div>
                 </aside>
             </div>
+            {maskEditorOpen && (
+                <div className="modal-overlay transform-mask-modal" role="dialog" aria-modal="true">
+                    <div className="modal-content transform-mask-dialog">
+                        <div className="transform-mask-toolbar">
+                            <div className="section-title">
+                                <Paintbrush size={18} className="icon-purple" />
+                                <h3>Transform Mask</h3>
+                            </div>
+                            <button className="modal-close" onClick={() => setMaskEditorOpen(false)} aria-label="Close mask editor">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="transform-mask-body">
+                            {maskLoading && (
+                                <div className="empty-state">
+                                    <Loader2 className="spin" size={28} />
+                                </div>
+                            )}
+                            {!maskLoading && maskTargetUrl && (
+                                <div className="transform-mask-stage">
+                                    <img
+                                        src={maskTargetUrl}
+                                        alt="AI transform target"
+                                        className="transform-mask-target"
+                                        onLoad={handleMaskTargetLoad}
+                                    />
+                                    <canvas
+                                        ref={maskCanvasRef}
+                                        className="transform-mask-canvas"
+                                        onPointerDown={handleMaskPointerDown}
+                                        onPointerMove={handleMaskPointerMove}
+                                        onPointerUp={stopMaskPainting}
+                                        onPointerCancel={stopMaskPainting}
+                                        onPointerLeave={stopMaskPainting}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="transform-mask-actions">
+                            <div className="toggle-group mask-tool-toggle">
+                                <button
+                                    className={maskTool === 'brush' ? 'active' : ''}
+                                    onClick={() => setMaskTool('brush')}
+                                    type="button"
+                                    title="Brush"
+                                >
+                                    <Paintbrush size={16} />
+                                </button>
+                                <button
+                                    className={maskTool === 'eraser' ? 'active' : ''}
+                                    onClick={() => setMaskTool('eraser')}
+                                    type="button"
+                                    title="Eraser"
+                                >
+                                    <Eraser size={16} />
+                                </button>
+                            </div>
+                            <label className="mask-size-control">
+                                <span>Size</span>
+                                <input
+                                    type="range"
+                                    min={8}
+                                    max={96}
+                                    value={maskBrushSize}
+                                    onChange={(event) => setMaskBrushSize(Number(event.target.value))}
+                                />
+                                <span>{maskBrushSize}</span>
+                            </label>
+                            <button className="btn-ghost" type="button" onClick={clearTransformMask}>
+                                <RotateCcw size={16} /> Clear
+                            </button>
+                            <button className="btn-amber" type="button" onClick={() => { void applyTransformMask(); }}>
+                                <Save size={16} /> Apply Mask
+                            </button>
+                        </div>
+                        {maskError && <div className="error-message mini">{maskError}</div>}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -17,6 +17,7 @@ export interface OpenAiImageRequest {
     size?: string;
     background?: ImageBackground;
     referenceImages?: File[];
+    maskImage?: File | Blob | null;
 }
 
 export interface OpenAiImageResponse {
@@ -63,6 +64,10 @@ export const openAiImageClient: OpenAiImageClient = {
             request.referenceImages?.forEach((file) => {
                 formData.append('image[]', file);
             });
+
+            if (request.maskImage) {
+                formData.append('mask', request.maskImage);
+            }
 
             if (request.size && request.size !== 'auto') formData.append('size', request.size);
             if (request.quality) formData.append('quality', request.quality);

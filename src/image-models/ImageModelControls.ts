@@ -184,6 +184,10 @@ export function getImageModelUiChoices(): Array<{
     });
 }
 
+export function imageModelSupportsTransformMask(model: ImageModelSlug): boolean {
+    return IMAGE_MODEL_REGISTRY[model].capabilities.transformMask;
+}
+
 export function sanitizeImageModelControls(
     model: typeof OPENAI_IMAGE_MODEL,
     value: unknown,
