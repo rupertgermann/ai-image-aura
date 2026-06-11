@@ -19,6 +19,7 @@ export interface ImageProviderRequest {
     preserveSourceDimensions?: boolean;
     batchSize?: number;
     referenceImages?: File[];
+    maskImage?: File | Blob | null;
 }
 
 export type ImageProviderResponse = OpenAiImageResponse;
@@ -41,6 +42,7 @@ export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImag
         background: request.background,
         batchSize: request.batchSize,
         referenceImages: request.referenceImages,
+        maskImage: request.maskImage,
     });
 
     return {

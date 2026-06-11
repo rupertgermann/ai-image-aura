@@ -86,6 +86,13 @@ The layer selection sent to an AI transform as the image content to change.
 Distinct from **reference images** and composition context, which guide the AI
 transform without defining the target layer content.
 
+## Transform mask
+
+A transient painted mask for an AI transform target. Painted areas are editable
+by the image model; unpainted areas should remain protected. A transform mask is
+drawn over the AI transform target, not the whole Editor composition, and is
+distinct from **reference images** and composition context.
+
 ## Uploaded layer
 
 A raster image layer created from an image file the user adds to the visible

@@ -18,6 +18,7 @@ export interface OpenAiImageRequest {
     background?: ImageBackground;
     batchSize?: number;
     referenceImages?: File[];
+    maskImage?: File | Blob | null;
 }
 
 export interface OpenAiImageResponse {
@@ -60,71 +61,75 @@ export const openAiImageClient: OpenAiImageClient = {
 };
 
 async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiImageResponse[]> {
-        const isEdit = request.referenceImages && request.referenceImages.length > 0;
-        const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
-        const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
-        const endpoint = isEdit ? endpoints.edit : endpoints.generate;
-        const batchSize = coerceOpenAiBatchSize(request.batchSize);
+    const isEdit = request.referenceImages && request.referenceImages.length > 0;
+    const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
+    const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
+    const endpoint = isEdit ? endpoints.edit : endpoints.generate;
+    const batchSize = coerceOpenAiBatchSize(request.batchSize);
 
-        let body: BodyInit;
-        const headers: Record<string, string> = {
-            'Authorization': `Bearer ${request.apiKey}`,
-        };
+    let body: BodyInit;
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer ${request.apiKey}`,
+    };
 
-        if (isEdit) {
-            const formData = new FormData();
-            formData.append('model', apiModel);
-            formData.append('prompt', request.prompt);
-            formData.append('n', String(batchSize));
+    if (isEdit) {
+        const formData = new FormData();
+        formData.append('model', apiModel);
+        formData.append('prompt', request.prompt);
+        formData.append('n', String(batchSize));
 
-            request.referenceImages?.forEach((file) => {
-                formData.append('image[]', file);
-            });
-
-            if (request.size && request.size !== 'auto') formData.append('size', request.size);
-            if (request.quality) formData.append('quality', request.quality);
-            if (request.background && request.background !== 'auto') formData.append('background', request.background);
-
-            body = formData;
-        } else {
-            headers['Content-Type'] = 'application/json';
-            const jsonBody: {
-                model: string;
-                prompt: string;
-                n: number;
-                size?: string;
-                quality?: ImageQuality;
-                background?: 'transparent' | 'opaque';
-            } = {
-                model: apiModel,
-                prompt: request.prompt,
-                n: batchSize,
-            };
-            if (request.size && request.size !== 'auto') jsonBody.size = request.size;
-            if (request.quality) jsonBody.quality = request.quality;
-            if (request.background && request.background !== 'auto') jsonBody.background = request.background;
-
-            body = JSON.stringify(jsonBody);
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers,
-            body,
+        request.referenceImages?.forEach((file) => {
+            formData.append('image[]', file);
         });
 
-        if (!response.ok) {
-            const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
-            throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
+        if (request.maskImage) {
+            formData.append('mask', request.maskImage);
         }
 
-        const data: { data?: OpenAiImageResponse[] } = await response.json();
+        if (request.size && request.size !== 'auto') formData.append('size', request.size);
+        if (request.quality) formData.append('quality', request.quality);
+        if (request.background && request.background !== 'auto') formData.append('background', request.background);
 
-        if (!data.data || data.data.length === 0) {
-            throw new Error('No image data returned from OpenAI');
-        }
+        body = formData;
+    } else {
+        headers['Content-Type'] = 'application/json';
+        const jsonBody: {
+            model: string;
+            prompt: string;
+            n: number;
+            size?: string;
+            quality?: ImageQuality;
+            background?: 'transparent' | 'opaque';
+        } = {
+            model: apiModel,
+            prompt: request.prompt,
+            n: batchSize,
+        };
+        if (request.size && request.size !== 'auto') jsonBody.size = request.size;
+        if (request.quality) jsonBody.quality = request.quality;
+        if (request.background && request.background !== 'auto') jsonBody.background = request.background;
 
-        return data.data;
+        body = JSON.stringify(jsonBody);
+    }
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
+        throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
+    }
+
+    const data: { data?: OpenAiImageResponse[] } = await response.json();
+
+    if (!data.data || data.data.length === 0) {
+        throw new Error('No image data returned from OpenAI');
+    }
+
+    return data.data;
 }
 
 function coerceOpenAiBatchSize(value: unknown): number {

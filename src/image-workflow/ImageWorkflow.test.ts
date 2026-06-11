@@ -294,8 +294,10 @@ describe('ImageWorkflow', () => {
 
     it('sends selected-layer edit requests with composition context before user references', async () => {
         let seenReferenceImages: File[] = [];
+        let seenMaskImage: File | Blob | null | undefined;
         const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
             seenReferenceImages = input.referenceImages ?? [];
+            seenMaskImage = input.maskImage;
             return { b64_json: 'edited' };
         });
         const providers: ImageProviderRegistry = {
@@ -308,6 +310,7 @@ describe('ImageWorkflow', () => {
         const sourceImage = new Blob(['selected-layer'], { type: 'image/png' });
         const compositionContext = new File(['composition'], 'composition-context.png', { type: 'image/png' });
         const userReference = new File(['reference'], 'user-reference.png', { type: 'image/png' });
+        const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
         await workflow.edit({
             apiKey: 'sk-test',
@@ -315,6 +318,7 @@ describe('ImageWorkflow', () => {
             sourceImage,
             compositionContextImage: compositionContext,
             referenceImages: [userReference],
+            maskImage,
         });
 
         expect(seenReferenceImages.map((file) => file.name)).toEqual([
@@ -322,6 +326,7 @@ describe('ImageWorkflow', () => {
             'composition-context.png',
             'user-reference.png',
         ]);
+        expect(seenMaskImage).toBe(maskImage);
     });
 
     it('maps nano-banana-pro Editor AI transforms with source handling and Reference image limits', async () => {
@@ -403,6 +408,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
+                capabilities: { transformMask: false },
             },
             prompt: 'a luminous teapot city',
             aspectRatio: '16:9',
@@ -539,6 +545,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
+                capabilities: { transformMask: false },
             },
             prompt: 'make it cinematic',
             preserveSourceDimensions: true,
@@ -593,6 +600,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
+                capabilities: { transformMask: false },
             },
             prompt: 'a luminous teapot city',
             referenceImages: [],

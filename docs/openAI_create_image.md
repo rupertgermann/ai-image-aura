@@ -279,7 +279,8 @@ Reasoning text is trimmed and then used as:
 - GPT Image 2 Generate runs may request a batch of 1-4 images with the native
   `n` parameter; edit operations and Autopilot iterations request one image.
 - The app does not use streaming responses.
-- The app does not request masks or variations.
+- The app requests Editor transform masks for `gpt-image-2` only; it does not
+  request variations.
 - The app does not expose output format or compression controls.
 - OpenAI editor transforms always use `quality: medium`.
 - `nano-banana-pro` uses at most the first `14` reference images.

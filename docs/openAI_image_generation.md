@@ -47,6 +47,8 @@ Reference-based `gpt-image-2` generation and editor transforms use:
 - Content type: `multipart/form-data`
 - Model: `gpt-image-2`
 - Input images: browser `File` objects appended as `image[]`
+- Optional mask: Editor transform masks are appended as the separate `mask`
+  multipart field when present
 - Output handling: base64 image payload converted to a data URL
 
 This path is used when:

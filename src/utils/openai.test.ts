@@ -85,10 +85,12 @@ describe('openAiImageClient', () => {
         vi.stubGlobal('fetch', fetchMock);
         try {
             const referenceImage = new File(['source image'], 'source.png', { type: 'image/png' });
+            const maskImage = new File(['mask image'], 'mask.png', { type: 'image/png' });
             const result = await openAiImageClient.createImage({
                 apiKey: 'sk-test',
                 prompt: 'replace the cat',
                 referenceImages: [referenceImage],
+                maskImage,
                 model: OPENAI_IMAGE_MODEL,
                 quality: 'low',
                 size: '1024x1024',
@@ -116,6 +118,7 @@ describe('openAiImageClient', () => {
             expect(form.get('quality')).toBe('low');
             expect(form.get('background')).toBe('opaque');
             expect(form.get('size')).toBe('1024x1024');
+            expect(form.get('mask')).toBe(maskImage);
             expect(fileValues).toHaveLength(1);
             expect(fileValues[0]?.[1]).toBeInstanceOf(File);
         } finally {
