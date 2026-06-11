@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-react';
+import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
-import { getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
-import { useGenerateController } from '../generate-session/useGenerateController';
+import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
+import { addGeneratedResultAsReference, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
@@ -17,6 +17,7 @@ import {
     buildImageModelGenerateReferenceRunPlan,
     coerceImageModelControlValue,
     getImageModelGenerateControls,
+    getImageModelReferenceCapacityMessage,
     getImageModelUiChoices,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
@@ -321,6 +322,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const maxApiCalls = maxIterations * 3;
     const isAutopilotMode = mode === 'autopilot';
     const imageModelReferenceWarning = referenceRunPlan.referenceLimitMessage;
+    const resultReferenceCapacityMessage = getImageModelReferenceCapacityMessage(model, referenceImages.length, 'generation');
     const activeModelDraftKey = getImageModelDraftKey(model);
     const activeModelControls = draft[activeModelDraftKey] as Record<string, string | number>;
     const successfulBatchResults = currentBatchResults.filter((result) => result.status === 'success');
@@ -333,6 +335,23 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                 [controlId]: coerceImageModelControlValue(model, controlId, value),
             },
         } as Partial<GenerateDraft>);
+    };
+
+    const handleUseResultAsReference = (result: Extract<GenerateResultSlot, { status: 'success' }>) => {
+        if (resultReferenceCapacityMessage) {
+            return;
+        }
+
+        try {
+            addGeneratedResultAsReference({
+                slot: result,
+                addReferenceFiles,
+                session: generateSessionStore,
+            });
+            setAutopilotNotice(null);
+        } catch (referenceError) {
+            setAutopilotNotice(referenceError instanceof Error ? referenceError.message : 'Failed to use result as reference.');
+        }
     };
 
 
@@ -647,6 +666,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div className="error-message">{activeReasoningModel.label} API key missing. Go to Settings to configure.</div>
                     )}
                     {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
+                    {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}
                     {error && <div className="error-message">{error}</div>}
                     {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>
@@ -675,6 +695,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                                     </button>
                                                     <button className="btn-ghost" onClick={() => downloadResult(result.slotIndex)}>
                                                         <Download size={16} /> Download
+                                                    </button>
+                                                    <button
+                                                        className="btn-ghost"
+                                                        onClick={() => handleUseResultAsReference(result)}
+                                                        disabled={!!resultReferenceCapacityMessage}
+                                                        title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
+                                                    >
+                                                        <ImagePlus size={16} /> Use as Reference
                                                     </button>
                                                 </div>
                                             </>
@@ -719,6 +747,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 <button className="btn-ghost" onClick={download}>
                                     <Download size={18} /> Download
                                 </button>
+                                {singleResultSlot && (
+                                    <button
+                                        className="btn-ghost"
+                                        onClick={() => handleUseResultAsReference(singleResultSlot)}
+                                        disabled={!!resultReferenceCapacityMessage}
+                                        title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
+                                    >
+                                        <ImagePlus size={18} /> Use as Reference
+                                    </button>
+                                )}
                                 <button onClick={() => { void clear(); }} className="btn-ghost">
                                     <Trash2 size={18} />
                                 </button>

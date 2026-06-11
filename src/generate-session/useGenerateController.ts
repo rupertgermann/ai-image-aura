@@ -14,6 +14,7 @@ import {
     type CompletionNotificationPayload,
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
+import { dataURLtoFile } from '../utils/file';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -88,6 +89,12 @@ interface BuildGeneratedArchiveImageForSaveInput {
     serializeReferences: () => Promise<string[]>;
 }
 
+interface AddGeneratedResultAsReferenceInput {
+    slot: GenerateResultSlot;
+    addReferenceFiles: (files: File[]) => void;
+    session: Pick<GenerateSessionStore, 'saveLineageSource' | 'clearLineageSource'>;
+}
+
 export function buildGeneratedArchiveImage({
     id,
     url,
@@ -139,6 +146,28 @@ export async function buildGeneratedArchiveImageForSave({
         draft,
         references,
     });
+}
+
+export function addGeneratedResultAsReference({
+    slot,
+    addReferenceFiles,
+    session,
+}: AddGeneratedResultAsReferenceInput) {
+    if (slot.status !== 'success') {
+        return false;
+    }
+
+    addReferenceFiles([
+        dataURLtoFile(slot.imageUrl, `generated-result-${slot.slotIndex + 1}.png`),
+    ]);
+
+    if (slot.isSaved && slot.archiveImageId) {
+        session.saveLineageSource({ archiveImageId: slot.archiveImageId });
+    } else {
+        session.clearLineageSource();
+    }
+
+    return true;
 }
 
 export function notifyGenerateCompletion({

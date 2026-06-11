@@ -437,6 +437,19 @@ export function getImageModelReferenceLimitMessage(
     return `${IMAGE_MODEL_REGISTRY[model].label} uses the first ${limit} reference images for ${context}.`;
 }
 
+export function getImageModelReferenceCapacityMessage(
+    model: ImageModelSlug,
+    referenceCount: number,
+    context: string,
+): string | null {
+    const limit = IMAGE_MODEL_CONTROL_FACTS[model].referenceLimit;
+    if (limit === null || referenceCount < limit) {
+        return null;
+    }
+
+    return `${IMAGE_MODEL_REGISTRY[model].label} already has ${limit} reference images for ${context}. Remove one before adding another.`;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? value as Record<string, unknown>

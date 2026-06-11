@@ -3,6 +3,7 @@ import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageMo
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
 import {
+    addGeneratedResultAsReference,
     buildGenerateResultSlots,
     buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
@@ -94,6 +95,69 @@ describe('Generate controller batch result slots', () => {
                 error: 'content filter',
             },
         ]);
+    });
+});
+
+describe('Generate controller result Reference iteration', () => {
+    it('adds a saved generated result as a Reference image and keeps its lineage source', () => {
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+
+        const added = addGeneratedResultAsReference({
+            slot: {
+                slotIndex: 2,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,c2F2ZWQtcmVzdWx0',
+                isSaved: true,
+                archiveImageId: 'archive-image-123',
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+        });
+
+        expect(added).toBe(true);
+        expect(addReferenceFiles).toHaveBeenCalledWith([
+            expect.objectContaining({
+                name: 'generated-result-3.png',
+                type: 'image/png',
+            }),
+        ]);
+        expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'archive-image-123' });
+        expect(clearLineageSource).not.toHaveBeenCalled();
+    });
+
+    it('adds an unsaved generated result as a Reference image without carrying a lineage source', () => {
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+
+        const added = addGeneratedResultAsReference({
+            slot: {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,dW5zYXZlZC1yZXN1bHQ=',
+                isSaved: false,
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+        });
+
+        expect(added).toBe(true);
+        expect(addReferenceFiles).toHaveBeenCalledWith([
+            expect.objectContaining({
+                name: 'generated-result-1.png',
+                type: 'image/png',
+            }),
+        ]);
+        expect(saveLineageSource).not.toHaveBeenCalled();
+        expect(clearLineageSource).toHaveBeenCalled();
     });
 });
 

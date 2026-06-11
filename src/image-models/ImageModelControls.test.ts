@@ -6,6 +6,7 @@ import {
     coerceImageModelControlValue,
     getDefaultImageModelControls,
     getImageModelGenerateControls,
+    getImageModelReferenceCapacityMessage,
     getImageModelReferenceLimitMessage,
     getImageModelUiChoices,
     imageModelSupportsTransformMask,
@@ -227,6 +228,14 @@ describe('Image model controls', () => {
             'ref-12.png',
             'ref-13.png',
         ]);
+    });
+
+    it('reports when a Generate result cannot be appended as another Reference image', () => {
+        expect(getImageModelReferenceCapacityMessage(OPENAI_IMAGE_MODEL, 50, 'generation')).toBeNull();
+        expect(getImageModelReferenceCapacityMessage(NANO_BANANA_PRO_IMAGE_MODEL, 13, 'generation')).toBeNull();
+        expect(getImageModelReferenceCapacityMessage(NANO_BANANA_PRO_IMAGE_MODEL, 14, 'generation')).toBe(
+            'Nano Banana Pro already has 14 reference images for generation. Remove one before adding another.',
+        );
     });
 
     it('applies future gpt-image-2 Reference limits from Image model facts consistently', () => {
