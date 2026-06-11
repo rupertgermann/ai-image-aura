@@ -246,6 +246,46 @@ describe('saveEditedImage', () => {
         }));
     });
 
+    it('stores masked AI edit lineage as a transform mask asset without adding mask layers', async () => {
+        const lineage = createStore();
+        await seedSourceLineage(lineage);
+
+        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,masked-edit', {
+            ...createSaveContext(),
+            isCopy: true,
+            layerStack: createLayerStack(),
+            aiEditPrompt: 'replace only the painted area',
+            targetMode: 'selected-layers',
+            transformMask: {
+                assetId: null,
+                dataUrl: 'data:image/png;base64,bWFzaw==',
+                mimeType: 'image/png',
+            },
+        }, {
+            saveImage: vi.fn(async (image) => image),
+            lineageStore: lineage,
+            makeId: () => 'masked-copy',
+        });
+
+        const steps = await lineage.getByArchiveImageId(savedImage.id);
+        expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
+            aiEdit: expect.objectContaining({
+                transformMask: {
+                    assetId: 'masked-copy:transform-mask',
+                    dataUrl: 'data:image/png;base64,bWFzaw==',
+                    mimeType: 'image/png',
+                },
+            }),
+            transformMaskAsset: {
+                assetId: 'masked-copy:transform-mask',
+                dataUrl: 'data:image/png;base64,bWFzaw==',
+                mimeType: 'image/png',
+            },
+        }));
+        expect(savedImage.layerStack?.layers.map((layer) => layer.id)).toEqual(['base', 'upload', 'ai-layer']);
+        expect(savedImage.layerStack?.layers.some((layer) => layer.id.includes('mask'))).toBe(false);
+    });
+
     it('persists layered save metadata without putting the full stack in lineage', async () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);

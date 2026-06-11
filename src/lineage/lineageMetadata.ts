@@ -36,6 +36,7 @@ function validateEditorMetadata(metadata: Record<string, unknown>) {
     validateEditorAdjustment(metadata.editorAdjustment);
     validateEditorAiEdit(metadata.aiEdit);
     validateEditorLayers(metadata.layers);
+    validateTransformMaskAsset(metadata.transformMaskAsset);
 }
 
 function validateAutopilotMetadata(metadata: Record<string, unknown>) {
@@ -154,6 +155,7 @@ function validateEditorAiEdit(value: unknown) {
         requireFiniteNumber(referenceImages.count, 'lineage aiEdit referenceImages count');
     }
     validateEditorTransformTarget(aiEdit.transformTarget);
+    validateTransformMaskAsset(aiEdit.transformMask);
 }
 
 function validateEditorTransformTarget(value: unknown) {
@@ -175,6 +177,24 @@ function validateEditorTransformTarget(value: unknown) {
     if (transformTarget.includesBaseLayer !== null) {
         requireBoolean(transformTarget.includesBaseLayer, 'lineage transformTarget includesBaseLayer');
     }
+}
+
+function validateTransformMaskAsset(value: unknown) {
+    if (value === undefined || value === null) {
+        return;
+    }
+
+    const asset = requireRecord(value, 'lineage transformMask');
+    if (asset.assetId !== null) {
+        requireString(asset.assetId, 'lineage transformMask assetId');
+    }
+    if (asset.dataUrl !== undefined) {
+        requireString(asset.dataUrl, 'lineage transformMask dataUrl');
+    }
+    if (asset.fileName !== undefined) {
+        requireString(asset.fileName, 'lineage transformMask fileName');
+    }
+    requireString(asset.mimeType, 'lineage transformMask mimeType');
 }
 
 function validateEditorLayers(value: unknown) {

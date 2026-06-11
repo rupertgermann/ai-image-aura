@@ -80,7 +80,8 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
 
     zip.file(ARCHIVE_MANIFEST_FILE, JSON.stringify(createArchiveManifest(archiveManifestImages), null, 2));
 
-    zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify(createLineageManifest(dedupeLineageSteps(lineageCollections)), null, 2));
+    const lineageSteps = await addLineageAssetsToZip(zip, dedupeLineageSteps(lineageCollections));
+    zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify(createLineageManifest(lineageSteps), null, 2));
 
     return zip.generateAsync({ type: 'uint8array' });
 }
@@ -144,8 +145,9 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
 
     const importedStepIds: string[] = [];
     for (const step of lineageManifest.steps) {
-        await deps.lineageStore.save(step);
-        importedStepIds.push(step.id);
+        const hydratedStep = await hydrateLineageAssetsFromZip(zip, step, missingAssetFiles);
+        await deps.lineageStore.save(hydratedStep);
+        importedStepIds.push(hydratedStep.id);
     }
 
     return {
@@ -202,12 +204,60 @@ function getLayerFileName(imageId: string, layerId: string) {
     return `aura-${imageId}-layer-${layerId}.png`;
 }
 
+function getTransformMaskFileName(stepId: string, mimeType: string) {
+    return `aura-${stepId}-transform-mask.${mimeType === 'image/png' ? 'png' : 'bin'}`;
+}
+
 async function addLayerStackToZip(zip: JSZip, imageId: string, layerStack: ArchiveLayerStack): Promise<ArchiveManifestLayerStack> {
     await Promise.all(layerStack.layers.map(async (layer) => {
         zip.file(getLayerFileName(imageId, layer.id), await imageUrlToBytes(layer.assetUrl));
     }));
 
     return createArchiveManifestLayerStack(imageId, layerStack, getLayerFileName);
+}
+
+async function addLineageAssetsToZip(zip: JSZip, steps: LineageStep[]): Promise<LineageStep[]> {
+    return Promise.all(steps.map(async (step) => {
+        const nextStep = cloneLineageStep(step);
+        const transformMask = getTransformMaskAsset(nextStep.metadata);
+
+        if (!transformMask?.dataUrl) {
+            return nextStep;
+        }
+
+        const fileName = getTransformMaskFileName(step.id, transformMask.mimeType);
+        zip.file(fileName, await imageUrlToBytes(transformMask.dataUrl));
+        setTransformMaskAsset(nextStep.metadata, {
+            assetId: transformMask.assetId,
+            fileName,
+            mimeType: transformMask.mimeType,
+        });
+
+        return nextStep;
+    }));
+}
+
+async function hydrateLineageAssetsFromZip(zip: JSZip, step: LineageStep, missingAssetFiles: string[]): Promise<LineageStep> {
+    const nextStep = cloneLineageStep(step);
+    const transformMask = getTransformMaskAsset(nextStep.metadata);
+
+    if (!transformMask?.fileName || transformMask.dataUrl) {
+        return nextStep;
+    }
+
+    const file = zip.file(transformMask.fileName);
+    if (!file) {
+        missingAssetFiles.push(transformMask.fileName);
+        return nextStep;
+    }
+
+    setTransformMaskAsset(nextStep.metadata, {
+        assetId: transformMask.assetId,
+        dataUrl: bytesToDataUrl(await file.async('uint8array'), transformMask.mimeType),
+        mimeType: transformMask.mimeType,
+    });
+
+    return nextStep;
 }
 
 async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStack | undefined, missingAssetFiles: string[]): Promise<ArchiveLayerStack | undefined> {
@@ -238,8 +288,11 @@ async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStac
 }
 
 async function blobToDataUrl(blob: Blob) {
-    const mimeType = blob.type || 'image/png';
     const bytes = new Uint8Array(await blob.arrayBuffer());
+    return bytesToDataUrl(bytes, blob.type || 'image/png');
+}
+
+function bytesToDataUrl(bytes: Uint8Array, mimeType: string) {
     let binary = '';
 
     for (const byte of bytes) {
@@ -262,4 +315,57 @@ async function imageUrlToBytes(url: string) {
 
     const binary = atob(base64Data);
     return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+interface TransferTransformMaskAsset {
+    assetId: string | null;
+    dataUrl?: string;
+    fileName?: string;
+    mimeType: string;
+}
+
+function cloneLineageStep(step: LineageStep): LineageStep {
+    return {
+        ...step,
+        metadata: JSON.parse(JSON.stringify(step.metadata)) as Record<string, unknown>,
+    };
+}
+
+function getTransformMaskAsset(metadata: Record<string, unknown>): TransferTransformMaskAsset | null {
+    const aiEdit = asRecord(metadata.aiEdit);
+    return readTransformMaskAsset(aiEdit?.transformMask) ?? readTransformMaskAsset(metadata.transformMaskAsset);
+}
+
+function setTransformMaskAsset(metadata: Record<string, unknown>, asset: TransferTransformMaskAsset) {
+    const aiEdit = asRecord(metadata.aiEdit);
+    if (aiEdit) {
+        aiEdit.transformMask = asset;
+    }
+    metadata.transformMaskAsset = asset;
+}
+
+function readTransformMaskAsset(value: unknown): TransferTransformMaskAsset | null {
+    const asset = asRecord(value);
+    if (!asset) {
+        return null;
+    }
+
+    const dataUrl = typeof asset.dataUrl === 'string' ? asset.dataUrl : undefined;
+    const fileName = typeof asset.fileName === 'string' ? asset.fileName : undefined;
+    if (!dataUrl && !fileName) {
+        return null;
+    }
+
+    return {
+        assetId: typeof asset.assetId === 'string' ? asset.assetId : null,
+        ...(dataUrl ? { dataUrl } : {}),
+        ...(fileName ? { fileName } : {}),
+        mimeType: typeof asset.mimeType === 'string' ? asset.mimeType : 'image/png',
+    };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : null;
 }

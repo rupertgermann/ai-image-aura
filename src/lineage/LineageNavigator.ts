@@ -1,14 +1,14 @@
 import type { ArchiveImage } from '../db/types';
 import type { GenerateSessionStore } from '../generate-session/GenerateSession';
 import type { LineageStore } from './LineageStore';
-import { buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from './replayLineageStep';
+import { buildEditorReplay, buildGenerateReplay, isEditorReplayable, isGenerateReplayable, type EditorReplay } from './replayLineageStep';
 
 export type ReplayIntoGenerateOutcome =
     | { status: 'replayed' }
     | { status: 'unavailable'; reason: string };
 
 export type ReplayIntoEditorOutcome =
-    | { status: 'replayed'; image: ArchiveImage }
+    | { status: 'replayed'; image: ArchiveImage; replay: EditorReplay }
     | { status: 'unavailable'; reason: string };
 
 export type ForkOutcome =
@@ -60,9 +60,14 @@ export function createLineageNavigator(deps: LineageNavigatorDeps): LineageNavig
                 return { status: 'unavailable', reason: 'Selected step image is missing from the local archive' };
             }
 
+            const replay = buildEditorReplay(step);
+            if (!replay) {
+                return { status: 'unavailable', reason: 'This step cannot be replayed into Editor' };
+            }
+
             sessionStore.saveLineageSource({ archiveImageId: step.archiveImageId, stepId: step.id });
 
-            return { status: 'replayed', image };
+            return { status: 'replayed', image, replay };
         },
 
         async fork(stepId) {

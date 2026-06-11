@@ -70,6 +70,11 @@ describe('Editor controller AI transform flow', () => {
             isCopy: false,
             aiEditPrompt: 'replace the jacket',
             aiEditModel: OPENAI_IMAGE_MODEL,
+            transformMask: {
+                assetId: null,
+                dataUrl: 'data:image/png;base64,bWFzaw==',
+                mimeType: 'image/png',
+            },
             targetMode: 'selected-layers',
             targetLayerCount: 1,
             targetIncludesBaseLayer: false,

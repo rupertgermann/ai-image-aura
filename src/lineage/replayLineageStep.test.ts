@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArchiveImage } from '../db/types';
 import type { LineageStep } from './LineageStore';
-import { buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from './replayLineageStep';
+import { buildEditorReplay, buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from './replayLineageStep';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('replayLineageStep', () => {
@@ -56,6 +56,45 @@ describe('replayLineageStep', () => {
         expect(isGenerateReplayable(createStep({ id: 'b', archiveImageId: 'image-b', stepType: 'ai-edit', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(false);
         expect(isEditorReplayable(createStep({ id: 'c', archiveImageId: 'image-c', stepType: 'save-as-copy', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
         expect(isEditorReplayable(createStep({ id: 'd', archiveImageId: 'image-d', stepType: 'reference-generation', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(false);
+    });
+
+    it('hydrates masked editor replay metadata into an edit request mask image', async () => {
+        const step = createStep({
+            id: 'masked-step',
+            archiveImageId: 'masked-image',
+            stepType: 'ai-edit',
+            timestamp: '2026-04-04T10:00:00.000Z',
+            metadata: {
+                aiEdit: {
+                    prompt: 'replace only the painted area',
+                    imageModel: {
+                        slug: OPENAI_IMAGE_MODEL,
+                    },
+                    referenceImages: {
+                        count: 0,
+                    },
+                    transformTarget: {
+                        mode: 'selected-layers',
+                        layerCount: 1,
+                        includesBaseLayer: false,
+                    },
+                    transformMask: {
+                        assetId: 'masked-copy:transform-mask',
+                        dataUrl: 'data:image/png;base64,bWFzaw==',
+                        mimeType: 'image/png',
+                    },
+                },
+            },
+        });
+
+        const replay = buildEditorReplay(step);
+
+        expect(replay).toEqual(expect.objectContaining({
+            prompt: 'replace only the painted area',
+            model: OPENAI_IMAGE_MODEL,
+        }));
+        expect(replay?.maskImage).toBeInstanceOf(File);
+        await expect(replay?.maskImage?.text()).resolves.toBe('mask');
     });
 
     it('hydrates a generate draft from an autopilot step without an archive image fallback', () => {

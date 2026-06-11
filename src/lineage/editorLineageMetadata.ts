@@ -34,11 +34,19 @@ export interface EditorLineageAiTransformTarget {
     includesBaseLayer: boolean | null;
 }
 
+export interface EditorLineageTransformMaskAsset {
+    assetId: string | null;
+    dataUrl?: string;
+    fileName?: string;
+    mimeType: string;
+}
+
 export interface EditorLineageAiEdit {
     prompt: string;
     imageModel: EditorLineageImageModel | null;
     referenceImages: EditorLineageReferenceImages;
     transformTarget: EditorLineageAiTransformTarget;
+    transformMask?: EditorLineageTransformMaskAsset;
 }
 
 export interface EditorLineageAiResultLayerFact {
@@ -75,6 +83,7 @@ export interface EditorLineageMetadata extends Record<string, unknown> {
     targetIncludesBaseLayer: boolean | null;
     aiResultLayerId: string | null;
     aiResultLayerName: string | null;
+    transformMaskAsset?: EditorLineageTransformMaskAsset;
 }
 
 export interface EditorTimelineMetadata {
@@ -97,6 +106,7 @@ export function buildEditorLineageMetadata(input: {
     aiResultLayerName?: string | null;
     aiEditPrompt?: string | null;
     aiEditModel?: string | null;
+    transformMask?: EditorLineageTransformMaskAsset | null;
 }): EditorLineageMetadata {
     const layerStack = input.layerStack ?? input.savedImage.layerStack;
     const editPrompt = normalizeString(input.aiEditPrompt);
@@ -113,6 +123,7 @@ export function buildEditorLineageMetadata(input: {
         aiResultLayerId: input.aiResultLayerId ?? null,
         aiResultLayerName: input.aiResultLayerName ?? null,
     });
+    const transformMask = buildEditorTransformMaskAsset(input.transformMask, input.savedImage.id);
 
     return {
         sourceImage: {
@@ -134,6 +145,7 @@ export function buildEditorLineageMetadata(input: {
                     count: referenceCount,
                 },
                 transformTarget: aiTransformTarget,
+                ...(transformMask ? { transformMask } : {}),
             }
             : null,
         layers,
@@ -152,6 +164,7 @@ export function buildEditorLineageMetadata(input: {
         targetIncludesBaseLayer: aiTransformTarget.includesBaseLayer,
         aiResultLayerId: layers.aiResultLayer?.id ?? null,
         aiResultLayerName: layers.aiResultLayer?.name ?? null,
+        ...(transformMask ? { transformMaskAsset: transformMask } : {}),
     };
 }
 
@@ -214,6 +227,11 @@ export function readEditorLineageAiTransformTarget(metadata: Record<string, unkn
     };
 }
 
+export function readEditorLineageTransformMask(metadata: Record<string, unknown>): EditorLineageTransformMaskAsset | null {
+    const aiEdit = asRecord(metadata.aiEdit);
+    return readTransformMaskAsset(aiEdit?.transformMask) ?? readTransformMaskAsset(metadata.transformMaskAsset);
+}
+
 function buildEditorAdjustment(adjustments: EditorAdjustments): EditorLineageAdjustment {
     return {
         brightness: adjustments.brightness,
@@ -247,6 +265,45 @@ function buildEditorLineageImageModel(model: string | null): EditorLineageImageM
     return isImageModelSlug(model)
         ? { slug: model }
         : null;
+}
+
+function buildEditorTransformMaskAsset(
+    transformMask: EditorLineageTransformMaskAsset | null | undefined,
+    savedImageId: string,
+): EditorLineageTransformMaskAsset | null {
+    if (!transformMask?.dataUrl && !transformMask?.fileName) {
+        return null;
+    }
+
+    return {
+        assetId: transformMask.assetId || `${savedImageId}:transform-mask`,
+        ...(transformMask.dataUrl ? { dataUrl: transformMask.dataUrl } : {}),
+        ...(transformMask.fileName ? { fileName: transformMask.fileName } : {}),
+        mimeType: transformMask.mimeType || 'image/png',
+    };
+}
+
+function readTransformMaskAsset(value: unknown): EditorLineageTransformMaskAsset | null {
+    const asset = asRecord(value);
+    if (!asset) {
+        return null;
+    }
+
+    const dataUrl = typeof asset.dataUrl === 'string' ? asset.dataUrl : undefined;
+    const fileName = typeof asset.fileName === 'string' ? asset.fileName : undefined;
+    const mimeType = typeof asset.mimeType === 'string' ? asset.mimeType : 'image/png';
+    const assetId = typeof asset.assetId === 'string' ? asset.assetId : null;
+
+    if (!dataUrl && !fileName) {
+        return null;
+    }
+
+    return {
+        assetId,
+        ...(dataUrl ? { dataUrl } : {}),
+        ...(fileName ? { fileName } : {}),
+        mimeType,
+    };
 }
 
 function readAdjustment(value: unknown): EditorLineageAdjustment | null {

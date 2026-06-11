@@ -1,5 +1,7 @@
 import type { ArchiveLayerStack } from '../db/types';
+import type { EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 import type { ImageModelSlug } from '../utils/openaiModels';
+import { fileToDataURL } from '../utils/file';
 import {
     insertAiResultLayer,
     planAiTransformTarget,
@@ -43,11 +45,13 @@ export interface AiTransformSaveProvenance extends AiTransformTargetMetadata {
     aiEditModel: ImageModelSlug;
     aiResultLayerId: string;
     aiResultLayerName: string | null;
+    transformMask?: EditorLineageTransformMaskAsset | null;
 }
 
 export interface AiTransformProvenanceInput {
     prompt: string;
     model: ImageModelSlug;
+    transformMask?: EditorLineageTransformMaskAsset | null;
 }
 
 export async function renderAiTransformEditInput({
@@ -98,6 +102,7 @@ export function applyAiTransformResultToDraft(
             ? {
                 aiEditPrompt: provenanceInput.prompt,
                 aiEditModel: provenanceInput.model,
+                ...(provenanceInput.transformMask ? { transformMask: provenanceInput.transformMask } : {}),
                 targetMode: targetPlan.metadata.targetMode,
                 targetLayerCount: targetPlan.metadata.targetLayerCount,
                 targetIncludesBaseLayer: targetPlan.metadata.targetIncludesBaseLayer,
@@ -153,4 +158,12 @@ function getWholeCompositionBounds(layerStack: ArchiveLayerStack): LayerBounds {
 
 function blobToFile(blob: Blob, name: string) {
     return new File([blob], name, { type: blob.type || 'image/png' });
+}
+
+export async function blobToTransformMaskAsset(maskImage: File | Blob): Promise<EditorLineageTransformMaskAsset> {
+    return {
+        assetId: null,
+        dataUrl: await fileToDataURL(maskImage),
+        mimeType: maskImage.type || 'image/png',
+    };
 }

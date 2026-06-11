@@ -12,14 +12,16 @@ import { getImageModelReferenceLimitMessage, getImageModelUiChoices, imageModelS
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { renderAiTransformEditInput } from '../editor/aiTransform';
 import { classifyTransformMaskCoverage } from '../editor/transformMask';
+import type { EditorReplay } from '../lineage/replayLineageStep';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
+    replay?: EditorReplay | null;
     getProviderKey: (provider: Provider) => string | null;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }) => {
+const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, onSave }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
     const [adjustmentsOpen, setAdjustmentsOpen] = useState(true);
@@ -110,6 +112,20 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         onSave,
     });
     const aiReferenceWarning = getImageModelReferenceLimitMessage(aiEditModel, referenceImages.length, 'AI transforms');
+
+    useEffect(() => {
+        if (!replay) {
+            return;
+        }
+
+        if (replay.model) {
+            setAiEditModel(replay.model);
+        }
+        if (replay.prompt) {
+            setAiPrompt(replay.prompt);
+        }
+        setTransformMaskFile(replay.maskImage ?? null);
+    }, [replay, setAiPrompt]);
 
     useEffect(() => {
         if (!supportsTransformMask) {
