@@ -5,6 +5,7 @@ import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
 import {
     buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
+    notifyGenerateCompletion,
     snapshotGeneratedReferenceImages,
 } from './useGenerateController';
 
@@ -105,6 +106,46 @@ describe('Generate controller Reference image provenance', () => {
         expect(serializeReferenceFiles).toHaveBeenCalledWith(selectedReferenceFiles.slice(0, 14));
         expect(serializeReferences).not.toHaveBeenCalled();
         expect(image.references).toEqual(selectedReferenceDataUrls.slice(0, 14));
+    });
+});
+
+describe('Generate controller completion notifications', () => {
+    it('notifies when enabled and the document is hidden', () => {
+        const showCompletion = vi.fn();
+
+        notifyGenerateCompletion({
+            enabled: true,
+            documentHidden: true,
+            notificationPort: { showCompletion },
+            title: 'Generation complete',
+            body: 'Your image is ready.',
+        });
+
+        expect(showCompletion).toHaveBeenCalledWith({
+            title: 'Generation complete',
+            body: 'Your image is ready.',
+        });
+    });
+
+    it('does not notify when the document is visible or notifications are disabled', () => {
+        const showCompletion = vi.fn();
+
+        notifyGenerateCompletion({
+            enabled: true,
+            documentHidden: false,
+            notificationPort: { showCompletion },
+            title: 'Generation complete',
+            body: 'Your image is ready.',
+        });
+        notifyGenerateCompletion({
+            enabled: false,
+            documentHidden: true,
+            notificationPort: { showCompletion },
+            title: 'Autopilot complete',
+            body: 'Your run finished.',
+        });
+
+        expect(showCompletion).not.toHaveBeenCalled();
     });
 });
 

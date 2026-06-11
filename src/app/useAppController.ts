@@ -10,9 +10,20 @@ import { initializeAuraPersistence } from '../db/AuraPersistence';
 import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
 import { lineageStore } from '../lineage/LineageStore';
 import { createLineageNavigator } from '../lineage/LineageNavigator';
+import { browserCompletionNotificationPort, type CompletionNotificationReadiness } from './CompletionNotificationPort';
 
 export function useAppController() {
-    const { currentView, apiKey, googleApiKey, changeView, getKey, updateApiKey, updateGoogleApiKey } = useAppPreferences();
+    const {
+        currentView,
+        apiKey,
+        googleApiKey,
+        completionNotificationsEnabled,
+        changeView,
+        getKey,
+        updateApiKey,
+        updateGoogleApiKey,
+        updateCompletionNotificationsEnabled,
+    } = useAppPreferences();
     const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
@@ -21,6 +32,9 @@ export function useAppController() {
         onError: handleArchiveError,
     });
     const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
+    const [completionNotificationReadiness, setCompletionNotificationReadiness] = useState<CompletionNotificationReadiness>(
+        () => browserCompletionNotificationPort.getReadiness(),
+    );
     const recoveryStartedRef = useRef(false);
 
     useEffect(() => {
@@ -77,6 +91,22 @@ export function useAppController() {
         addToast('Image saved to archive', 'success');
         return savedImage;
     }, [addImage, addToast]);
+
+    const changeCompletionNotificationsEnabled = useCallback(async (enabled: boolean) => {
+        if (!enabled) {
+            updateCompletionNotificationsEnabled(false);
+            setCompletionNotificationReadiness(browserCompletionNotificationPort.getReadiness());
+            return;
+        }
+
+        const readiness = await browserCompletionNotificationPort.requestPermission();
+        setCompletionNotificationReadiness(readiness);
+        updateCompletionNotificationsEnabled(readiness === 'granted');
+
+        if (readiness !== 'granted') {
+            addToast('Browser notifications are not available', 'info');
+        }
+    }, [addToast, updateCompletionNotificationsEnabled]);
 
     const deleteImages = useCallback(async (ids: string[]) => {
         for (const id of ids) {
@@ -205,6 +235,9 @@ export function useAppController() {
             apiKey,
             getProviderKey: getKey,
             onSaveImage: saveImage,
+            completionNotificationsEnabled,
+            completionNotificationPort: browserCompletionNotificationPort,
+            isDocumentHidden: () => typeof document !== 'undefined' && document.hidden,
         },
         archiveViewProps: {
             images,
@@ -227,8 +260,11 @@ export function useAppController() {
         settingsViewProps: {
             apiKey,
             googleApiKey,
+            completionNotificationsEnabled,
+            completionNotificationReadiness,
             onApiKeyChange: updateApiKey,
             onGoogleApiKeyChange: updateGoogleApiKey,
+            onCompletionNotificationsChange: changeCompletionNotificationsEnabled,
         },
     };
 }

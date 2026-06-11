@@ -1747,6 +1747,23 @@ textarea.aura-input {
     align-items: center;
 }
 
+.settings-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-16);
+    color: var(--color-charcoal);
+    font-family: var(--font-suisse-intl);
+    font-size: var(--text-body);
+}
+
+.settings-toggle-row input {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--color-amber-glow);
+}
+
 .spin {
     animation: spin 1s linear infinite;
 }

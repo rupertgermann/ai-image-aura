@@ -8,6 +8,7 @@ export function useAppPreferences() {
     const [currentView, setCurrentView] = useLocalStorage<AppView>('aura_current_view', 'generate');
     const [apiKey, setApiKey] = useLocalStorage<string>(PROVIDER_API_KEY_STORAGE_KEYS.openai, '');
     const [googleApiKey, setGoogleApiKey] = useLocalStorage<string>(PROVIDER_API_KEY_STORAGE_KEYS.google, '');
+    const [completionNotificationsEnabled, setCompletionNotificationsEnabled] = useLocalStorage('aura_completion_notifications_enabled', false);
     const providerKeyResolver = useMemo(() => createProviderKeyResolver({
         openai: apiKey,
         google: googleApiKey,
@@ -34,6 +35,10 @@ export function useAppPreferences() {
         setGoogleApiKey(key);
     }, [setGoogleApiKey]);
 
+    const updateCompletionNotificationsEnabled = useCallback((enabled: boolean) => {
+        setCompletionNotificationsEnabled(enabled);
+    }, [setCompletionNotificationsEnabled]);
+
     const getKey = useCallback((provider: Provider) => {
         return providerKeyResolver.getKey(provider);
     }, [providerKeyResolver]);
@@ -43,10 +48,12 @@ export function useAppPreferences() {
         apiKey,
         openAiApiKey: apiKey,
         googleApiKey,
+        completionNotificationsEnabled,
         changeView,
         getKey,
         updateApiKey,
         updateOpenAiApiKey: updateApiKey,
         updateGoogleApiKey,
+        updateCompletionNotificationsEnabled,
     };
 }

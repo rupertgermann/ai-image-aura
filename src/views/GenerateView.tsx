@@ -12,6 +12,7 @@ import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
 import { createSatisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { resolveReasoningClient } from '../autopilot/ReasoningClient';
+import type { CompletionNotificationPort } from '../app/CompletionNotificationPort';
 import {
     buildImageModelGenerateReferenceRunPlan,
     coerceImageModelControlValue,
@@ -31,6 +32,9 @@ import {
 interface GenerateViewProps {
     getProviderKey: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    completionNotificationsEnabled?: boolean;
+    completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
+    isDocumentHidden?: () => boolean;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -158,7 +162,13 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
     );
 };
 
-const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage }) => {
+const GenerateView: React.FC<GenerateViewProps> = ({
+    getProviderKey,
+    onSaveImage,
+    completionNotificationsEnabled,
+    completionNotificationPort,
+    isDocumentHidden,
+}) => {
     const [draft, setDraft] = useGenerateDraft();
     const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
@@ -212,6 +222,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
         onSaveImage,
         evaluate: satisfactionEvaluator.evaluate,
         refine: promptRefiner.refine,
+        completionNotificationsEnabled,
+        completionNotificationPort,
+        isDocumentHidden,
     });
 
     const handleNextReference = () => {
