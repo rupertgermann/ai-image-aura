@@ -1,3 +1,10 @@
+export interface ActualImageParameters {
+    revisedPrompt?: string;
+    size?: string;
+    quality?: string;
+    elapsedMs?: number;
+}
+
 export interface ArchiveImage {
     id: string;
     url: string;
@@ -14,6 +21,7 @@ export interface ArchiveImage {
     style?: string;
     lighting?: string;
     palette?: string;
+    actualParameters?: ActualImageParameters;
     layerStack?: ArchiveLayerStack;
 }
 

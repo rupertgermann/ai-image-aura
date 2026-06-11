@@ -7,6 +7,11 @@ import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLi
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig } from '../utils/openaiModels';
+import ActualParametersPanel from './ActualParametersPanel';
+import {
+    buildActualParameterDetails,
+    getRequestedArchiveParameters,
+} from '../generate-session/actualParameters';
 
 interface ImageDetailModalProps {
     image: ArchiveImage;
@@ -37,6 +42,10 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     const imageModel = isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const modelLabel = resolveImageModelConfig(imageModel).label;
     const isNanoImage = imageModel === NANO_BANANA_PRO_IMAGE_MODEL;
+    const actualParameterDetails = buildActualParameterDetails({
+        actualParameters: image.actualParameters,
+        requestedParameters: getRequestedArchiveParameters(image),
+    });
 
     const copyPrompt = () => {
         navigator.clipboard.writeText(image.prompt);
@@ -193,6 +202,8 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 </div>
                             )}
                         </div>
+
+                        <ActualParametersPanel details={actualParameterDetails} />
 
                         {image.references && image.references.length > 0 && (
                             <div className="sidebar-section">

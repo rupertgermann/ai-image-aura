@@ -127,6 +127,36 @@ describe('saveGeneratedImage', () => {
         ]);
     });
 
+    it('writes actual parameters into generation lineage metadata', async () => {
+        const lineage = createStore();
+        const sessionStore = createSessionStore();
+        const actualParameters = {
+            revisedPrompt: 'refined prompt',
+            size: '1536x1024',
+            quality: 'high',
+            elapsedMs: 930,
+        };
+        const image = createArchiveImage({
+            id: 'generated-with-actuals',
+            actualParameters,
+        });
+
+        await saveGeneratedImage(image, {
+            saveImage: vi.fn(async (nextImage) => nextImage),
+            lineageStore: lineage,
+            sessionStore,
+        });
+
+        await expect(lineage.getByArchiveImageId('generated-with-actuals')).resolves.toEqual([
+            expect.objectContaining({
+                stepType: 'generation',
+                metadata: expect.objectContaining({
+                    actualParameters,
+                }),
+            }),
+        ]);
+    });
+
     it('records Nano Banana Pro reference-generation lineage from the saved used Reference images', async () => {
         const lineage = createStore();
         const sessionStore = createSessionStore();

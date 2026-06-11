@@ -813,6 +813,17 @@ textarea.aura-input {
     color: var(--color-steel);
 }
 
+.result-container.has-actual-parameters {
+    gap: var(--spacing-16);
+    padding-bottom: var(--spacing-16);
+}
+
+.result-container.has-actual-parameters .result-image {
+    height: auto;
+    max-height: min(70vh, 720px);
+    flex: 1;
+}
+
 .result-batch-container {
     width: 100%;
     min-height: 100%;
@@ -863,6 +874,109 @@ textarea.aura-input {
 
 .result-slot-actions {
     flex-wrap: wrap;
+}
+
+.actual-parameters-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--element-gap);
+    margin: 0 var(--spacing-16);
+    padding: var(--card-padding);
+    border: 1px solid var(--color-steel);
+    background: var(--color-snow);
+    color: var(--color-charcoal);
+}
+
+.result-slot-card .actual-parameters-panel,
+.modal-sidebar .actual-parameters-panel {
+    margin: 0;
+}
+
+.actual-parameters-panel.compact {
+    padding: var(--spacing-8);
+}
+
+.actual-parameter-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--element-gap);
+    margin: 0;
+}
+
+.actual-parameter-row,
+.actual-parameter-elapsed {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-16);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
+.actual-parameter-row dt,
+.actual-parameter-elapsed span,
+.actual-parameter-prompt span {
+    color: var(--color-steel);
+    text-transform: uppercase;
+}
+
+.actual-parameter-row dd {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    align-items: start;
+    gap: var(--element-gap);
+    margin: 0;
+    min-width: 0;
+}
+
+.actual-parameter-row dd span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.actual-parameter-row small {
+    color: var(--color-steel);
+    font-size: 10px;
+    line-height: 1.2;
+    text-transform: uppercase;
+}
+
+.actual-parameter-row strong,
+.actual-parameter-elapsed strong {
+    overflow-wrap: anywhere;
+    color: var(--color-charcoal);
+    font-weight: var(--font-weight-regular);
+}
+
+.actual-parameter-row em {
+    padding: 2px 6px;
+    border: 1px solid var(--color-amber-glow);
+    color: var(--color-amber-glow);
+    font-style: normal;
+    text-transform: uppercase;
+}
+
+.actual-parameter-row.changed {
+    padding-left: var(--spacing-8);
+    border-left: 2px solid var(--color-amber-glow);
+}
+
+.actual-parameter-prompt {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
+.actual-parameter-prompt p {
+    margin: 0;
+    color: var(--color-charcoal);
+    overflow-wrap: anywhere;
 }
 
 .result-slot-error {

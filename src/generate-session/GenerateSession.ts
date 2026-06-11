@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { ArchiveImage } from '../db/types';
+import type { ActualImageParameters, ArchiveImage } from '../db/types';
 import {
     buildActiveImageModelControls,
     buildImageModelArchiveFields,
@@ -64,6 +64,7 @@ export type GenerateResultSlot =
         status: 'success';
         imageUrl: string;
         isSaved: boolean;
+        actualParameters?: ActualImageParameters;
         archiveImageId?: string;
     }
     | {
@@ -479,6 +480,7 @@ function sanitizeGenerateResultSlot(value: unknown): GenerateResultSlot | null {
             status: 'success',
             imageUrl: record.imageUrl,
             isSaved: record.isSaved === true,
+            actualParameters: sanitizeActualParameters(record.actualParameters),
             ...(typeof record.archiveImageId === 'string' && record.archiveImageId
                 ? { archiveImageId: record.archiveImageId }
                 : {}),
@@ -494,6 +496,22 @@ function sanitizeGenerateResultSlot(value: unknown): GenerateResultSlot | null {
     }
 
     return null;
+}
+
+function sanitizeActualParameters(value: unknown): ActualImageParameters | undefined {
+    const record = asRecord(value);
+    if (!record) {
+        return undefined;
+    }
+
+    const actualParameters: ActualImageParameters = {
+        ...(typeof record.revisedPrompt === 'string' ? { revisedPrompt: record.revisedPrompt } : {}),
+        ...(typeof record.size === 'string' ? { size: record.size } : {}),
+        ...(typeof record.quality === 'string' ? { quality: record.quality } : {}),
+        ...(typeof record.elapsedMs === 'number' && Number.isFinite(record.elapsedMs) ? { elapsedMs: record.elapsedMs } : {}),
+    };
+
+    return Object.keys(actualParameters).length > 0 ? actualParameters : undefined;
 }
 
 function sanitizeReferenceDataUrls(value: unknown): string[] | null {

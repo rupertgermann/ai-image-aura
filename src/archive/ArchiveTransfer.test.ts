@@ -208,6 +208,41 @@ describe('ArchiveTransfer', () => {
         expect(archiveStore.images.get('image-2')?.favorite).toBeUndefined();
     });
 
+    it('round-trips actual parameters through the archive manifest', async () => {
+        const actualParameters = {
+            revisedPrompt: 'refined prompt',
+            size: '1536x1024',
+            quality: 'high',
+            elapsedMs: 930,
+        };
+        const sourceImages = createImages();
+        sourceImages[0] = {
+            ...sourceImages[0]!,
+            actualParameters,
+        };
+
+        const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: createStore() });
+        const zip = await JSZip.loadAsync(zipBytes);
+        const manifest = JSON.parse(await zip.file('archive-manifest.json')!.async('text')) as {
+            images: Array<{ id: string; actualParameters?: unknown }>;
+        };
+
+        expect(manifest.images).toEqual([
+            expect.objectContaining({ id: 'image-1', actualParameters }),
+            expect.not.objectContaining({ id: 'image-2', actualParameters: expect.anything() }),
+            expect.not.objectContaining({ id: 'image-3', actualParameters: expect.anything() }),
+        ]);
+
+        const archiveStore = new InMemoryArchiveStore();
+        await importArchiveZip(zipBytes, {
+            archiveStore,
+            lineageStore: createStore(),
+        });
+
+        expect(archiveStore.images.get('image-1')?.actualParameters).toEqual(actualParameters);
+        expect(archiveStore.images.get('image-2')?.actualParameters).toBeUndefined();
+    });
+
     it('round-trips layered image assets and stable layer ids', async () => {
         const sourceLineage = createStore();
         const sourceImages = [createLayeredImage()];

@@ -25,6 +25,9 @@ export interface OpenAiImageRequest {
 export interface OpenAiImageResponse {
     b64_json?: string;
     error?: string;
+    revised_prompt?: string;
+    size?: string;
+    quality?: string;
 }
 
 export interface OpenAiResponsesRequest {
@@ -142,13 +145,21 @@ async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiI
         return readOpenAiImageStream(response, request.onPartialImage);
     }
 
-    const data: { data?: OpenAiImageResponse[] } = await response.json();
+    const data: {
+        data?: OpenAiImageResponse[];
+        size?: string;
+        quality?: string;
+    } = await response.json();
 
     if (!data.data || data.data.length === 0) {
         throw new Error('No image data returned from OpenAI');
     }
 
-    return data.data;
+    return data.data.map((image) => ({
+        ...image,
+        ...(image.size === undefined && data.size !== undefined ? { size: data.size } : {}),
+        ...(image.quality === undefined && data.quality !== undefined ? { quality: data.quality } : {}),
+    }));
 }
 
 function supportsOpenAiImageStreaming(apiModel: string) {

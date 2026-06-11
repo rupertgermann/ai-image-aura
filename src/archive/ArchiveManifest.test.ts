@@ -50,6 +50,27 @@ describe('ArchiveManifest', () => {
         ]);
     });
 
+    it('preserves actual parameters while keeping legacy images compatible by omission', () => {
+        const actualParameters = {
+            revisedPrompt: 'refined prompt',
+            size: '1536x1024',
+            quality: 'high',
+            elapsedMs: 930,
+        };
+        const manifest = parseArchiveManifest({
+            version: ARCHIVE_MANIFEST_VERSION,
+            images: [
+                createManifestImage({ id: 'actual-image', actualParameters }),
+                createManifestImage({ id: 'legacy-image' }),
+            ],
+        });
+
+        expect(manifest.images).toEqual([
+            expect.objectContaining({ id: 'actual-image', actualParameters }),
+            expect.not.objectContaining({ id: 'legacy-image', actualParameters: expect.anything() }),
+        ]);
+    });
+
     it('rejects malformed layer stack entries', () => {
         expect(() => parseArchiveManifest({
             version: ARCHIVE_MANIFEST_VERSION,
