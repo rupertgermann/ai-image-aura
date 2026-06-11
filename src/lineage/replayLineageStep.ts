@@ -15,6 +15,12 @@ import { dataURLtoFile } from '../utils/file';
 type ReplayableStep = Pick<LineageStep, 'stepType'>;
 type GenerateReplayImageModel = NonNullable<ReturnType<typeof readGenerateLineageImageModel>>;
 
+export interface EditorReplay {
+    prompt: string | null;
+    model: typeof OPENAI_IMAGE_MODEL | typeof NANO_BANANA_PRO_IMAGE_MODEL | null;
+    maskImage?: File;
+}
+
 interface GenerateReplayMetadata {
     imageModel: GenerateReplayImageModel | null;
     model: ReturnType<typeof resolveReplayModel> | null;
@@ -36,11 +42,7 @@ export function isEditorReplayable(step: ReplayableStep) {
     return step.stepType === 'ai-edit' || step.stepType === 'save-as-copy';
 }
 
-export function buildEditorReplay(step: LineageStep): {
-    prompt: string | null;
-    model: typeof OPENAI_IMAGE_MODEL | typeof NANO_BANANA_PRO_IMAGE_MODEL | null;
-    maskImage?: File;
-} | null {
+export function buildEditorReplay(step: LineageStep): EditorReplay | null {
     if (!isEditorReplayable(step)) {
         return null;
     }
