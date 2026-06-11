@@ -15,7 +15,7 @@ import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResu
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
-import { createAutopilotSession, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
+import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import {
@@ -55,7 +55,7 @@ interface UseGenerateControllerOptions {
     serializeReferences: () => Promise<string[]>;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
-    session?: Pick<GenerateSessionStore, 'loadCurrentBatch' | 'saveCurrentBatch' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
+    session?: Pick<GenerateSessionStore, 'loadCurrentBatch' | 'saveCurrentBatch' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     createAutopilot?: typeof createAutopilotSession;
     evaluate?: typeof satisfactionEvaluator.evaluate;
@@ -261,7 +261,7 @@ export function addGeneratedResultAsReference({
         dataURLtoFile(slot.imageUrl, `generated-result-${slot.slotIndex + 1}.png`),
     ]);
 
-    if (slot.isSaved && slot.archiveImageId) {
+    if (slot.archiveImageId) {
         session.saveLineageSource({ archiveImageId: slot.archiveImageId });
     } else {
         session.clearLineageSource();
@@ -568,13 +568,7 @@ export function useGenerateController({
                         bestIterationNumber: runningBest.iterationNumber,
                     }));
                     setCurrentResult(iteration.imageDataUrl);
-                    setCurrentBatchResults([{
-                        slotIndex: 0,
-                        status: 'success',
-                        imageUrl: iteration.imageDataUrl,
-                        isSaved: false,
-                        archiveImageId: iteration.archiveImageId,
-                    }]);
+                    setCurrentBatchResults([buildAutopilotResultSlot(iteration)]);
                 },
                 onError: (error, iterationNumber) => {
                     setError(error.message);
@@ -590,25 +584,26 @@ export function useGenerateController({
                     referenceImages: outcome.usedReferenceImages,
                     serializeReferenceFiles: workflow.serializeReferences,
                 });
-                setCurrentResult(outcome.result.bestIteration.imageDataUrl);
-                setCurrentBatchResults([{
-                    slotIndex: 0,
-                    status: 'success',
-                    imageUrl: outcome.result.bestIteration.imageDataUrl,
-                    isSaved: false,
-                    archiveImageId: outcome.result.bestIteration.archiveImageId,
-                }]);
-                setCurrentResultReferences(usedReferences);
-                setCurrentRunDraft(null);
-                setCurrentRunLineageSource({
+                const bestSlot = buildAutopilotResultSlot(outcome.result.bestIteration);
+                const lineageSource = {
                     archiveImageId: outcome.result.bestIteration.archiveImageId,
                     stepId: outcome.result.bestIteration.stepId,
-                });
+                };
+                setCurrentResult(outcome.result.bestIteration.imageDataUrl);
+                setCurrentBatchResults([bestSlot]);
+                setCurrentResultReferences(usedReferences);
+                setCurrentRunDraft(null);
+                setCurrentRunLineageSource(lineageSource);
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
                     isSaved: false,
                 });
-                await session.saveCurrentResult(outcome.result.bestIteration.imageDataUrl, usedReferences);
+                await session.saveCurrentBatch({
+                    results: [bestSlot],
+                    references: usedReferences,
+                    draft: null,
+                    lineageSource,
+                });
             }
 
             if (outcome.result.status === 'failed' && outcome.result.error) {
@@ -814,6 +809,17 @@ function markGenerateResultSlotSaved(
             archiveImageId,
         }
         : result);
+}
+
+function buildAutopilotResultSlot(iteration: AutopilotIteration): Extract<GenerateResultSlot, { status: 'success' }> {
+    return {
+        slotIndex: 0,
+        status: 'success',
+        imageUrl: iteration.imageDataUrl,
+        isSaved: false,
+        archiveImageId: iteration.archiveImageId,
+        ...(iteration.actualParameters ? { actualParameters: iteration.actualParameters } : {}),
+    };
 }
 
 function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {

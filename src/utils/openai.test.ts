@@ -108,7 +108,7 @@ describe('openAiImageClient', () => {
         const fetchMock = vi.fn(async () => createSseResponse([
             'event: image_generation.partial_image\ndata: {"type":"image_generation.partial_image","b64_json":"partial-0"}\n\n',
             'event: image_generation.partial_image\ndata: {"type":"image_generation.partial_image","partial_image":{"b64_json":"partial-1"}}\n\n',
-            'event: image_generation.completed\ndata: {"type":"image_generation.completed","data":[{"b64_json":"final"}]}\n\n',
+            'event: image_generation.completed\ndata: {"type":"image_generation.completed","size":"1536x1024","quality":"high","data":[{"b64_json":"final","revised_prompt":"a refined slow cat"}]}\n\n',
         ]));
         const partials: Array<{ b64_json?: string }> = [];
 
@@ -120,7 +120,12 @@ describe('openAiImageClient', () => {
                 onPartialImage: (partial) => partials.push(partial),
             });
 
-            expect(result).toEqual({ b64_json: 'final' });
+            expect(result).toEqual({
+                b64_json: 'final',
+                revised_prompt: 'a refined slow cat',
+                size: '1536x1024',
+                quality: 'high',
+            });
             expect(partials).toEqual([
                 { b64_json: 'partial-0' },
                 { b64_json: 'partial-1' },

@@ -165,6 +165,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         } else {
             this.clearLineageSource();
         }
+        await this.clearCurrentResult();
 
         if (image.references && image.references.length > 0) {
             await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));

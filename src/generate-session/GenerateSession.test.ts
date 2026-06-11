@@ -89,6 +89,42 @@ describe('GenerateSession draft migration', () => {
         await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
     });
 
+    it('clears stale current generation results when transferring an archive image into Generate', async () => {
+        const store = createGenerateSessionStore({
+            blobStorage: new InMemoryStorageProvider(),
+        });
+        await store.saveCurrentBatch({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,stale-result',
+                isSaved: false,
+            }],
+            references: ['data:image/png;base64,stale-ref'],
+            draft: DEFAULT_GENERATE_DRAFT,
+            lineageSource: { archiveImageId: 'old-source' },
+        });
+
+        await store.transferFromArchive({
+            id: 'archive-image',
+            url: 'data:image/png;base64,archive',
+            prompt: 'use this image',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            timestamp: '2026-06-05T12:00:00.000Z',
+            width: 1024,
+            height: 1024,
+            model: 'gpt-image-2',
+            references: ['data:image/png;base64,archive-ref'],
+        });
+
+        await expect(store.loadCurrentBatch()).resolves.toBeNull();
+        await expect(store.loadCurrentResult()).resolves.toBeNull();
+        await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
+        await expect(store.consumeTransferredReferences()).resolves.toEqual(['data:image/png;base64,archive-ref']);
+    });
+
     it('round-trips the current generation batch with slot state and run context', async () => {
         const store = createGenerateSessionStore({
             blobStorage: new InMemoryStorageProvider(),

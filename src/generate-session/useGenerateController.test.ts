@@ -341,6 +341,37 @@ describe('Generate controller result Reference iteration', () => {
         expect(clearLineageSource).toHaveBeenCalled();
     });
 
+    it('keeps lineage when adding an unsaved autopilot result as a Reference image', () => {
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+
+        const added = addGeneratedResultAsReference({
+            slot: {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,YXV0b3BpbG90',
+                isSaved: false,
+                archiveImageId: 'autopilot:run:iteration:1',
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+        });
+
+        expect(added).toBe(true);
+        expect(addReferenceFiles).toHaveBeenCalledWith([
+            expect.objectContaining({
+                name: 'generated-result-1.png',
+                type: 'image/png',
+            }),
+        ]);
+        expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'autopilot:run:iteration:1' });
+        expect(clearLineageSource).not.toHaveBeenCalled();
+    });
+
     it('blocks result Reference iteration at model capacity without changing session lineage', () => {
         const addReferenceFiles = vi.fn();
         const saveLineageSource = vi.fn();

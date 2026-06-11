@@ -128,6 +128,50 @@ describe('AutopilotSession', () => {
         expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 1]);
     });
 
+    it('carries actual image parameters through completed iterations', async () => {
+        const lineage = createStore();
+        const callbacks = { onIterationComplete: vi.fn(), onError: vi.fn() };
+
+        const result = await createAutopilotSession({
+            goal: 'A cinematic portrait',
+            initialPrompt: 'prompt 1',
+            settings: createSettings(),
+            apiKey: 'key',
+            maxIterations: 1,
+            satisfactionThreshold: 90,
+            generate: vi.fn().mockResolvedValueOnce({
+                imageDataUrl: 'data:image/png;base64,one',
+                actualParameters: {
+                    revisedPrompt: 'refined prompt',
+                    size: '1536x1024',
+                    quality: 'high',
+                    elapsedMs: 240,
+                },
+            }),
+            evaluate: vi.fn().mockResolvedValueOnce({ score: 95, feedback: ['Strong match.'] }),
+            refine: vi.fn(),
+            lineageStore: lineage,
+            callbacks,
+        }).run();
+
+        expect(result.bestIteration).toEqual(expect.objectContaining({
+            actualParameters: {
+                revisedPrompt: 'refined prompt',
+                size: '1536x1024',
+                quality: 'high',
+                elapsedMs: 240,
+            },
+        }));
+        expect(callbacks.onIterationComplete.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+            actualParameters: {
+                revisedPrompt: 'refined prompt',
+                size: '1536x1024',
+                quality: 'high',
+                elapsedMs: 240,
+            },
+        }));
+    });
+
     it('freezes the Reference image snapshot for every iteration', async () => {
         const lineage = createStore();
         const firstReference = new File(['reference-0'], 'ref-0.png', { type: 'image/png' });

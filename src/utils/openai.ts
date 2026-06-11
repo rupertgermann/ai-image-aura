@@ -332,18 +332,36 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
     }
 }
 
-function extractImageResponses(value: unknown): OpenAiImageResponse[] {
+function extractImageResponses(
+    value: unknown,
+    inheritedParameters: Pick<OpenAiImageResponse, 'size' | 'quality'> = {},
+): OpenAiImageResponse[] {
     if (typeof value !== 'object' || value === null) {
         return [];
     }
 
     const record = value as Record<string, unknown>;
+    const actualParameters = {
+        size: typeof record.size === 'string' ? record.size : inheritedParameters.size,
+        quality: typeof record.quality === 'string' ? record.quality : inheritedParameters.quality,
+    };
     if (Array.isArray(record.data)) {
-        return record.data.flatMap(extractImageResponses);
+        return record.data.flatMap((item) => extractImageResponses(item, actualParameters));
+    }
+
+    if (typeof record.data === 'object' && record.data !== null) {
+        return extractImageResponses(record.data, actualParameters);
     }
 
     const b64Json = extractImageB64Json(record);
-    return b64Json ? [{ b64_json: b64Json }] : [];
+    return b64Json
+        ? [{
+            b64_json: b64Json,
+            ...(typeof record.revised_prompt === 'string' ? { revised_prompt: record.revised_prompt } : {}),
+            ...(actualParameters.size ? { size: actualParameters.size } : {}),
+            ...(actualParameters.quality ? { quality: actualParameters.quality } : {}),
+        }]
+        : [];
 }
 
 function extractImageB64Json(value: unknown): string | null {
