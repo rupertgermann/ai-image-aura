@@ -5,6 +5,12 @@ import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 import { readGenerateLineageImageModel } from './generateLineageMetadata';
 import { readAutopilotGenerateReplayMetadata } from './autopilotLineageMetadata';
+import {
+    readEditorLineageEditPrompt,
+    readEditorLineageImageModel,
+    readEditorLineageTransformMask,
+} from './editorLineageMetadata';
+import { dataURLtoFile } from '../utils/file';
 
 type ReplayableStep = Pick<LineageStep, 'stepType'>;
 type GenerateReplayImageModel = NonNullable<ReturnType<typeof readGenerateLineageImageModel>>;
@@ -28,6 +34,25 @@ export function isGenerateReplayable(step: ReplayableStep) {
 
 export function isEditorReplayable(step: ReplayableStep) {
     return step.stepType === 'ai-edit' || step.stepType === 'save-as-copy';
+}
+
+export function buildEditorReplay(step: LineageStep): {
+    prompt: string | null;
+    model: typeof OPENAI_IMAGE_MODEL | typeof NANO_BANANA_PRO_IMAGE_MODEL | null;
+    maskImage?: File;
+} | null {
+    if (!isEditorReplayable(step)) {
+        return null;
+    }
+
+    const transformMask = readEditorLineageTransformMask(step.metadata);
+    const dataUrl = transformMask?.dataUrl;
+
+    return {
+        prompt: readEditorLineageEditPrompt(step.metadata),
+        model: readEditorLineageImageModel(step.metadata)?.slug ?? null,
+        ...(dataUrl ? { maskImage: dataURLtoFile(dataUrl, 'transform-mask.png') } : {}),
+    };
 }
 
 export function buildGenerateReplay(image: ArchiveImage | null, step: LineageStep): {

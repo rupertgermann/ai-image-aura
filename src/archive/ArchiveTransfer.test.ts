@@ -5,6 +5,7 @@ import type { ArchiveImage } from '../db/types';
 import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE, LINEAGE_MANIFEST_VERSION } from './ArchiveTransfer';
 import { createLineageStore, type LineageMetadataPort, type LineageStep, type LineageStore } from '../lineage/LineageStore';
 import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
+import type { EditorLineageMetadata, EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -142,6 +143,75 @@ describe('ArchiveTransfer', () => {
             expect.objectContaining({
                 id: 'typed-autopilot-step',
                 metadata: autopilotMetadata,
+            }),
+        ]);
+    });
+
+    it('exports transform mask lineage assets as ZIP files and hydrates them on import', async () => {
+        const sourceLineage = createStore();
+        const maskedMetadata = createTypedEditorMetadata();
+        maskedMetadata.aiEdit.transformMask = {
+            assetId: 'image-1:transform-mask',
+            dataUrl: 'data:image/png;base64,bWFzaw==',
+            mimeType: 'image/png',
+        };
+        maskedMetadata.transformMaskAsset = maskedMetadata.aiEdit.transformMask;
+        await sourceLineage.save({
+            id: 'masked-editor-step',
+            archiveImageId: 'image-1',
+            parentStepId: null,
+            stepType: 'ai-edit',
+            timestamp: '2026-04-04T10:00:00.000Z',
+            metadata: maskedMetadata,
+        });
+
+        const zipBytes = await buildArchiveZip([createImages()[0]!], { lineageStore: sourceLineage });
+        const zip = await JSZip.loadAsync(zipBytes);
+        const maskFileName = 'aura-masked-editor-step-transform-mask.png';
+        const manifest = JSON.parse(await zip.file(LINEAGE_MANIFEST_FILE)!.async('text')) as {
+            steps: LineageStep[];
+        };
+
+        expect(await zip.file(maskFileName)?.async('text')).toBe('mask');
+        expect(manifest.steps[0]?.metadata).toEqual(expect.objectContaining({
+            aiEdit: expect.objectContaining({
+                transformMask: {
+                    assetId: 'image-1:transform-mask',
+                    fileName: maskFileName,
+                    mimeType: 'image/png',
+                },
+            }),
+            transformMaskAsset: {
+                assetId: 'image-1:transform-mask',
+                fileName: maskFileName,
+                mimeType: 'image/png',
+            },
+        }));
+        expect(JSON.stringify(manifest.steps[0]?.metadata)).not.toContain('data:image/png');
+
+        const importedLineage = createStore();
+        await importArchiveZip(zipBytes, {
+            archiveStore: new InMemoryArchiveStore(),
+            lineageStore: importedLineage,
+        });
+
+        await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
+            expect.objectContaining({
+                id: 'masked-editor-step',
+                metadata: expect.objectContaining({
+                    aiEdit: expect.objectContaining({
+                        transformMask: {
+                            assetId: 'image-1:transform-mask',
+                            dataUrl: 'data:image/png;base64,bWFzaw==',
+                            mimeType: 'image/png',
+                        },
+                    }),
+                    transformMaskAsset: {
+                        assetId: 'image-1:transform-mask',
+                        dataUrl: 'data:image/png;base64,bWFzaw==',
+                        mimeType: 'image/png',
+                    },
+                }),
             }),
         ]);
     });
@@ -465,7 +535,11 @@ function createTypedGenerateMetadata() {
     };
 }
 
-function createTypedEditorMetadata() {
+function createTypedEditorMetadata(): EditorLineageMetadata & {
+    aiEdit: NonNullable<EditorLineageMetadata['aiEdit']> & {
+        transformMask?: EditorLineageTransformMaskAsset;
+    };
+} {
     return {
         sourceImage: {
             archiveImageId: 'image-1',
