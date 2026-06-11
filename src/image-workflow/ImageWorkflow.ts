@@ -203,7 +203,7 @@ function mapGenerateBatchResults(responses: ImageProviderResponse[], batchSize: 
         return {
             slotIndex,
             status: 'failed',
-            error: 'No image data returned from image provider',
+            error: response?.error ?? 'No image data returned from image provider',
         };
     });
 }

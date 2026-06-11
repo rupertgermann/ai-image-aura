@@ -69,6 +69,7 @@ describe('Image model controls', () => {
         expect(getImageModelGenerateControls(NANO_BANANA_PRO_IMAGE_MODEL).map((control) => control.id)).toEqual([
             'aspectRatio',
             'imageSize',
+            'batchSize',
         ]);
     });
 
@@ -87,6 +88,7 @@ describe('Image model controls', () => {
         expect(getDefaultImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL)).toEqual({
             aspectRatio: '1:1',
             imageSize: '1K',
+            batchSize: 1,
         });
         expect(sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
             quality: 'high',
@@ -117,11 +119,14 @@ describe('Image model controls', () => {
         expect(sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, {
             aspectRatio: '1536x1024',
             imageSize: '4K',
+            batchSize: 8,
         })).toEqual({
             aspectRatio: '3:2',
             imageSize: '4K',
+            batchSize: 4,
         });
         expect(coerceImageModelControlValue(NANO_BANANA_PRO_IMAGE_MODEL, 'aspectRatio', '1024x1536')).toBe('2:3');
+        expect(coerceImageModelControlValue(NANO_BANANA_PRO_IMAGE_MODEL, 'batchSize', '3')).toBe('3');
         expect(coerceImageModelControlValue(OPENAI_IMAGE_MODEL, 'quality', 'best')).toBe('medium');
         expect(coerceImageModelControlValue(OPENAI_IMAGE_MODEL, 'batchSize', '9')).toBe('4');
     });
@@ -172,11 +177,13 @@ describe('Image model controls', () => {
             quality: 'high',
             aspectRatio: '1024x1536',
             background: 'transparent',
+            batchSize: 4,
             imageSize: '4K',
             referenceImages: references,
         })).toEqual({
             aspectRatio: '2:3',
             imageSize: '4K',
+            batchSize: 4,
             referenceImages: references.slice(0, 14),
         });
     });

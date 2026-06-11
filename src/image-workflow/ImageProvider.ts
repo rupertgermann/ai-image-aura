@@ -80,7 +80,26 @@ export function createGoogleImageProvider(fetchImpl: typeof fetch = fetch): Imag
     };
 
     return {
-        generate: async (request) => [await createImage(request)],
+        async generate(request) {
+            const batchSize = coerceProviderBatchSize(request.batchSize);
+
+            if (batchSize === 1) {
+                return [await createImage(request)];
+            }
+
+            return Promise.all(Array.from({ length: batchSize }, async () => {
+                try {
+                    return await createImage({
+                        ...request,
+                        batchSize: 1,
+                    });
+                } catch (error) {
+                    return {
+                        error: error instanceof Error ? error.message : 'Google Gemini image generation failed',
+                    };
+                }
+            }));
+        },
         edit: createImage,
     };
 }
@@ -129,6 +148,20 @@ async function fileToBase64(file: File) {
         binary += String.fromCharCode(byte);
     });
     return btoa(binary);
+}
+
+function coerceProviderBatchSize(value: unknown): number {
+    const parsed = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value.trim())
+            : NaN;
+
+    if (!Number.isFinite(parsed)) {
+        return 1;
+    }
+
+    return Math.min(4, Math.max(1, Math.trunc(parsed)));
 }
 
 export function extractGoogleImageData(data: unknown): string | null {

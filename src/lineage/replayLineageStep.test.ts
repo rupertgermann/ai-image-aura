@@ -39,6 +39,7 @@ describe('replayLineageStep', () => {
                 nanoBananaPro: {
                     aspectRatio: '1:1',
                     imageSize: '1K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },
@@ -90,6 +91,7 @@ describe('replayLineageStep', () => {
                 nanoBananaPro: {
                     aspectRatio: '1:1',
                     imageSize: '1K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },
@@ -138,6 +140,7 @@ describe('replayLineageStep', () => {
                 nanoBananaPro: {
                     aspectRatio: '1:1',
                     imageSize: '1K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },

@@ -23,6 +23,7 @@ export interface OpenAiImageRequest {
 
 export interface OpenAiImageResponse {
     b64_json?: string;
+    error?: string;
 }
 
 export interface OpenAiResponsesRequest {

@@ -188,6 +188,7 @@ describe('saveGeneratedImage', () => {
                         controls: {
                             aspectRatio: '16:9',
                             imageSize: '2K',
+                            batchSize: 1,
                         },
                     },
                     dimensions: {
