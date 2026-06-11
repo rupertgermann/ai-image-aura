@@ -7,7 +7,7 @@ describe('ImageWorkflow', () => {
     it('routes generate requests through the configured provider for the selected model', async () => {
         const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
             void input;
-            return { b64_json: 'generated' };
+            return [{ b64_json: 'generated' }];
         });
         const providers: ImageProviderRegistry = {
             openai: {
@@ -18,7 +18,7 @@ describe('ImageWorkflow', () => {
 
         const workflow = createImageWorkflow(providers);
 
-        const dataUrl = await workflow.generate({
+        const results = await workflow.generate({
             apiKey: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
@@ -30,7 +30,11 @@ describe('ImageWorkflow', () => {
             referenceImages: [],
         });
 
-        expect(dataUrl).toBe('data:image/png;base64,generated');
+        expect(results).toEqual([{
+            slotIndex: 0,
+            status: 'success',
+            imageUrl: 'data:image/png;base64,generated',
+        }]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             apiKey: 'sk-test',
             model: expect.objectContaining({
@@ -42,7 +46,44 @@ describe('ImageWorkflow', () => {
             quality: 'high',
             size: '1024x1024',
             background: 'transparent',
+            batchSize: 1,
             referenceImages: [],
+        }));
+    });
+
+    it('returns per-slot batch results and keeps failed slots in place', async () => {
+        const generate = vi.fn(async () => [
+            { b64_json: 'generated-0' },
+            {},
+            { b64_json: 'generated-2' },
+        ]);
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        const results = await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 3,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(results).toEqual([
+            { slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,generated-0' },
+            { slotIndex: 1, status: 'failed', error: 'No image data returned from image provider' },
+            { slotIndex: 2, status: 'success', imageUrl: 'data:image/png;base64,generated-2' },
+        ]);
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            batchSize: 3,
         }));
     });
 
@@ -79,10 +120,7 @@ describe('ImageWorkflow', () => {
     });
 
     it('falls back to the default generation size when aspect ratio value is unsupported', async () => {
-        const generate = vi.fn(async (request: Parameters<ImageProvider['generate']>[0]) => {
-            void request;
-            return { b64_json: 'generated' };
-        });
+        const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
         const workflow = createImageWorkflow({
             openai: {
                 generate,
@@ -112,7 +150,7 @@ describe('ImageWorkflow', () => {
     });
 
     it('trims generation dimensions before validating size', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
         const workflow = createImageWorkflow({
             openai: {
                 generate,
@@ -142,7 +180,7 @@ describe('ImageWorkflow', () => {
     });
 
     it('maps landscape generation dimensions to supported Nano Banana aspect ratio', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -173,7 +211,7 @@ describe('ImageWorkflow', () => {
     });
 
     it('trims Nano Banana generation dimensions before mapping aspect ratio', async () => {
-        const generate = vi.fn(async () => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -204,7 +242,7 @@ describe('ImageWorkflow', () => {
     });
 
     it('surfaces a provider-agnostic error when generation returns no image data', async () => {
-        const generate = vi.fn(async () => ({}));
+        const generate = vi.fn(async () => [{}]);
         const workflow = createImageWorkflow({
             openai: {
                 generate,
@@ -378,7 +416,7 @@ describe('googleImageProvider', () => {
             referenceImages: [reference],
         });
 
-        expect(result).toEqual({ b64_json: 'gemini-image' });
+        expect(result).toEqual([{ b64_json: 'gemini-image' }]);
         expect(fetchImpl).toHaveBeenCalledWith('https://example.test/generate', expect.objectContaining({
             method: 'POST',
             headers: {
@@ -400,9 +438,9 @@ describe('googleImageProvider', () => {
     });
 
     it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
-        const generate = vi.fn(async (request: Parameters<ImageProvider['generate']>[0]) => {
-            void request;
-            return { b64_json: 'generated' };
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            void input;
+            return [{ b64_json: 'generated' }];
         });
         const workflow = createImageWorkflow({
             openai: {
@@ -436,7 +474,7 @@ describe('googleImageProvider', () => {
     it('uses only the first 14 references for Nano Banana generation requests', async () => {
         const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
             void input;
-            return { b64_json: 'generated' };
+            return [{ b64_json: 'generated' }];
         });
         const workflow = createImageWorkflow({
             openai: {

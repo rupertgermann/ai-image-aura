@@ -3,6 +3,7 @@ import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageMo
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
 import {
+    buildGenerateResultSlots,
     buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
     notifyGenerateCompletion,
@@ -17,6 +18,7 @@ describe('Generate controller Image model archive metadata', () => {
                 quality: 'high',
                 size: '1536x1024',
                 background: 'transparent',
+                batchSize: 1,
             },
         });
 
@@ -63,6 +65,35 @@ describe('Generate controller Image model archive metadata', () => {
             height: 2304,
             references: [],
         });
+    });
+});
+
+describe('Generate controller batch result slots', () => {
+    it('keeps successful and failed batch slots independent', () => {
+        expect(buildGenerateResultSlots([
+            {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,one',
+            },
+            {
+                slotIndex: 1,
+                status: 'failed',
+                error: 'content filter',
+            },
+        ])).toEqual([
+            {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,one',
+                isSaved: false,
+            },
+            {
+                slotIndex: 1,
+                status: 'failed',
+                error: 'content filter',
+            },
+        ]);
     });
 });
 

@@ -88,6 +88,7 @@ describe('AutopilotSession', () => {
                         quality: 'high',
                         size: '1024x1024',
                         background: 'transparent',
+                        batchSize: 1,
                     },
                 },
                 iteration: { number: 1 },

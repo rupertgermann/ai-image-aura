@@ -44,6 +44,39 @@ describe('openAiImageClient', () => {
         }
     });
 
+    it('posts batched image generation requests with native n and returns every image payload', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            data: [
+                { b64_json: 'generated-0' },
+                { b64_json: 'generated-1' },
+                { b64_json: 'generated-2' },
+            ],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiImageClient.createImages({
+                apiKey: 'sk-test',
+                prompt: 'three cats',
+                batchSize: 3,
+            });
+
+            expect(result).toEqual([
+                { b64_json: 'generated-0' },
+                { b64_json: 'generated-1' },
+                { b64_json: 'generated-2' },
+            ]);
+
+            const [, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+            const body = JSON.parse(String(request.body));
+            expect(body).toMatchObject({
+                n: 3,
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('posts image edit requests with multipart form data to the edit endpoint', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
             data: [{ b64_json: 'edited' }],

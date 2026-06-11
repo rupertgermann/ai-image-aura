@@ -16,6 +16,7 @@ export interface OpenAiImageRequest {
     quality?: ImageQuality;
     size?: string;
     background?: ImageBackground;
+    batchSize?: number;
     referenceImages?: File[];
     maskImage?: File | Blob | null;
 }
@@ -37,6 +38,7 @@ export interface OpenAiResponsesResponse {
 
 export interface OpenAiImageClient {
     createImage(request: OpenAiImageRequest): Promise<OpenAiImageResponse>;
+    createImages(request: OpenAiImageRequest): Promise<OpenAiImageResponse[]>;
 }
 
 export interface OpenAiResponsesClient {
@@ -45,76 +47,104 @@ export interface OpenAiResponsesClient {
 
 export const openAiImageClient: OpenAiImageClient = {
     async createImage(request) {
-        const isEdit = request.referenceImages && request.referenceImages.length > 0;
-        const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
-        const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
-        const endpoint = isEdit ? endpoints.edit : endpoints.generate;
-
-        let body: BodyInit;
-        const headers: Record<string, string> = {
-            'Authorization': `Bearer ${request.apiKey}`,
-        };
-
-        if (isEdit) {
-            const formData = new FormData();
-            formData.append('model', apiModel);
-            formData.append('prompt', request.prompt);
-            formData.append('n', '1');
-
-            request.referenceImages?.forEach((file) => {
-                formData.append('image[]', file);
-            });
-
-            if (request.maskImage) {
-                formData.append('mask', request.maskImage);
-            }
-
-            if (request.size && request.size !== 'auto') formData.append('size', request.size);
-            if (request.quality) formData.append('quality', request.quality);
-            if (request.background && request.background !== 'auto') formData.append('background', request.background);
-
-            body = formData;
-        } else {
-            headers['Content-Type'] = 'application/json';
-            const jsonBody: {
-                model: string;
-                prompt: string;
-                n: number;
-                size?: string;
-                quality?: ImageQuality;
-                background?: 'transparent' | 'opaque';
-            } = {
-                model: apiModel,
-                prompt: request.prompt,
-                n: 1,
-            };
-            if (request.size && request.size !== 'auto') jsonBody.size = request.size;
-            if (request.quality) jsonBody.quality = request.quality;
-            if (request.background && request.background !== 'auto') jsonBody.background = request.background;
-
-            body = JSON.stringify(jsonBody);
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers,
-            body,
+        const images = await requestOpenAiImages({
+            ...request,
+            batchSize: 1,
         });
 
-        if (!response.ok) {
-            const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
-            throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
-        }
+        return images[0];
+    },
 
-        const data: { data?: OpenAiImageResponse[] } = await response.json();
-
-        if (!data.data || data.data.length === 0) {
-            throw new Error('No image data returned from OpenAI');
-        }
-
-        return data.data[0];
+    createImages(request) {
+        return requestOpenAiImages(request);
     },
 };
+
+async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiImageResponse[]> {
+    const isEdit = request.referenceImages && request.referenceImages.length > 0;
+    const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
+    const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
+    const endpoint = isEdit ? endpoints.edit : endpoints.generate;
+    const batchSize = coerceOpenAiBatchSize(request.batchSize);
+
+    let body: BodyInit;
+    const headers: Record<string, string> = {
+        'Authorization': `Bearer ${request.apiKey}`,
+    };
+
+    if (isEdit) {
+        const formData = new FormData();
+        formData.append('model', apiModel);
+        formData.append('prompt', request.prompt);
+        formData.append('n', String(batchSize));
+
+        request.referenceImages?.forEach((file) => {
+            formData.append('image[]', file);
+        });
+
+        if (request.maskImage) {
+            formData.append('mask', request.maskImage);
+        }
+
+        if (request.size && request.size !== 'auto') formData.append('size', request.size);
+        if (request.quality) formData.append('quality', request.quality);
+        if (request.background && request.background !== 'auto') formData.append('background', request.background);
+
+        body = formData;
+    } else {
+        headers['Content-Type'] = 'application/json';
+        const jsonBody: {
+            model: string;
+            prompt: string;
+            n: number;
+            size?: string;
+            quality?: ImageQuality;
+            background?: 'transparent' | 'opaque';
+        } = {
+            model: apiModel,
+            prompt: request.prompt,
+            n: batchSize,
+        };
+        if (request.size && request.size !== 'auto') jsonBody.size = request.size;
+        if (request.quality) jsonBody.quality = request.quality;
+        if (request.background && request.background !== 'auto') jsonBody.background = request.background;
+
+        body = JSON.stringify(jsonBody);
+    }
+
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
+        throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
+    }
+
+    const data: { data?: OpenAiImageResponse[] } = await response.json();
+
+    if (!data.data || data.data.length === 0) {
+        throw new Error('No image data returned from OpenAI');
+    }
+
+    return data.data;
+}
+
+function coerceOpenAiBatchSize(value: unknown): number {
+    const parsed = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value.trim())
+            : NaN;
+
+    if (!Number.isFinite(parsed)) {
+        return 1;
+    }
+
+    return Math.min(4, Math.max(1, Math.trunc(parsed)));
+}
 
 export const openAiResponsesClient: OpenAiResponsesClient = {
     async createResponse(request) {

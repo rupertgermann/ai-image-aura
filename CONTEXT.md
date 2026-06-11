@@ -44,6 +44,18 @@ An optional input image supplied alongside the prompt to guide generation or
 editing. Distinct from the **source image** in the Editor (the canvas being
 transformed), which is always the first image sent on an edit.
 
+## Generation batch
+
+The set of result slots produced by one Generate run. A generation batch uses
+one prompt, image model, control set, and reference image snapshot, even when
+some slots succeed and others fail.
+
+## Batch result
+
+One slot in a **generation batch**. A batch result may be a generated image or a
+slot-level failure. Saving a successful batch result creates its own archive
+image and lineage step while preserving the full run inputs.
+
 ## Favorite
 
 A user-marked archive image kept easy to find with the Archive favorites filter.

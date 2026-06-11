@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, getActiveGenerateArchiveFields, getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
-import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
+import { generateSessionStore, getActiveGenerateArchiveFields, getActiveGenerateControls, type GenerateDraft, type GenerateLineageSource, type GenerateSessionStore } from './GenerateSession';
+import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
@@ -30,6 +30,20 @@ interface AutopilotProgressState {
     bestIterationNumber: number | null;
     lastErrorIteration: number | null;
 }
+
+export type GenerateResultSlot =
+    | {
+        slotIndex: number;
+        status: 'success';
+        imageUrl: string;
+        isSaved: boolean;
+        archiveImageId?: string;
+    }
+    | {
+        slotIndex: number;
+        status: 'failed';
+        error: string;
+    };
 
 interface UseGenerateControllerOptions {
     apiKey: string | null;
@@ -196,7 +210,10 @@ export function useGenerateController({
     isDocumentHidden = () => typeof document !== 'undefined' && document.hidden,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
+    const [currentBatchResults, setCurrentBatchResults] = useState<GenerateResultSlot[]>([]);
     const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
+    const [currentRunDraft, setCurrentRunDraft] = useState<GenerateDraft | null>(null);
+    const [currentRunLineageSource, setCurrentRunLineageSource] = useState<GenerateLineageSource | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
@@ -219,6 +236,12 @@ export function useGenerateController({
         ]).then(([value, references]) => {
             if (value) {
                 setCurrentResult(value);
+                setCurrentBatchResults([{
+                    slotIndex: 0,
+                    status: 'success',
+                    imageUrl: value,
+                    isSaved: false,
+                }]);
                 setCurrentResultReferences(references);
             }
         });
@@ -252,26 +275,47 @@ export function useGenerateController({
         try {
             const controls = getActiveGenerateControls(draft);
             const usedReferenceImages = referenceImages.slice();
+            const runDraft = cloneGenerateDraft(draft);
+            const runLineageSource = session.loadLineageSource();
             const usedReferences = await snapshotGeneratedReferenceImages({
                 referenceImages: usedReferenceImages,
                 serializeReferenceFiles: workflow.serializeReferences,
             });
-            const imageUrl = await workflow.generate({
+            const results = await workflow.generate({
                 apiKey,
                 model: draft.model,
                 prompt: draft.prompt,
                 quality: controls.quality,
                 aspectRatio: controls.aspectRatio,
                 background: controls.background,
+                batchSize: controls.batchSize,
                 imageSize: controls.imageSize,
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
                 referenceImages: usedReferenceImages,
             });
+            const imageUrl = getFirstSuccessfulGeneratedImage(results);
+            const batchResults = buildGenerateResultSlots(results);
+
+            setCurrentBatchResults(batchResults);
+            setCurrentRunDraft(runDraft);
+            setCurrentRunLineageSource(runLineageSource);
+            setCurrentResultReferences(usedReferences);
+
+            if (!imageUrl) {
+                setCurrentResult(null);
+                updateDraft({ isSaved: false });
+                setError('Generation failed for every batch result.');
+                await session.clearCurrentResult();
+                completionNotification = {
+                    title: 'Generation failed',
+                    body: 'Every batch result failed.',
+                };
+                return;
+            }
 
             setCurrentResult(imageUrl);
-            setCurrentResultReferences(usedReferences);
             updateDraft({ isSaved: false });
             await session.saveCurrentResult(imageUrl, usedReferences);
             completionNotification = {
@@ -316,6 +360,9 @@ export function useGenerateController({
         setLoading(true);
         setError(null);
         setCurrentResultReferences(null);
+        setCurrentBatchResults([]);
+        setCurrentRunDraft(null);
+        setCurrentRunLineageSource(session.loadLineageSource());
         setAutopilot({
             running: true,
             iterations: [],
@@ -353,6 +400,13 @@ export function useGenerateController({
                         bestIterationNumber: runningBest.iterationNumber,
                     }));
                     setCurrentResult(iteration.imageDataUrl);
+                    setCurrentBatchResults([{
+                        slotIndex: 0,
+                        status: 'success',
+                        imageUrl: iteration.imageDataUrl,
+                        isSaved: false,
+                        archiveImageId: iteration.archiveImageId,
+                    }]);
                 },
                 onError: (error, iterationNumber) => {
                     setError(error.message);
@@ -369,7 +423,19 @@ export function useGenerateController({
                     serializeReferenceFiles: workflow.serializeReferences,
                 });
                 setCurrentResult(outcome.result.bestIteration.imageDataUrl);
+                setCurrentBatchResults([{
+                    slotIndex: 0,
+                    status: 'success',
+                    imageUrl: outcome.result.bestIteration.imageDataUrl,
+                    isSaved: false,
+                    archiveImageId: outcome.result.bestIteration.archiveImageId,
+                }]);
                 setCurrentResultReferences(usedReferences);
+                setCurrentRunDraft(null);
+                setCurrentRunLineageSource({
+                    archiveImageId: outcome.result.bestIteration.archiveImageId,
+                    stepId: outcome.result.bestIteration.stepId,
+                });
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
                     isSaved: false,
@@ -422,17 +488,19 @@ export function useGenerateController({
         autopilotSessionRef.current?.cancel();
     }, []);
 
-    const save = useCallback(async () => {
-        if (!currentResult || draft.isSaved) {
+    const saveResult = useCallback(async (slotIndex: number) => {
+        const slot = currentBatchResults.find((result) => result.slotIndex === slotIndex);
+        if (!slot || slot.status !== 'success' || slot.isSaved) {
             return;
         }
 
         try {
+            const archiveImageId = crypto.randomUUID();
             const image = await buildGeneratedArchiveImageForSave({
-                id: crypto.randomUUID(),
-                url: currentResult,
+                id: archiveImageId,
+                url: slot.imageUrl,
                 timestamp: new Date().toISOString(),
-                draft,
+                draft: currentRunDraft ?? draft,
                 usedReferences: currentResultReferences,
                 serializeReferences,
             });
@@ -440,12 +508,25 @@ export function useGenerateController({
                 saveImage: async (image) => Promise.resolve(onSaveImage(image)),
                 lineageStore: lineage,
                 sessionStore: session,
+                lineageSource: currentRunLineageSource,
             });
-            updateDraft({ isSaved: true });
+            const nextResults = currentBatchResults.map((result) => result.slotIndex === slotIndex && result.status === 'success'
+                ? {
+                    ...result,
+                    isSaved: true,
+                    archiveImageId,
+                }
+                : result);
+            setCurrentBatchResults(nextResults);
+            updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [currentResult, currentResultReferences, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
+    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
+
+    const save = useCallback(async () => {
+        await saveResult(0);
+    }, [saveResult]);
 
     const download = useCallback(() => {
         if (!currentResult) {
@@ -455,14 +536,25 @@ export function useGenerateController({
         downloadGeneratedImage(currentResult);
     }, [currentResult]);
 
+    const downloadResult = useCallback((slotIndex: number) => {
+        const slot = currentBatchResults.find((result) => result.slotIndex === slotIndex);
+        if (slot?.status === 'success') {
+            downloadGeneratedImage(slot.imageUrl);
+        }
+    }, [currentBatchResults]);
+
     const clear = useCallback(async () => {
         setCurrentResult(null);
+        setCurrentBatchResults([]);
         setCurrentResultReferences(null);
+        setCurrentRunDraft(null);
+        setCurrentRunLineageSource(null);
         await session.clearCurrentResult();
     }, [session]);
 
     return {
         currentResult,
+        currentBatchResults,
         loading,
         error,
         autopilot,
@@ -471,7 +563,36 @@ export function useGenerateController({
         runAutopilot,
         cancelAutopilot,
         save,
+        saveResult,
         download,
+        downloadResult,
         clear,
+    };
+}
+
+export function buildGenerateResultSlots(results: GenerateBatchResult[]): GenerateResultSlot[] {
+    return results.map((result) => result.status === 'success'
+        ? {
+            slotIndex: result.slotIndex,
+            status: 'success',
+            imageUrl: result.imageUrl,
+            isSaved: false,
+        }
+        : result);
+}
+
+function areAllSuccessfulResultsSaved(results: GenerateResultSlot[]) {
+    const successfulResults = results.filter((result): result is Extract<GenerateResultSlot, { status: 'success' }> =>
+        result.status === 'success',
+    );
+
+    return successfulResults.length > 0 && successfulResults.every((result) => result.isSaved);
+}
+
+function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {
+    return {
+        ...draft,
+        gptImage2: { ...draft.gptImage2 },
+        nanoBananaPro: { ...draft.nanoBananaPro },
     };
 }

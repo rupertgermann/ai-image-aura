@@ -3,6 +3,7 @@ import { satisfactionEvaluator } from './SatisfactionEvaluator';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { getFirstSuccessfulGeneratedImage } from '../image-workflow/ImageWorkflow';
 import { buildAutopilotLineageMetadata } from '../lineage/autopilotLineageMetadata';
 
 export const DEFAULT_AUTOPILOT_MAX_ITERATIONS = 4;
@@ -67,7 +68,7 @@ class DefaultAutopilotSession implements AutopilotSession {
     }
 
     async run(): Promise<AutopilotSessionResult> {
-        const generate = this.input.generate ?? ((input) => imageWorkflow.generate(input));
+        const generate = this.input.generate ?? generateSingleImage;
         const evaluate = this.input.evaluate ?? ((input) => satisfactionEvaluator.evaluate(input));
         const refine = this.input.refine ?? ((input) => promptRefiner.refine(input));
         const maxIterations = Math.max(1, Math.min(MAX_AUTOPILOT_ITERATIONS, this.input.maxIterations ?? DEFAULT_AUTOPILOT_MAX_ITERATIONS));
@@ -188,6 +189,20 @@ function pickBetterIteration(best: AutopilotIteration | null, candidate: Autopil
 
 export function createAutopilotSession(input: CreateAutopilotSessionInput): AutopilotSession {
     return new DefaultAutopilotSession(input);
+}
+
+async function generateSingleImage(input: GenerateImageInput): Promise<string> {
+    const results = await imageWorkflow.generate({
+        ...input,
+        batchSize: 1,
+    });
+    const imageDataUrl = getFirstSuccessfulGeneratedImage(results);
+
+    if (!imageDataUrl) {
+        throw new Error('No image data returned from image provider');
+    }
+
+    return imageDataUrl;
 }
 
 function snapshotAutopilotSettings(

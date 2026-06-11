@@ -66,6 +66,7 @@ describe('saveGeneratedImage', () => {
                             quality: savedImage.quality,
                             size: savedImage.aspectRatio,
                             background: savedImage.background,
+                            batchSize: 1,
                         },
                     },
                     dimensions: {
@@ -266,6 +267,39 @@ describe('saveGeneratedImage', () => {
         expect(steps.at(-1)).toEqual(expect.objectContaining({
             parentStepId: 'step-1',
         }));
+    });
+
+    it('can reuse a captured lineage source for multiple batch result saves', async () => {
+        const lineage = createStore();
+        const sessionStore = createSessionStore(null);
+        await lineage.save({
+            archiveImageId: 'source-image',
+            parentStepId: null,
+            stepType: 'generation',
+            timestamp: '2026-04-04T09:00:00.000Z',
+            metadata: { prompt: 'source prompt' },
+        });
+        const lineageSource = { archiveImageId: 'source-image' };
+
+        await saveGeneratedImage(createArchiveImage({ id: 'batch-result-1' }), {
+            saveImage: vi.fn(async (nextImage) => nextImage),
+            lineageStore: lineage,
+            sessionStore,
+            lineageSource,
+        });
+        await saveGeneratedImage(createArchiveImage({ id: 'batch-result-2' }), {
+            saveImage: vi.fn(async (nextImage) => nextImage),
+            lineageStore: lineage,
+            sessionStore,
+            lineageSource,
+        });
+
+        await expect(lineage.getByArchiveImageId('batch-result-1')).resolves.toEqual([
+            expect.objectContaining({ parentStepId: 'step-1' }),
+        ]);
+        await expect(lineage.getByArchiveImageId('batch-result-2')).resolves.toEqual([
+            expect.objectContaining({ parentStepId: 'step-1' }),
+        ]);
     });
 
     it('does not write provenance when archive save fails', async () => {

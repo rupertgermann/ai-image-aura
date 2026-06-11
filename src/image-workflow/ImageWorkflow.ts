@@ -20,6 +20,7 @@ export interface GenerateImageInput {
     quality: ImageQuality;
     aspectRatio: string;
     background: ImageBackground;
+    batchSize?: number;
     imageSize?: NanoBananaImageSize;
     style: string;
     lighting: string;
@@ -40,8 +41,20 @@ export interface EditImageInput {
     imageSize?: NanoBananaImageSize;
 }
 
+export type GenerateBatchResult =
+    | {
+        slotIndex: number;
+        status: 'success';
+        imageUrl: string;
+    }
+    | {
+        slotIndex: number;
+        status: 'failed';
+        error: string;
+    };
+
 export interface ImageWorkflow {
-    generate(input: GenerateImageInput): Promise<string>;
+    generate(input: GenerateImageInput): Promise<GenerateBatchResult[]>;
     edit(input: EditImageInput): Promise<string>;
     serializeReferences(files: File[]): Promise<string[]>;
     hydrateReferences(dataUrls: string[]): File[];
@@ -55,16 +68,41 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
                 quality: input.quality,
                 aspectRatio: input.aspectRatio,
                 background: input.background,
+                batchSize: input.batchSize,
                 imageSize: input.imageSize,
                 referenceImages: input.referenceImages,
             });
 
-            return requestImageDataUrl(provider.generate({
-                apiKey: input.apiKey,
-                model,
-                prompt: buildGenerationPrompt(input),
-                ...providerRequest,
-            }));
+            const batchSize = providerRequest.batchSize ?? 1;
+
+            try {
+                const responses = await provider.generate({
+                    apiKey: input.apiKey,
+                    model,
+                    prompt: buildGenerationPrompt(input),
+                    ...providerRequest,
+                });
+                const results = mapGenerateBatchResults(responses, batchSize);
+
+                if (!hasSuccessfulGeneratedImage(results) && batchSize === 1) {
+                    const [result] = results;
+                    throw new Error(result?.status === 'failed'
+                        ? result.error
+                        : 'No image data returned from image provider');
+                }
+
+                return results;
+            } catch (error) {
+                if (batchSize === 1) {
+                    throw error;
+                }
+
+                return Array.from({ length: batchSize }, (_, slotIndex) => ({
+                    slotIndex,
+                    status: 'failed' as const,
+                    error: error instanceof Error ? error.message : 'Image generation failed',
+                }));
+            }
         },
 
         async edit(input) {
@@ -141,3 +179,31 @@ const requestImageDataUrl = async (request: Promise<ImageProviderResponse>) => {
 
     return `data:image/png;base64,${result.b64_json}`;
 };
+
+export function getFirstSuccessfulGeneratedImage(results: GenerateBatchResult[]): string | null {
+    return results.find((result) => result.status === 'success')?.imageUrl ?? null;
+}
+
+function hasSuccessfulGeneratedImage(results: GenerateBatchResult[]): boolean {
+    return getFirstSuccessfulGeneratedImage(results) !== null;
+}
+
+function mapGenerateBatchResults(responses: ImageProviderResponse[], batchSize: number): GenerateBatchResult[] {
+    return Array.from({ length: batchSize }, (_, slotIndex) => {
+        const response = responses[slotIndex];
+
+        if (response?.b64_json) {
+            return {
+                slotIndex,
+                status: 'success',
+                imageUrl: `data:image/png;base64,${response.b64_json}`,
+            };
+        }
+
+        return {
+            slotIndex,
+            status: 'failed',
+            error: 'No image data returned from image provider',
+        };
+    });
+}

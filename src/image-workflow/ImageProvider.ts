@@ -17,6 +17,7 @@ export interface ImageProviderRequest {
     aspectRatio?: NanoBananaAspectRatio;
     imageSize?: NanoBananaImageSize;
     preserveSourceDimensions?: boolean;
+    batchSize?: number;
     referenceImages?: File[];
     maskImage?: File | Blob | null;
 }
@@ -24,14 +25,14 @@ export interface ImageProviderRequest {
 export type ImageProviderResponse = OpenAiImageResponse;
 
 export interface ImageProvider {
-    generate(request: ImageProviderRequest): Promise<ImageProviderResponse>;
+    generate(request: ImageProviderRequest): Promise<ImageProviderResponse[]>;
     edit(request: ImageProviderRequest): Promise<ImageProviderResponse>;
 }
 
 export type ImageProviderRegistry = Partial<Record<Provider, ImageProvider>>;
 
 export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImageClient): ImageProvider {
-    const createImage = (request: ImageProviderRequest) => client.createImage({
+    const toOpenAiRequest = (request: ImageProviderRequest) => ({
         apiKey: request.apiKey,
         apiModel: request.model.apiModel,
         endpoints: request.model.endpoints,
@@ -39,13 +40,14 @@ export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImag
         quality: request.quality,
         size: request.size,
         background: request.background,
+        batchSize: request.batchSize,
         referenceImages: request.referenceImages,
         maskImage: request.maskImage,
     });
 
     return {
-        generate: createImage,
-        edit: createImage,
+        generate: (request) => client.createImages(toOpenAiRequest(request)),
+        edit: (request) => client.createImage(toOpenAiRequest(request)),
     };
 }
 
@@ -78,7 +80,7 @@ export function createGoogleImageProvider(fetchImpl: typeof fetch = fetch): Imag
     };
 
     return {
-        generate: createImage,
+        generate: async (request) => [await createImage(request)],
         edit: createImage,
     };
 }
