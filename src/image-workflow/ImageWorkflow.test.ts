@@ -883,7 +883,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'a luminous teapot city',
             aspectRatio: '16:9',
