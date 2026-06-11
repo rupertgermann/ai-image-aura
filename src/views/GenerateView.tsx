@@ -200,6 +200,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const removeReferenceAt = referenceCollection.removeAt;
     const {
         currentResult,
+        currentPartialResult,
         currentBatchResults,
         loading,
         error,
@@ -653,8 +654,17 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>
 
-                <section className={`preview-panel glass-panel${showBatchGrid ? ' batch-preview-panel' : ''}`}>
-                    {showBatchGrid ? (
+                <section className={`preview-panel glass-panel${showBatchGrid && !currentPartialResult ? ' batch-preview-panel' : ''}`}>
+                    {currentPartialResult ? (
+                        <div className="result-container partial-result-container">
+                            <img src={currentPartialResult} alt="In-progress generation preview" className="result-image partial-result-image" />
+                            <div className="partial-result-banner glass-panel">
+                                <Loader2 className="spin" size={18} />
+                                <strong>Generating preview</strong>
+                                <span>Final result is still rendering.</span>
+                            </div>
+                        </div>
+                    ) : showBatchGrid ? (
                         <div className="result-batch-container">
                             <div className="result-batch-grid">
                                 {currentBatchResults.map((result) => (

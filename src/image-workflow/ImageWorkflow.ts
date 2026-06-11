@@ -26,6 +26,7 @@ export interface GenerateImageInput {
     lighting: string;
     palette: string;
     referenceImages: File[];
+    onPartialImage?: (imageUrl: string) => void;
 }
 
 export interface EditImageInput {
@@ -74,6 +75,9 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
             });
 
             const batchSize = providerRequest.batchSize ?? 1;
+            const onPartialImage = batchSize === 1 && model.capabilities.partialImageStreaming
+                ? createPartialImageHandler(input.onPartialImage)
+                : undefined;
 
             try {
                 const responses = await provider.generate({
@@ -81,6 +85,7 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
                     model,
                     prompt: buildGenerationPrompt(input),
                     ...providerRequest,
+                    ...(onPartialImage ? { onPartialImage } : {}),
                 });
                 const results = mapGenerateBatchResults(responses, batchSize);
 
@@ -148,6 +153,24 @@ const buildGenerationPrompt = (input: GenerateImageInput) => {
         ? `${input.prompt}, ${modifiers.join(', ')}`
         : input.prompt;
 };
+
+function createPartialImageHandler(onPartialImage: GenerateImageInput['onPartialImage']) {
+    if (!onPartialImage) {
+        return undefined;
+    }
+
+    return (partial: ImageProviderResponse) => {
+        if (!partial.b64_json) {
+            return;
+        }
+
+        try {
+            onPartialImage(`data:image/png;base64,${partial.b64_json}`);
+        } catch {
+            // Partial previews should not interrupt the final generation result.
+        }
+    };
+}
 
 const createEditSourceFile = (sourceImage: Blob) => {
     return new File([sourceImage], 'edit-input.png', {

@@ -23,6 +23,7 @@ import {
     type CompletionNotificationPayload,
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
+import { resolveImageModelConfig } from '../utils/openaiModels';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -96,6 +97,37 @@ interface SaveGenerateResultSlotsInput {
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
     createArchiveImageId?: () => string;
     now?: () => Date;
+}
+
+interface StartGeneratePartialPreviewRunInput {
+    getCurrentRunId: () => number;
+    setCurrentRunId: (runId: number) => void;
+    setCurrentPartialResult: (imageUrl: string | null) => void;
+}
+
+export function startGeneratePartialPreviewRun({
+    getCurrentRunId,
+    setCurrentRunId,
+    setCurrentPartialResult,
+}: StartGeneratePartialPreviewRunInput) {
+    const runId = getCurrentRunId() + 1;
+    setCurrentRunId(runId);
+    setCurrentPartialResult(null);
+
+    const isCurrentRun = () => getCurrentRunId() === runId;
+
+    return {
+        update(imageUrl: string) {
+            if (isCurrentRun()) {
+                setCurrentPartialResult(imageUrl);
+            }
+        },
+        clear() {
+            if (isCurrentRun()) {
+                setCurrentPartialResult(null);
+            }
+        },
+    };
 }
 
 export function buildGeneratedArchiveImage({
@@ -268,6 +300,7 @@ export function useGenerateController({
     const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
     const [currentRunDraft, setCurrentRunDraft] = useState<GenerateDraft | null>(null);
     const [currentRunLineageSource, setCurrentRunLineageSource] = useState<GenerateLineageSource | null>(null);
+    const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
@@ -278,6 +311,7 @@ export function useGenerateController({
         lastErrorIteration: null,
     });
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
+    const partialRunIdRef = useRef(0);
 
     const updateDraft = useCallback((patch: Partial<GenerateDraft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
@@ -315,6 +349,13 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        const partialPreviewRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => partialRunIdRef.current,
+            setCurrentRunId: (runId) => {
+                partialRunIdRef.current = runId;
+            },
+            setCurrentPartialResult,
+        });
         setAutopilot((current) => ({
             ...current,
             running: false,
@@ -327,6 +368,9 @@ export function useGenerateController({
             const usedReferenceImages = referenceImages.slice();
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
+            const onPartialImage = shouldStreamGeneratePartials(draft)
+                ? partialPreviewRun.update
+                : undefined;
             const usedReferences = await snapshotGeneratedReferenceImages({
                 referenceImages: usedReferenceImages,
                 serializeReferenceFiles: workflow.serializeReferences,
@@ -344,6 +388,7 @@ export function useGenerateController({
                 lighting: draft.lighting,
                 palette: draft.palette,
                 referenceImages: usedReferenceImages,
+                onPartialImage,
             });
             const imageUrl = getFirstSuccessfulGeneratedImage(results);
             const batchResults = buildGenerateResultSlots(results);
@@ -358,6 +403,7 @@ export function useGenerateController({
             setCurrentRunDraft(runDraft);
             setCurrentRunLineageSource(runLineageSource);
             setCurrentResultReferences(usedReferences);
+            partialPreviewRun.clear();
             await session.saveCurrentBatch(batchSnapshot);
 
             if (!imageUrl) {
@@ -379,6 +425,7 @@ export function useGenerateController({
             };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to generate image';
+            partialPreviewRun.clear();
             setError(message);
             completionNotification = {
                 title: 'Generation failed',
@@ -414,6 +461,7 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        setCurrentPartialResult(null);
         setCurrentResultReferences(null);
         setCurrentBatchResults([]);
         setCurrentRunDraft(null);
@@ -623,6 +671,7 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         setCurrentResult(null);
+        setCurrentPartialResult(null);
         setCurrentBatchResults([]);
         setCurrentResultReferences(null);
         setCurrentRunDraft(null);
@@ -632,6 +681,7 @@ export function useGenerateController({
 
     return {
         currentResult,
+        currentPartialResult,
         currentBatchResults,
         loading,
         error,
@@ -647,6 +697,13 @@ export function useGenerateController({
         downloadResult,
         clear,
     };
+}
+
+export function shouldStreamGeneratePartials(draft: GenerateDraft) {
+    const model = resolveImageModelConfig(draft.model);
+    const controls = getActiveGenerateControls(draft);
+
+    return model.capabilities.partialImageStreaming && controls.batchSize === 1;
 }
 
 export function buildGenerateResultSlots(results: GenerateBatchResult[]): GenerateResultSlot[] {

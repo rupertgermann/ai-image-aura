@@ -77,6 +77,94 @@ describe('openAiImageClient', () => {
         }
     });
 
+    it('streams partial image events and resolves with the completed image', async () => {
+        const fetchMock = vi.fn(async () => createSseResponse([
+            'event: image_generation.partial_image\ndata: {"type":"image_generation.partial_image","b64_json":"partial-0"}\n\n',
+            'event: image_generation.partial_image\ndata: {"type":"image_generation.partial_image","partial_image":{"b64_json":"partial-1"}}\n\n',
+            'event: image_generation.completed\ndata: {"type":"image_generation.completed","data":[{"b64_json":"final"}]}\n\n',
+        ]));
+        const partials: Array<{ b64_json?: string }> = [];
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat appearing slowly',
+                onPartialImage: (partial) => partials.push(partial),
+            });
+
+            expect(result).toEqual({ b64_json: 'final' });
+            expect(partials).toEqual([
+                { b64_json: 'partial-0' },
+                { b64_json: 'partial-1' },
+            ]);
+
+            const [, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+            const body = JSON.parse(String(request.body));
+            expect(body).toMatchObject({
+                stream: true,
+                partial_images: 3,
+                n: 1,
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('falls back to the normal JSON response when streaming is requested but SSE is not returned', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            data: [{ b64_json: 'generated' }],
+        }), {
+            headers: { 'Content-Type': 'application/json' },
+        }));
+        const onPartialImage = vi.fn();
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat in a hat',
+                onPartialImage,
+            });
+
+            expect(result).toEqual({ b64_json: 'generated' });
+            expect(onPartialImage).not.toHaveBeenCalled();
+
+            const [, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+            const body = JSON.parse(String(request.body));
+            expect(body.stream).toBe(true);
+            expect(body.partial_images).toBe(3);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('does not request streaming for batched image generation', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            data: [
+                { b64_json: 'generated-0' },
+                { b64_json: 'generated-1' },
+            ],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await openAiImageClient.createImages({
+                apiKey: 'sk-test',
+                prompt: 'two cats',
+                batchSize: 2,
+                onPartialImage: vi.fn(),
+            });
+
+            const [, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+            const body = JSON.parse(String(request.body));
+            expect(body.stream).toBeUndefined();
+            expect(body.partial_images).toBeUndefined();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('posts image edit requests with multipart form data to the edit endpoint', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
             data: [{ b64_json: 'edited' }],
@@ -156,6 +244,19 @@ describe('openAiImageClient', () => {
         }
     });
 });
+
+function createSseResponse(chunks: string[]) {
+    const encoder = new TextEncoder();
+
+    return new Response(new ReadableStream({
+        start(controller) {
+            chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
+            controller.close();
+        },
+    }), {
+        headers: { 'Content-Type': 'text/event-stream' },
+    });
+}
 
 describe('openAiResponsesClient', () => {
     it('posts image reasoning requests to the responses endpoint', async () => {

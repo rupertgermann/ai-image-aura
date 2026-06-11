@@ -118,6 +118,111 @@ describe('ImageWorkflow', () => {
         ]);
     });
 
+    it('forwards single-slot OpenAI partial images as data URLs', async () => {
+        const onPartialImage = vi.fn();
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            input.onPartialImage?.({ b64_json: 'partial' });
+            return [{ b64_json: 'generated' }];
+        });
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 1,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+            onPartialImage,
+        });
+
+        expect(onPartialImage).toHaveBeenCalledWith('data:image/png;base64,partial');
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            onPartialImage: expect.any(Function),
+        }));
+    });
+
+    it('does not forward partial image callbacks for batch generation', async () => {
+        const onPartialImage = vi.fn();
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            input.onPartialImage?.({ b64_json: 'partial' });
+            return [
+                { b64_json: 'generated-0' },
+                { b64_json: 'generated-1' },
+            ];
+        });
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 2,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+            onPartialImage,
+        });
+
+        expect(onPartialImage).not.toHaveBeenCalled();
+        expect(generate).toHaveBeenCalledWith(expect.not.objectContaining({
+            onPartialImage: expect.any(Function),
+        }));
+    });
+
+    it('does not forward partial image callbacks for Nano Banana generation', async () => {
+        const onPartialImage = vi.fn();
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            input.onPartialImage?.({ b64_json: 'partial' });
+            return [{ b64_json: 'generated' }];
+        });
+        const workflow = createImageWorkflow({
+            openai: {
+                generate: vi.fn(),
+                edit: vi.fn(),
+            },
+            google: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await workflow.generate({
+            apiKey: 'google-key',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            prompt: 'teapot city',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+            onPartialImage,
+        });
+
+        expect(onPartialImage).not.toHaveBeenCalled();
+        expect(generate).toHaveBeenCalledWith(expect.not.objectContaining({
+            onPartialImage: expect.any(Function),
+        }));
+    });
 
     it('routes edit requests through the configured provider for the default model', async () => {
         const edit = vi.fn(async () => ({ b64_json: 'edited' }));
@@ -440,7 +545,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'a luminous teapot city',
             aspectRatio: '16:9',
@@ -467,6 +572,44 @@ describe('googleImageProvider', () => {
             aspectRatio: '16:9',
             imageSize: '2K',
         });
+    });
+
+    it('ignores partial image callbacks for Gemini requests', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'gemini-image' } }],
+                },
+            }],
+        })));
+        const provider = createGoogleImageProvider(fetchImpl);
+        const onPartialImage = vi.fn();
+
+        const result = await provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+                capabilities: { transformMask: false, partialImageStreaming: false },
+            },
+            prompt: 'a luminous teapot city',
+            onPartialImage,
+        });
+
+        expect(result).toEqual([{ b64_json: 'gemini-image' }]);
+        expect(onPartialImage).not.toHaveBeenCalled();
+
+        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
+        const body = JSON.parse(String(requestInit.body));
+        expect(JSON.stringify(body)).not.toContain('partial');
+        expect(JSON.stringify(body)).not.toContain('stream');
     });
 
     it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
@@ -577,7 +720,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'make it cinematic',
             preserveSourceDimensions: true,
@@ -632,7 +775,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
-                capabilities: { transformMask: false },
+                capabilities: { transformMask: false, partialImageStreaming: false },
             },
             prompt: 'a luminous teapot city',
             referenceImages: [],

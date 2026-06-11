@@ -24,6 +24,7 @@ export interface ImageModelConfig {
     parameters: Partial<Record<'size' | 'quality' | 'background' | 'aspectRatio' | 'imageSize', string>>;
     capabilities: {
         transformMask: boolean;
+        partialImageStreaming: boolean;
     };
 }
 
@@ -52,6 +53,7 @@ export const IMAGE_MODEL_REGISTRY = {
         },
         capabilities: {
             transformMask: true,
+            partialImageStreaming: true,
         },
     },
     [NANO_BANANA_PRO_IMAGE_MODEL]: {
@@ -69,6 +71,7 @@ export const IMAGE_MODEL_REGISTRY = {
         },
         capabilities: {
             transformMask: false,
+            partialImageStreaming: false,
         },
     },
 } as const satisfies Record<string, ImageModelConfig>;

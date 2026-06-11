@@ -8,7 +8,9 @@ import {
     buildGeneratedArchiveImageForSave,
     notifyGenerateCompletion,
     saveGenerateResultSlots,
+    shouldStreamGeneratePartials,
     snapshotGeneratedReferenceImages,
+    startGeneratePartialPreviewRun,
 } from './useGenerateController';
 
 describe('Generate controller Image model archive metadata', () => {
@@ -186,6 +188,72 @@ describe('Generate controller batch result slots', () => {
                 archiveImageId: 'archive-3',
             },
         ]);
+    });
+});
+
+describe('Generate controller partial preview gating', () => {
+    it('streams partial previews only for single-slot GPT Image 2 runs', () => {
+        expect(shouldStreamGeneratePartials(createDraft({
+            model: OPENAI_IMAGE_MODEL,
+            gptImage2: {
+                quality: 'high',
+                size: '1024x1024',
+                background: 'auto',
+                batchSize: 1,
+            },
+        }))).toBe(true);
+
+        expect(shouldStreamGeneratePartials(createDraft({
+            model: OPENAI_IMAGE_MODEL,
+            gptImage2: {
+                quality: 'high',
+                size: '1024x1024',
+                background: 'auto',
+                batchSize: 2,
+            },
+        }))).toBe(false);
+
+        expect(shouldStreamGeneratePartials(createDraft({
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+        }))).toBe(false);
+    });
+
+    it('updates and clears partial preview state only for the active run', () => {
+        let currentRunId = 0;
+        let currentPartialResult: string | null = 'data:image/png;base64,old';
+        const setCurrentPartialResult = vi.fn((imageUrl: string | null) => {
+            currentPartialResult = imageUrl;
+        });
+
+        const firstRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => currentRunId,
+            setCurrentRunId: (runId) => {
+                currentRunId = runId;
+            },
+            setCurrentPartialResult,
+        });
+
+        expect(currentPartialResult).toBeNull();
+
+        firstRun.update('data:image/png;base64,partial-1');
+        expect(currentPartialResult).toBe('data:image/png;base64,partial-1');
+
+        const secondRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => currentRunId,
+            setCurrentRunId: (runId) => {
+                currentRunId = runId;
+            },
+            setCurrentPartialResult,
+        });
+
+        secondRun.update('data:image/png;base64,partial-2');
+        firstRun.update('data:image/png;base64,stale-partial');
+        firstRun.clear();
+
+        expect(currentPartialResult).toBe('data:image/png;base64,partial-2');
+
+        secondRun.clear();
+        expect(currentPartialResult).toBeNull();
     });
 });
 
