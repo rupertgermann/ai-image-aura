@@ -34,6 +34,9 @@ describe('ImageWorkflow', () => {
             slotIndex: 0,
             status: 'success',
             imageUrl: 'data:image/png;base64,generated',
+            actualParameters: {
+                elapsedMs: expect.any(Number),
+            },
         }]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             apiKey: 'sk-test',
@@ -78,13 +81,68 @@ describe('ImageWorkflow', () => {
         });
 
         expect(results).toEqual([
-            { slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,generated-0' },
+            {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,generated-0',
+                actualParameters: {
+                    elapsedMs: expect.any(Number),
+                },
+            },
             { slotIndex: 1, status: 'failed', error: 'No image data returned from image provider' },
-            { slotIndex: 2, status: 'success', imageUrl: 'data:image/png;base64,generated-2' },
+            {
+                slotIndex: 2,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,generated-2',
+                actualParameters: {
+                    elapsedMs: expect.any(Number),
+                },
+            },
         ]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             batchSize: 3,
         }));
+    });
+
+    it('attaches actual parameters and elapsed time to successful generated results', async () => {
+        const generate = vi.fn(async () => [{
+            b64_json: 'generated',
+            revised_prompt: 'refined mountain prompt',
+            size: '1536x1024',
+            quality: 'high',
+        }]);
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        }, {
+            now: createNowSequence([1000, 1275]),
+        });
+
+        const results = await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'medium',
+            aspectRatio: 'auto',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(results).toEqual([{
+            slotIndex: 0,
+            status: 'success',
+            imageUrl: 'data:image/png;base64,generated',
+            actualParameters: {
+                revisedPrompt: 'refined mountain prompt',
+                size: '1536x1024',
+                quality: 'high',
+                elapsedMs: 275,
+            },
+        }]);
     });
 
     it('routes edit requests through the configured provider for the default model', async () => {
@@ -417,6 +475,9 @@ describe('googleImageProvider', () => {
         });
 
         expect(result).toEqual([{ b64_json: 'gemini-image' }]);
+        expect(result[0]).not.toHaveProperty('revised_prompt');
+        expect(result[0]).not.toHaveProperty('size');
+        expect(result[0]).not.toHaveProperty('quality');
         expect(fetchImpl).toHaveBeenCalledWith('https://example.test/generate', expect.objectContaining({
             method: 'POST',
             headers: {
@@ -614,3 +675,8 @@ describe('googleImageProvider', () => {
         });
     });
 });
+
+function createNowSequence(values: number[]) {
+    let index = 0;
+    return () => values[index++] ?? values.at(-1) ?? 0;
+}

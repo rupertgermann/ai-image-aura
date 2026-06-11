@@ -44,6 +44,33 @@ describe('openAiImageClient', () => {
         }
     });
 
+    it('extracts revised prompt and actual parameters from image responses', async () => {
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            size: '1536x1024',
+            quality: 'high',
+            data: [{ b64_json: 'generated', revised_prompt: 'a refined cat prompt' }],
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat',
+                size: 'auto',
+                quality: 'medium',
+            });
+
+            expect(result).toEqual({
+                b64_json: 'generated',
+                revised_prompt: 'a refined cat prompt',
+                size: '1536x1024',
+                quality: 'high',
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('posts batched image generation requests with native n and returns every image payload', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
             data: [

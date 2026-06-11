@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import type { ArchiveImage } from '../db/types';
+import type { ActualImageParameters, ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
 import { generateSessionStore, getActiveGenerateArchiveFields, getActiveGenerateControls, type GenerateDraft, type GenerateLineageSource, type GenerateSessionStore } from './GenerateSession';
 import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
@@ -37,6 +37,7 @@ export type GenerateResultSlot =
         status: 'success';
         imageUrl: string;
         isSaved: boolean;
+        actualParameters?: ActualImageParameters;
         archiveImageId?: string;
     }
     | {
@@ -72,6 +73,7 @@ interface BuildGeneratedArchiveImageInput {
     timestamp: string;
     draft: GenerateDraft;
     references: string[];
+    actualParameters?: ActualImageParameters;
 }
 
 interface SnapshotGeneratedReferenceImagesInput {
@@ -85,6 +87,7 @@ interface BuildGeneratedArchiveImageForSaveInput {
     timestamp: string;
     draft: GenerateDraft;
     usedReferences: string[] | null;
+    actualParameters?: ActualImageParameters;
     serializeReferences: () => Promise<string[]>;
 }
 
@@ -94,6 +97,7 @@ export function buildGeneratedArchiveImage({
     timestamp,
     draft,
     references,
+    actualParameters,
 }: BuildGeneratedArchiveImageInput): ArchiveImage {
     const archiveFields = getActiveGenerateArchiveFields(draft);
 
@@ -111,6 +115,7 @@ export function buildGeneratedArchiveImage({
         style: draft.style,
         lighting: draft.lighting,
         palette: draft.palette,
+        actualParameters,
         references,
     };
 }
@@ -128,6 +133,7 @@ export async function buildGeneratedArchiveImageForSave({
     timestamp,
     draft,
     usedReferences,
+    actualParameters,
     serializeReferences,
 }: BuildGeneratedArchiveImageForSaveInput): Promise<ArchiveImage> {
     const references = usedReferences ?? await serializeReferences();
@@ -137,6 +143,7 @@ export async function buildGeneratedArchiveImageForSave({
         url,
         timestamp,
         draft,
+        actualParameters,
         references,
     });
 }
@@ -502,6 +509,7 @@ export function useGenerateController({
                 timestamp: new Date().toISOString(),
                 draft: currentRunDraft ?? draft,
                 usedReferences: currentResultReferences,
+                actualParameters: slot.actualParameters,
                 serializeReferences,
             });
             await saveGeneratedImage(image, {
@@ -555,6 +563,7 @@ export function useGenerateController({
     return {
         currentResult,
         currentBatchResults,
+        currentRunDraft,
         loading,
         error,
         autopilot,
@@ -577,6 +586,7 @@ export function buildGenerateResultSlots(results: GenerateBatchResult[]): Genera
             status: 'success',
             imageUrl: result.imageUrl,
             isSaved: false,
+            actualParameters: result.actualParameters,
         }
         : result);
 }

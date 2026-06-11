@@ -26,6 +26,7 @@ function validateGenerateMetadata(metadata: Record<string, unknown>) {
     validateImageModel(metadata.imageModel);
     validateDimensions(metadata.dimensions);
     validateReferenceImages(metadata.referenceImages);
+    validateActualParameters(metadata.actualParameters);
 }
 
 function validateEditorMetadata(metadata: Record<string, unknown>) {
@@ -82,6 +83,26 @@ function validateReferenceImages(value: unknown) {
     requireFiniteNumber(referenceImages.count, 'lineage referenceImages count');
     if (!Array.isArray(referenceImages.ids) || !referenceImages.ids.every((id) => typeof id === 'string')) {
         throw new Error('Invalid lineage referenceImages ids');
+    }
+}
+
+function validateActualParameters(value: unknown) {
+    if (value === undefined) {
+        return;
+    }
+
+    const actualParameters = requireRecord(value, 'lineage actualParameters');
+    if (actualParameters.revisedPrompt !== undefined) {
+        requireString(actualParameters.revisedPrompt, 'lineage actualParameters revisedPrompt');
+    }
+    if (actualParameters.size !== undefined) {
+        requireString(actualParameters.size, 'lineage actualParameters size');
+    }
+    if (actualParameters.quality !== undefined) {
+        requireString(actualParameters.quality, 'lineage actualParameters quality');
+    }
+    if (actualParameters.elapsedMs !== undefined) {
+        requireFiniteNumber(actualParameters.elapsedMs, 'lineage actualParameters elapsedMs');
     }
 }
 

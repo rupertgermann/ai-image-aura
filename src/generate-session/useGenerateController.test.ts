@@ -28,6 +28,12 @@ describe('Generate controller Image model archive metadata', () => {
             timestamp: '2026-06-05T12:00:00.000Z',
             draft,
             references: ['data:image/png;base64,ref'],
+            actualParameters: {
+                revisedPrompt: 'refined prompt',
+                size: '1536x1024',
+                quality: 'high',
+                elapsedMs: 420,
+            },
         })).toMatchObject({
             id: 'generated-openai',
             model: OPENAI_IMAGE_MODEL,
@@ -37,6 +43,12 @@ describe('Generate controller Image model archive metadata', () => {
             width: 1536,
             height: 1024,
             references: ['data:image/png;base64,ref'],
+            actualParameters: {
+                revisedPrompt: 'refined prompt',
+                size: '1536x1024',
+                quality: 'high',
+                elapsedMs: 420,
+            },
         });
     });
 
@@ -75,6 +87,10 @@ describe('Generate controller batch result slots', () => {
                 slotIndex: 0,
                 status: 'success',
                 imageUrl: 'data:image/png;base64,one',
+                actualParameters: {
+                    elapsedMs: 350,
+                    size: '1536x1024',
+                },
             },
             {
                 slotIndex: 1,
@@ -87,6 +103,10 @@ describe('Generate controller batch result slots', () => {
                 status: 'success',
                 imageUrl: 'data:image/png;base64,one',
                 isSaved: false,
+                actualParameters: {
+                    elapsedMs: 350,
+                    size: '1536x1024',
+                },
             },
             {
                 slotIndex: 1,

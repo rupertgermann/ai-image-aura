@@ -1,5 +1,5 @@
 import { archiveMetadataPort } from '../db/AuraPersistence';
-import type { ArchiveLayerStack } from '../db/types';
+import type { ActualImageParameters, ArchiveLayerStack } from '../db/types';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { storage, type StorageProvider } from '../services/StorageService';
 import { getArchiveImageBlobKey } from './ArchiveAssets';
@@ -25,6 +25,7 @@ interface ArchiveMetadataRecord {
     style?: string;
     lighting?: string;
     palette?: string;
+    actualParameters?: ActualImageParameters;
     referenceIds: number[];
     layerStack?: ArchiveLayerStack;
 }
@@ -80,6 +81,7 @@ export async function recoverArchiveMetadataFromManifests(
             style: image.style,
             lighting: image.lighting,
             palette: image.palette,
+            actualParameters: image.actualParameters,
             referenceIds: image.references.map((_, index) => index),
             layerStack: image.layerStack ? createLayerStackMetadata(image.layerStack) : undefined,
         });

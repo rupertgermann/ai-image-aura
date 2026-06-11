@@ -14,6 +14,12 @@ describe('recoverArchiveMetadataFromManifests', () => {
         const generateMetadata = createTypedGenerateMetadata();
         const editorMetadata = createTypedEditorMetadata();
         const autopilotMetadata = createTypedAutopilotMetadata();
+        const actualParameters = {
+            revisedPrompt: 'refined prompt',
+            size: '1536x1024',
+            quality: 'high',
+            elapsedMs: 930,
+        };
 
         const summary = await recoverArchiveMetadataFromManifests({
             version: 1,
@@ -31,6 +37,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
                     style: 'none',
                     lighting: 'none',
                     palette: 'none',
+                    actualParameters,
                     imageFileName: 'aura-image-1.png',
                     references: [{ fileName: 'aura-image-1-reference-0.png' }],
                     layerStack: {
@@ -122,6 +129,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
             aspectRatio: '1536x1024',
             referenceIds: [0],
             model: 'gpt-image-2',
+            actualParameters,
             layerStack: expect.objectContaining({
                 layers: [
                     expect.objectContaining({ id: 'base', assetUrl: '' }),

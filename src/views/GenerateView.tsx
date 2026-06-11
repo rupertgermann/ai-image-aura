@@ -6,7 +6,13 @@ import { useGenerateController } from '../generate-session/useGenerateController
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
+import ActualParametersPanel from '../components/ActualParametersPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import {
+    buildActualParameterDetails,
+    getRequestedGenerateParameters,
+    hasActualParameterDetails,
+} from '../generate-session/actualParameters';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
@@ -201,6 +207,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const {
         currentResult,
         currentBatchResults,
+        currentRunDraft,
         loading,
         error,
         autopilot,
@@ -326,6 +333,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const successfulBatchResults = currentBatchResults.filter((result) => result.status === 'success');
     const showBatchGrid = currentBatchResults.length > 1 || currentBatchResults.some((result) => result.status === 'failed');
     const singleResultSlot = !showBatchGrid ? successfulBatchResults[0] : null;
+    const requestedParameters = getRequestedGenerateParameters(currentRunDraft ?? draft);
+    const singleResultActualDetails = singleResultSlot
+        ? buildActualParameterDetails({
+            actualParameters: singleResultSlot.actualParameters,
+            requestedParameters,
+        })
+        : null;
+    const hasSingleResultActualDetails = singleResultActualDetails
+        ? hasActualParameterDetails(singleResultActualDetails)
+        : false;
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
         updateDraft({
             [activeModelDraftKey]: {
@@ -665,6 +682,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         {result.status === 'success' ? (
                                             <>
                                                 <img src={result.imageUrl} alt={`Generated result ${result.slotIndex + 1}`} className="result-slot-image" />
+                                                <ActualParametersPanel
+                                                    compact
+                                                    details={buildActualParameterDetails({
+                                                        actualParameters: result.actualParameters,
+                                                        requestedParameters,
+                                                    })}
+                                                />
                                                 <div className="result-slot-actions">
                                                     <button
                                                         onClick={() => { void saveResult(result.slotIndex); }}
@@ -692,8 +716,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </button>
                         </div>
                     ) : currentResult ? (
-                        <div className="result-container">
+                        <div className={`result-container${hasSingleResultActualDetails ? ' has-actual-parameters' : ''}`}>
                             <img src={currentResult} alt="Generated result" className="result-image" />
+                            {singleResultActualDetails && (
+                                <ActualParametersPanel details={singleResultActualDetails} />
+                            )}
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
                                 <div className="autopilot-result-banner glass-panel">
                                     <strong>

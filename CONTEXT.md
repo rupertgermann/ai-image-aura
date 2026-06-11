@@ -56,6 +56,14 @@ One slot in a **generation batch**. A batch result may be a generated image or a
 slot-level failure. Saving a successful batch result creates its own archive
 image and lineage step while preserving the full run inputs.
 
+## Actual parameters
+
+Provider- or workflow-reported facts about a completed generated image, such as
+the provider-rewritten prompt, applied size or quality, and elapsed generation
+time. Distinct from requested generation settings, which are what the user asked
+for before the provider processed the run. Actual parameters are recorded only
+when reported or measured; do not infer missing provider values.
+
 ## Favorite
 
 A user-marked archive image kept easy to find with the Archive favorites filter.
