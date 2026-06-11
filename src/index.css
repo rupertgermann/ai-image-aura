@@ -857,6 +857,13 @@ textarea.aura-input {
     text-align: center;
 }
 
+.result-batch-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--element-gap);
+    flex-wrap: wrap;
+}
+
 .result-batch-clear {
     align-self: flex-end;
 }

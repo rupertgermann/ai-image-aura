@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
-import { generateSessionStore, getActiveGenerateArchiveFields, getActiveGenerateControls, type GenerateDraft, type GenerateLineageSource, type GenerateSessionStore } from './GenerateSession';
+import {
+    generateSessionStore,
+    getActiveGenerateArchiveFields,
+    getActiveGenerateControls,
+    type GenerateBatchSnapshot,
+    type GenerateDraft,
+    type GenerateLineageSource,
+    type GenerateResultSlot,
+    type GenerateSessionStore,
+} from './GenerateSession';
 import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
@@ -31,20 +40,6 @@ interface AutopilotProgressState {
     lastErrorIteration: number | null;
 }
 
-export type GenerateResultSlot =
-    | {
-        slotIndex: number;
-        status: 'success';
-        imageUrl: string;
-        isSaved: boolean;
-        archiveImageId?: string;
-    }
-    | {
-        slotIndex: number;
-        status: 'failed';
-        error: string;
-    };
-
 interface UseGenerateControllerOptions {
     apiKey: string | null;
     reasoningApiKey?: string | null;
@@ -56,7 +51,7 @@ interface UseGenerateControllerOptions {
     serializeReferences: () => Promise<string[]>;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
-    session?: Pick<GenerateSessionStore, 'loadCurrentResult' | 'loadCurrentResultReferences' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
+    session?: Pick<GenerateSessionStore, 'loadCurrentBatch' | 'saveCurrentBatch' | 'saveCurrentResult' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     createAutopilot?: typeof createAutopilotSession;
     evaluate?: typeof satisfactionEvaluator.evaluate;
@@ -86,6 +81,21 @@ interface BuildGeneratedArchiveImageForSaveInput {
     draft: GenerateDraft;
     usedReferences: string[] | null;
     serializeReferences: () => Promise<string[]>;
+}
+
+interface SaveGenerateResultSlotsInput {
+    results: GenerateResultSlot[];
+    slotIndexes?: number[];
+    draft: GenerateDraft;
+    runDraft: GenerateDraft | null;
+    usedReferences: string[] | null;
+    runLineageSource: GenerateLineageSource | null;
+    serializeReferences: () => Promise<string[]>;
+    saveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
+    sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
+    createArchiveImageId?: () => string;
+    now?: () => Date;
 }
 
 export function buildGeneratedArchiveImage({
@@ -139,6 +149,50 @@ export async function buildGeneratedArchiveImageForSave({
         draft,
         references,
     });
+}
+
+export async function saveGenerateResultSlots({
+    results,
+    slotIndexes,
+    draft,
+    runDraft,
+    usedReferences,
+    runLineageSource,
+    serializeReferences,
+    saveImage,
+    lineageStore,
+    sessionStore,
+    createArchiveImageId = () => crypto.randomUUID(),
+    now = () => new Date(),
+}: SaveGenerateResultSlotsInput): Promise<GenerateResultSlot[]> {
+    const selectedSlotIndexes = new Set(slotIndexes);
+    const shouldSaveSlot = (slot: GenerateResultSlot): slot is Extract<GenerateResultSlot, { status: 'success' }> => (
+        slot.status === 'success' &&
+        !slot.isSaved &&
+        (!slotIndexes || selectedSlotIndexes.has(slot.slotIndex))
+    );
+    let nextResults = results;
+
+    for (const slot of results.filter(shouldSaveSlot)) {
+        const archiveImageId = createArchiveImageId();
+        const image = await buildGeneratedArchiveImageForSave({
+            id: archiveImageId,
+            url: slot.imageUrl,
+            timestamp: now().toISOString(),
+            draft: runDraft ?? draft,
+            usedReferences,
+            serializeReferences,
+        });
+        await saveGeneratedImage(image, {
+            saveImage: async (image) => Promise.resolve(saveImage(image)),
+            lineageStore,
+            sessionStore,
+            lineageSource: runLineageSource,
+        });
+        nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, archiveImageId);
+    }
+
+    return nextResults;
 }
 
 export function notifyGenerateCompletion({
@@ -230,20 +284,16 @@ export function useGenerateController({
     }, [setDraft]);
 
     useEffect(() => {
-        Promise.all([
-            session.loadCurrentResult(),
-            session.loadCurrentResultReferences(),
-        ]).then(([value, references]) => {
-            if (value) {
-                setCurrentResult(value);
-                setCurrentBatchResults([{
-                    slotIndex: 0,
-                    status: 'success',
-                    imageUrl: value,
-                    isSaved: false,
-                }]);
-                setCurrentResultReferences(references);
+        session.loadCurrentBatch().then((batch) => {
+            if (!batch) {
+                return;
             }
+
+            setCurrentResult(getFirstSuccessfulResultSlot(batch.results)?.imageUrl ?? null);
+            setCurrentBatchResults(batch.results);
+            setCurrentResultReferences(batch.references);
+            setCurrentRunDraft(batch.draft);
+            setCurrentRunLineageSource(batch.lineageSource);
         });
 
         session.consumeTransferredReferences().then((references) => {
@@ -297,17 +347,23 @@ export function useGenerateController({
             });
             const imageUrl = getFirstSuccessfulGeneratedImage(results);
             const batchResults = buildGenerateResultSlots(results);
+            const batchSnapshot: GenerateBatchSnapshot = {
+                results: batchResults,
+                references: usedReferences,
+                draft: runDraft,
+                lineageSource: runLineageSource,
+            };
 
             setCurrentBatchResults(batchResults);
             setCurrentRunDraft(runDraft);
             setCurrentRunLineageSource(runLineageSource);
             setCurrentResultReferences(usedReferences);
+            await session.saveCurrentBatch(batchSnapshot);
 
             if (!imageUrl) {
                 setCurrentResult(null);
                 updateDraft({ isSaved: false });
                 setError('Generation failed for every batch result.');
-                await session.clearCurrentResult();
                 completionNotification = {
                     title: 'Generation failed',
                     body: 'Every batch result failed.',
@@ -317,7 +373,6 @@ export function useGenerateController({
 
             setCurrentResult(imageUrl);
             updateDraft({ isSaved: false });
-            await session.saveCurrentResult(imageUrl, usedReferences);
             completionNotification = {
                 title: 'Generation complete',
                 body: 'Your image is ready in AURA.',
@@ -488,6 +543,13 @@ export function useGenerateController({
         autopilotSessionRef.current?.cancel();
     }, []);
 
+    const persistCurrentBatch = useCallback((results: GenerateResultSlot[]) => session.saveCurrentBatch({
+        results,
+        references: currentResultReferences,
+        draft: currentRunDraft ?? draft,
+        lineageSource: currentRunLineageSource,
+    }), [currentResultReferences, currentRunDraft, currentRunLineageSource, draft, session]);
+
     const saveResult = useCallback(async (slotIndex: number) => {
         const slot = currentBatchResults.find((result) => result.slotIndex === slotIndex);
         if (!slot || slot.status !== 'success' || slot.isSaved) {
@@ -495,34 +557,50 @@ export function useGenerateController({
         }
 
         try {
-            const archiveImageId = crypto.randomUUID();
-            const image = await buildGeneratedArchiveImageForSave({
-                id: archiveImageId,
-                url: slot.imageUrl,
-                timestamp: new Date().toISOString(),
-                draft: currentRunDraft ?? draft,
+            const nextResults = await saveGenerateResultSlots({
+                results: currentBatchResults,
+                slotIndexes: [slot.slotIndex],
+                draft,
+                runDraft: currentRunDraft,
                 usedReferences: currentResultReferences,
+                runLineageSource: currentRunLineageSource,
                 serializeReferences,
-            });
-            await saveGeneratedImage(image, {
-                saveImage: async (image) => Promise.resolve(onSaveImage(image)),
+                saveImage: onSaveImage,
                 lineageStore: lineage,
                 sessionStore: session,
-                lineageSource: currentRunLineageSource,
             });
-            const nextResults = currentBatchResults.map((result) => result.slotIndex === slotIndex && result.status === 'success'
-                ? {
-                    ...result,
-                    isSaved: true,
-                    archiveImageId,
-                }
-                : result);
             setCurrentBatchResults(nextResults);
+            await persistCurrentBatch(nextResults);
             updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Failed to save image');
         }
-    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, serializeReferences, session, updateDraft]);
+    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
+
+    const saveAllResults = useCallback(async () => {
+        if (!hasUnsavedSuccessfulResults(currentBatchResults)) {
+            return;
+        }
+
+        try {
+            const nextResults = await saveGenerateResultSlots({
+                results: currentBatchResults,
+                draft,
+                runDraft: currentRunDraft,
+                usedReferences: currentResultReferences,
+                runLineageSource: currentRunLineageSource,
+                serializeReferences,
+                saveImage: onSaveImage,
+                lineageStore: lineage,
+                sessionStore: session,
+            });
+            setCurrentBatchResults(nextResults);
+            await persistCurrentBatch(nextResults);
+            updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to save batch');
+        }
+    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
 
     const save = useCallback(async () => {
         await saveResult(0);
@@ -564,6 +642,7 @@ export function useGenerateController({
         cancelAutopilot,
         save,
         saveResult,
+        saveAllResults,
         download,
         downloadResult,
         clear,
@@ -587,6 +666,30 @@ function areAllSuccessfulResultsSaved(results: GenerateResultSlot[]) {
     );
 
     return successfulResults.length > 0 && successfulResults.every((result) => result.isSaved);
+}
+
+function hasUnsavedSuccessfulResults(results: GenerateResultSlot[]) {
+    return results.some((result) => result.status === 'success' && !result.isSaved);
+}
+
+function getFirstSuccessfulResultSlot(results: GenerateResultSlot[]) {
+    return results.find((result): result is Extract<GenerateResultSlot, { status: 'success' }> =>
+        result.status === 'success',
+    ) ?? null;
+}
+
+function markGenerateResultSlotSaved(
+    results: GenerateResultSlot[],
+    slotIndex: number,
+    archiveImageId: string,
+): GenerateResultSlot[] {
+    return results.map((result) => result.slotIndex === slotIndex && result.status === 'success'
+        ? {
+            ...result,
+            isSaved: true,
+            archiveImageId,
+        }
+        : result);
 }
 
 function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {

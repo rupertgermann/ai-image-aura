@@ -210,6 +210,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         cancelAutopilot,
         save,
         saveResult,
+        saveAllResults,
         download,
         downloadResult,
         clear,
@@ -324,6 +325,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const activeModelDraftKey = getImageModelDraftKey(model);
     const activeModelControls = draft[activeModelDraftKey] as Record<string, string | number>;
     const successfulBatchResults = currentBatchResults.filter((result) => result.status === 'success');
+    const hasUnsavedSuccessfulBatchResults = successfulBatchResults.some((result) => !result.isSaved);
     const showBatchGrid = currentBatchResults.length > 1 || currentBatchResults.some((result) => result.status === 'failed');
     const singleResultSlot = !showBatchGrid ? successfulBatchResults[0] : null;
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
@@ -687,9 +689,18 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => { void clear(); }} className="btn-ghost result-batch-clear">
-                                <Trash2 size={18} /> Clear Results
-                            </button>
+                            <div className="result-batch-actions">
+                                <button
+                                    onClick={() => { void saveAllResults(); }}
+                                    className="btn-amber"
+                                    disabled={!hasUnsavedSuccessfulBatchResults}
+                                >
+                                    <Archive size={18} /> Save All
+                                </button>
+                                <button onClick={() => { void clear(); }} className="btn-ghost result-batch-clear">
+                                    <Trash2 size={18} /> Clear Results
+                                </button>
+                            </div>
                         </div>
                     ) : currentResult ? (
                         <div className="result-container">

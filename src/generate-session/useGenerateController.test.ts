@@ -7,6 +7,7 @@ import {
     buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
     notifyGenerateCompletion,
+    saveGenerateResultSlots,
     snapshotGeneratedReferenceImages,
 } from './useGenerateController';
 
@@ -92,6 +93,96 @@ describe('Generate controller batch result slots', () => {
                 slotIndex: 1,
                 status: 'failed',
                 error: 'content filter',
+            },
+        ]);
+    });
+
+    it('save-all archives each unsaved successful slot without duplicating saved or failed slots', async () => {
+        const savedImages: string[] = [];
+        const nextResults = await saveGenerateResultSlots({
+            results: [
+                {
+                    slotIndex: 0,
+                    status: 'success',
+                    imageUrl: 'data:image/png;base64,one',
+                    isSaved: false,
+                },
+                {
+                    slotIndex: 1,
+                    status: 'success',
+                    imageUrl: 'data:image/png;base64,two',
+                    isSaved: true,
+                    archiveImageId: 'already-saved',
+                },
+                {
+                    slotIndex: 2,
+                    status: 'failed',
+                    error: 'content filter',
+                },
+                {
+                    slotIndex: 3,
+                    status: 'success',
+                    imageUrl: 'data:image/png;base64,four',
+                    isSaved: false,
+                },
+            ],
+            draft: createDraft({ prompt: 'batch prompt' }),
+            runDraft: null,
+            usedReferences: [],
+            runLineageSource: null,
+            serializeReferences: vi.fn(async () => []),
+            saveImage: vi.fn(async (image) => {
+                savedImages.push(image.id);
+                return image;
+            }),
+            lineageStore: {
+                getByArchiveImageId: vi.fn(async () => []),
+                save: vi.fn(async (input) => ({
+                    id: input.id ?? 'lineage-step',
+                    archiveImageId: input.archiveImageId,
+                    parentStepId: input.parentStepId ?? null,
+                    stepType: input.stepType,
+                    timestamp: input.timestamp ?? '2026-06-05T12:00:00.000Z',
+                    metadata: input.metadata,
+                })),
+            },
+            sessionStore: {
+                loadLineageSource: vi.fn(() => null),
+                clearLineageSource: vi.fn(),
+            },
+            createArchiveImageId: vi.fn()
+                .mockReturnValueOnce('archive-0')
+                .mockReturnValueOnce('archive-3'),
+            now: vi.fn(() => new Date('2026-06-05T12:00:00.000Z')),
+        });
+
+        expect(savedImages).toEqual(['archive-0', 'archive-3']);
+        expect(nextResults).toEqual([
+            {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,one',
+                isSaved: true,
+                archiveImageId: 'archive-0',
+            },
+            {
+                slotIndex: 1,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,two',
+                isSaved: true,
+                archiveImageId: 'already-saved',
+            },
+            {
+                slotIndex: 2,
+                status: 'failed',
+                error: 'content filter',
+            },
+            {
+                slotIndex: 3,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,four',
+                isSaved: true,
+                archiveImageId: 'archive-3',
             },
         ]);
     });

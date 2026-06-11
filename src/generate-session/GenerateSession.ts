@@ -23,6 +23,7 @@ import {
 const GENERATE_DRAFT_KEY = 'aura_generate_draft';
 const GENERATE_CURRENT_RESULT_KEY = 'generate_current_result';
 const GENERATE_CURRENT_RESULT_REFERENCES_KEY = 'generate_current_result_references';
+const GENERATE_CURRENT_BATCH_KEY = 'generate_current_batch';
 const GENERATE_TRANSFERRED_REFERENCES_KEY = 'generate_transferred_references';
 const GENERATE_LINEAGE_SOURCE_KEY = 'generate_lineage_source';
 
@@ -57,6 +58,27 @@ export interface GenerateLineageSource {
     stepId?: string | null;
 }
 
+export type GenerateResultSlot =
+    | {
+        slotIndex: number;
+        status: 'success';
+        imageUrl: string;
+        isSaved: boolean;
+        archiveImageId?: string;
+    }
+    | {
+        slotIndex: number;
+        status: 'failed';
+        error: string;
+    };
+
+export interface GenerateBatchSnapshot {
+    results: GenerateResultSlot[];
+    references: string[] | null;
+    draft: GenerateDraft | null;
+    lineageSource: GenerateLineageSource | null;
+}
+
 export interface GenerateSessionStore {
     readDraft(): GenerateDraft;
     writeDraft(draft: GenerateDraft): void;
@@ -64,6 +86,8 @@ export interface GenerateSessionStore {
     loadLineageSource(): GenerateLineageSource | null;
     saveLineageSource(source: GenerateLineageSource): void;
     clearLineageSource(): void;
+    loadCurrentBatch(): Promise<GenerateBatchSnapshot | null>;
+    saveCurrentBatch(batch: GenerateBatchSnapshot): Promise<void>;
     loadCurrentResult(): Promise<string | null>;
     loadCurrentResultReferences(): Promise<string[] | null>;
     saveCurrentResult(result: string, usedReferences?: string[] | null): Promise<void>;
@@ -161,38 +185,71 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         this.localStorage.removeItem(GENERATE_LINEAGE_SOURCE_KEY);
     }
 
-    loadCurrentResult(): Promise<string | null> {
-        return this.blobStorage.load(GENERATE_CURRENT_RESULT_KEY);
-    }
+    async loadCurrentBatch(): Promise<GenerateBatchSnapshot | null> {
+        const storedBatch = await this.blobStorage.load(GENERATE_CURRENT_BATCH_KEY);
+        const batch = storedBatch ? parseGenerateBatchSnapshot(storedBatch) : null;
 
-    async loadCurrentResultReferences(): Promise<string[] | null> {
-        const value = await this.blobStorage.load(GENERATE_CURRENT_RESULT_REFERENCES_KEY);
-        if (!value) {
-            return null;
+        if (batch) {
+            return batch;
         }
 
-        try {
-            const references = JSON.parse(value) as unknown;
-            return Array.isArray(references) && references.every((reference) => typeof reference === 'string')
-                ? references
-                : null;
-        } catch {
-            return null;
-        }
+        return this.loadLegacyCurrentBatch();
     }
 
-    async saveCurrentResult(result: string, usedReferences: string[] | null = null): Promise<void> {
-        await this.blobStorage.save(GENERATE_CURRENT_RESULT_KEY, result);
-        if (Array.isArray(usedReferences)) {
-            await this.blobStorage.save(GENERATE_CURRENT_RESULT_REFERENCES_KEY, JSON.stringify(usedReferences));
+    async saveCurrentBatch(batch: GenerateBatchSnapshot): Promise<void> {
+        const snapshot = sanitizeGenerateBatchSnapshot(batch);
+
+        if (!snapshot) {
+            await this.clearCurrentResult();
             return;
         }
 
-        await this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY);
+        await this.blobStorage.save(GENERATE_CURRENT_BATCH_KEY, JSON.stringify(snapshot));
+        const firstSuccessfulResult = getFirstSuccessfulResultSlot(snapshot.results);
+
+        if (firstSuccessfulResult) {
+            await this.blobStorage.save(GENERATE_CURRENT_RESULT_KEY, firstSuccessfulResult.imageUrl);
+            if (Array.isArray(snapshot.references)) {
+                await this.blobStorage.save(GENERATE_CURRENT_RESULT_REFERENCES_KEY, JSON.stringify(snapshot.references));
+                return;
+            }
+
+            await this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY);
+            return;
+        }
+
+        await Promise.all([
+            this.blobStorage.remove(GENERATE_CURRENT_RESULT_KEY),
+            this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY),
+        ]);
+    }
+
+    async loadCurrentResult(): Promise<string | null> {
+        const batch = await this.loadCurrentBatch();
+        return getFirstSuccessfulResultSlot(batch?.results ?? [])?.imageUrl ?? null;
+    }
+
+    async loadCurrentResultReferences(): Promise<string[] | null> {
+        return (await this.loadCurrentBatch())?.references ?? null;
+    }
+
+    async saveCurrentResult(result: string, usedReferences: string[] | null = null): Promise<void> {
+        await this.saveCurrentBatch({
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: result,
+                isSaved: false,
+            }],
+            references: usedReferences,
+            draft: null,
+            lineageSource: null,
+        });
     }
 
     async clearCurrentResult(): Promise<void> {
         await Promise.all([
+            this.blobStorage.remove(GENERATE_CURRENT_BATCH_KEY),
             this.blobStorage.remove(GENERATE_CURRENT_RESULT_KEY),
             this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY),
         ]);
@@ -242,6 +299,42 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
 
     private clearLegacyDraftKeys() {
         Object.values(LEGACY_KEYS).forEach((key) => this.localStorage.removeItem(key));
+    }
+
+    private async loadLegacyCurrentBatch(): Promise<GenerateBatchSnapshot | null> {
+        const result = await this.blobStorage.load(GENERATE_CURRENT_RESULT_KEY);
+
+        if (!result) {
+            return null;
+        }
+
+        return {
+            results: [{
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: result,
+                isSaved: false,
+            }],
+            references: await this.loadLegacyCurrentResultReferences(),
+            draft: null,
+            lineageSource: this.loadLineageSource(),
+        };
+    }
+
+    private async loadLegacyCurrentResultReferences(): Promise<string[] | null> {
+        const value = await this.blobStorage.load(GENERATE_CURRENT_RESULT_REFERENCES_KEY);
+        if (!value) {
+            return null;
+        }
+
+        try {
+            const references = JSON.parse(value) as unknown;
+            return Array.isArray(references) && references.every((reference) => typeof reference === 'string')
+                ? references
+                : null;
+        } catch {
+            return null;
+        }
     }
 }
 
@@ -338,3 +431,103 @@ export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModel
 }
 
 export const getImageModelDraftKey = resolveImageModelDraftKey;
+
+function parseGenerateBatchSnapshot(value: string): GenerateBatchSnapshot | null {
+    try {
+        return sanitizeGenerateBatchSnapshot(JSON.parse(value) as unknown);
+    } catch {
+        return null;
+    }
+}
+
+function sanitizeGenerateBatchSnapshot(value: unknown): GenerateBatchSnapshot | null {
+    const record = asRecord(value);
+    if (!record) {
+        return null;
+    }
+
+    const results = Array.isArray(record.results)
+        ? record.results.map(sanitizeGenerateResultSlot).filter((result): result is GenerateResultSlot => result !== null)
+        : [];
+
+    if (results.length === 0) {
+        return null;
+    }
+
+    return {
+        results,
+        references: sanitizeReferenceDataUrls(record.references),
+        draft: record.draft ? sanitizeGenerateDraft(record.draft as DraftLike) : null,
+        lineageSource: sanitizeGenerateLineageSource(record.lineageSource),
+    };
+}
+
+function sanitizeGenerateResultSlot(value: unknown): GenerateResultSlot | null {
+    const record = asRecord(value);
+    if (!record) {
+        return null;
+    }
+
+    const slotIndex = coerceSlotIndex(record.slotIndex);
+    if (slotIndex === null) {
+        return null;
+    }
+
+    if (record.status === 'success' && typeof record.imageUrl === 'string' && record.imageUrl.length > 0) {
+        return {
+            slotIndex,
+            status: 'success',
+            imageUrl: record.imageUrl,
+            isSaved: record.isSaved === true,
+            ...(typeof record.archiveImageId === 'string' && record.archiveImageId
+                ? { archiveImageId: record.archiveImageId }
+                : {}),
+        };
+    }
+
+    if (record.status === 'failed' && typeof record.error === 'string' && record.error.length > 0) {
+        return {
+            slotIndex,
+            status: 'failed',
+            error: record.error,
+        };
+    }
+
+    return null;
+}
+
+function sanitizeReferenceDataUrls(value: unknown): string[] | null {
+    return Array.isArray(value) && value.every((reference) => typeof reference === 'string')
+        ? value
+        : null;
+}
+
+function sanitizeGenerateLineageSource(value: unknown): GenerateLineageSource | null {
+    const record = asRecord(value);
+    if (!record || typeof record.archiveImageId !== 'string' || !record.archiveImageId) {
+        return null;
+    }
+
+    return {
+        archiveImageId: record.archiveImageId,
+        stepId: typeof record.stepId === 'string' ? record.stepId : null,
+    };
+}
+
+function getFirstSuccessfulResultSlot(results: GenerateResultSlot[]) {
+    return results.find((result): result is Extract<GenerateResultSlot, { status: 'success' }> =>
+        result.status === 'success',
+    ) ?? null;
+}
+
+function coerceSlotIndex(value: unknown): number | null {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+        return null;
+    }
+
+    return value;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
