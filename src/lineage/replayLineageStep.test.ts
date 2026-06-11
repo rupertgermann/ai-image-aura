@@ -34,6 +34,7 @@ describe('replayLineageStep', () => {
                     quality: 'high',
                     size: '1536x1024',
                     background: 'transparent',
+                    batchSize: 1,
                 },
                 nanoBananaPro: {
                     aspectRatio: '1:1',
@@ -84,6 +85,7 @@ describe('replayLineageStep', () => {
                     quality: 'high',
                     size: '1536x1024',
                     background: 'transparent',
+                    batchSize: 1,
                 },
                 nanoBananaPro: {
                     aspectRatio: '1:1',
@@ -131,6 +133,7 @@ describe('replayLineageStep', () => {
                     quality: 'high',
                     size: '1536x1024',
                     background: 'transparent',
+                    batchSize: 1,
                 },
                 nanoBananaPro: {
                     aspectRatio: '1:1',

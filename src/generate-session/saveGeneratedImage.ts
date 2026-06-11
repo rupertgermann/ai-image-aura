@@ -7,10 +7,13 @@ export interface SaveGeneratedImageDeps {
     saveImage: (image: ArchiveImage) => Promise<ArchiveImage>;
     lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
+    lineageSource?: GenerateLineageSource | null;
 }
 
 export async function saveGeneratedImage(image: ArchiveImage, deps: SaveGeneratedImageDeps): Promise<ArchiveImage> {
-    const lineageSource = deps.sessionStore.loadLineageSource();
+    const lineageSource = deps.lineageSource !== undefined
+        ? deps.lineageSource
+        : deps.sessionStore.loadLineageSource();
     const savedImage = await deps.saveImage(image);
 
     await deps.lineageStore.save({

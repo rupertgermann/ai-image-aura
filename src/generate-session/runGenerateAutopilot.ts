@@ -1,8 +1,9 @@
 import { createAutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import type { LineageStore } from '../lineage/LineageStore';
-import type { ImageWorkflow } from '../image-workflow/ImageWorkflow';
+import type { GenerateImageInput, ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
+import { getFirstSuccessfulGeneratedImage } from '../image-workflow/ImageWorkflow';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
@@ -48,6 +49,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
             quality: controls.quality,
             aspectRatio: controls.aspectRatio,
             background: controls.background,
+            batchSize: 1,
             imageSize: controls.imageSize,
             style: input.draft.style,
             lighting: input.draft.lighting,
@@ -60,7 +62,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
         maxIterations: input.maxIterations,
         satisfactionThreshold: input.satisfactionThreshold,
-        generate: (request) => workflow.generate(request),
+        generate: (request) => generateSingleImage(workflow, request),
         evaluate: input.evaluate,
         refine: input.refine,
         lineageStore: input.lineageStore,
@@ -88,4 +90,21 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
         usedReferenceImages: usedReferenceImages.slice(),
         usedReferences,
     };
+}
+
+async function generateSingleImage(
+    workflow: Pick<ImageWorkflow, 'generate'>,
+    request: GenerateImageInput,
+): Promise<string> {
+    const results = await workflow.generate({
+        ...request,
+        batchSize: 1,
+    });
+    const imageDataUrl = getFirstSuccessfulGeneratedImage(results);
+
+    if (!imageDataUrl) {
+        throw new Error('No image data returned from image provider');
+    }
+
+    return imageDataUrl;
 }

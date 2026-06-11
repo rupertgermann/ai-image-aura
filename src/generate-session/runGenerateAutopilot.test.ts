@@ -51,6 +51,7 @@ describe('runGenerateAutopilot', () => {
                     quality: 'high',
                     size: '1024x1024',
                     background: 'transparent',
+                    batchSize: 1,
                 },
                 nanoBananaPro: {
                     aspectRatio: '1:1',
@@ -103,7 +104,11 @@ describe('runGenerateAutopilot', () => {
             input.referenceImages.push(new File(['request-mutation'], `request-mutated-${seenReferenceNames.length}.png`, { type: 'image/png' }));
             selectedReferenceFiles.unshift(new File(['new-reference'], `new-ref-${seenReferenceNames.length}.png`, { type: 'image/png' }));
 
-            return `data:image/png;base64,iteration-${seenReferenceNames.length}`;
+            return [{
+                slotIndex: 0,
+                status: 'success' as const,
+                imageUrl: `data:image/png;base64,iteration-${seenReferenceNames.length}`,
+            }];
         });
         const saveCurrentResult = vi.fn(async () => undefined);
         const serializeReferences = vi.fn(async (files: File[]) =>
@@ -136,6 +141,7 @@ describe('runGenerateAutopilot', () => {
                     quality: 'high',
                     size: '1024x1024',
                     background: 'transparent',
+                    batchSize: 1,
                 },
                 nanoBananaPro: {
                     aspectRatio: '16:9',

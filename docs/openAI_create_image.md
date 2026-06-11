@@ -276,7 +276,8 @@ Reasoning text is trimmed and then used as:
 
 ## Current Limitations
 
-- The app requests one image per generation or edit operation.
+- GPT Image 2 Generate runs may request a batch of 1-4 images with the native
+  `n` parameter; edit operations and Autopilot iterations request one image.
 - The app does not use streaming responses.
 - The app does not request masks or variations.
 - The app does not expose output format or compression controls.

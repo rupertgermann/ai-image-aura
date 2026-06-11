@@ -200,6 +200,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const removeReferenceAt = referenceCollection.removeAt;
     const {
         currentResult,
+        currentBatchResults,
         loading,
         error,
         autopilot,
@@ -208,7 +209,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         runAutopilot,
         cancelAutopilot,
         save,
+        saveResult,
         download,
+        downloadResult,
         clear,
     } = useGenerateController({
         apiKey: activeImageApiKey,
@@ -319,7 +322,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const isAutopilotMode = mode === 'autopilot';
     const imageModelReferenceWarning = referenceRunPlan.referenceLimitMessage;
     const activeModelDraftKey = getImageModelDraftKey(model);
-    const activeModelControls = draft[activeModelDraftKey] as Record<string, string>;
+    const activeModelControls = draft[activeModelDraftKey] as Record<string, string | number>;
+    const successfulBatchResults = currentBatchResults.filter((result) => result.status === 'success');
+    const showBatchGrid = currentBatchResults.length > 1 || currentBatchResults.some((result) => result.status === 'failed');
+    const singleResultSlot = !showBatchGrid ? successfulBatchResults[0] : null;
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
         updateDraft({
             [activeModelDraftKey]: {
@@ -493,7 +499,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 <label>{control.label}</label>
                                 {control.kind === 'select' ? (
                                     <CustomSelect
-                                        value={activeModelControls[control.id] ?? ''}
+                                        value={String(activeModelControls[control.id] ?? '')}
                                         onChange={(value) => updateImageModelControl(control.id, value)}
                                         options={control.options}
                                     />
@@ -502,7 +508,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         {control.options.map((option) => (
                                             <button
                                                 key={option.value}
-                                                className={activeModelControls[control.id] === option.value ? 'active' : ''}
+                                                className={String(activeModelControls[control.id] ?? '') === option.value ? 'active' : ''}
                                                 onClick={() => updateImageModelControl(control.id, option.value)}
                                             >{option.label}</button>
                                         ))}
@@ -645,8 +651,47 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>
 
-                <section className="preview-panel glass-panel">
-                    {currentResult ? (
+                <section className={`preview-panel glass-panel${showBatchGrid ? ' batch-preview-panel' : ''}`}>
+                    {showBatchGrid ? (
+                        <div className="result-batch-container">
+                            <div className="result-batch-grid">
+                                {currentBatchResults.map((result) => (
+                                    <div key={result.slotIndex} className={`result-slot-card ${result.status}`}>
+                                        <div className="result-slot-header">
+                                            <span>Result {result.slotIndex + 1}</span>
+                                            {result.status === 'success' && result.isSaved && <span>Saved</span>}
+                                            {result.status === 'failed' && <span>Failed</span>}
+                                        </div>
+                                        {result.status === 'success' ? (
+                                            <>
+                                                <img src={result.imageUrl} alt={`Generated result ${result.slotIndex + 1}`} className="result-slot-image" />
+                                                <div className="result-slot-actions">
+                                                    <button
+                                                        onClick={() => { void saveResult(result.slotIndex); }}
+                                                        className="btn-amber"
+                                                        disabled={result.isSaved}
+                                                    >
+                                                        <Archive size={16} /> {result.isSaved ? 'Saved' : 'Save'}
+                                                    </button>
+                                                    <button className="btn-ghost" onClick={() => downloadResult(result.slotIndex)}>
+                                                        <Download size={16} /> Download
+                                                    </button>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="result-slot-error">
+                                                <Sparkles size={28} className="dim-icon" />
+                                                <p>{result.error}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={() => { void clear(); }} className="btn-ghost result-batch-clear">
+                                <Trash2 size={18} /> Clear Results
+                            </button>
+                        </div>
+                    ) : currentResult ? (
                         <div className="result-container">
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
@@ -667,9 +712,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 <button
                                     onClick={() => { void save(); }}
                                     className="btn-amber"
-                                    disabled={isSaved}
+                                    disabled={singleResultSlot?.isSaved ?? isSaved}
                                 >
-                                    <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
+                                    <Archive size={18} /> {(singleResultSlot?.isSaved ?? isSaved) ? 'Saved to Archive' : 'Save to Archive'}
                                 </button>
                                 <button className="btn-ghost" onClick={download}>
                                     <Download size={18} /> Download

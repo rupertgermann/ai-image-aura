@@ -122,7 +122,8 @@ Autopilot adds app-level controls that shape request cadence and reasoning:
 
 ## Current Behavior
 
-- The app requests a single image per generation or edit operation.
+- GPT Image 2 Generate runs may request a batch of 1-4 images with the native
+  `n` parameter; edit operations and Autopilot iterations request one image.
 - Image responses are expected as base64 payloads and converted into browser data URLs.
 - Prompt modifiers are concatenated into the final prompt in `ImageWorkflow`.
 - Generate and Editor previews update immediately after a successful provider response.

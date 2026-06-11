@@ -16,6 +16,7 @@ export interface OpenAiImageRequest {
     quality?: ImageQuality;
     size?: string;
     background?: ImageBackground;
+    batchSize?: number;
     referenceImages?: File[];
 }
 
@@ -36,6 +37,7 @@ export interface OpenAiResponsesResponse {
 
 export interface OpenAiImageClient {
     createImage(request: OpenAiImageRequest): Promise<OpenAiImageResponse>;
+    createImages(request: OpenAiImageRequest): Promise<OpenAiImageResponse[]>;
 }
 
 export interface OpenAiResponsesClient {
@@ -44,10 +46,25 @@ export interface OpenAiResponsesClient {
 
 export const openAiImageClient: OpenAiImageClient = {
     async createImage(request) {
+        const images = await requestOpenAiImages({
+            ...request,
+            batchSize: 1,
+        });
+
+        return images[0];
+    },
+
+    createImages(request) {
+        return requestOpenAiImages(request);
+    },
+};
+
+async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiImageResponse[]> {
         const isEdit = request.referenceImages && request.referenceImages.length > 0;
         const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
         const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
         const endpoint = isEdit ? endpoints.edit : endpoints.generate;
+        const batchSize = coerceOpenAiBatchSize(request.batchSize);
 
         let body: BodyInit;
         const headers: Record<string, string> = {
@@ -58,7 +75,7 @@ export const openAiImageClient: OpenAiImageClient = {
             const formData = new FormData();
             formData.append('model', apiModel);
             formData.append('prompt', request.prompt);
-            formData.append('n', '1');
+            formData.append('n', String(batchSize));
 
             request.referenceImages?.forEach((file) => {
                 formData.append('image[]', file);
@@ -81,7 +98,7 @@ export const openAiImageClient: OpenAiImageClient = {
             } = {
                 model: apiModel,
                 prompt: request.prompt,
-                n: 1,
+                n: batchSize,
             };
             if (request.size && request.size !== 'auto') jsonBody.size = request.size;
             if (request.quality) jsonBody.quality = request.quality;
@@ -107,9 +124,22 @@ export const openAiImageClient: OpenAiImageClient = {
             throw new Error('No image data returned from OpenAI');
         }
 
-        return data.data[0];
-    },
-};
+        return data.data;
+}
+
+function coerceOpenAiBatchSize(value: unknown): number {
+    const parsed = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value.trim())
+            : NaN;
+
+    if (!Number.isFinite(parsed)) {
+        return 1;
+    }
+
+    return Math.min(4, Math.max(1, Math.trunc(parsed)));
+}
 
 export const openAiResponsesClient: OpenAiResponsesClient = {
     async createResponse(request) {

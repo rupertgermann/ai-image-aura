@@ -23,6 +23,7 @@ describe('GenerateSession draft migration', () => {
                 quality: 'high',
                 size: '1536x1024',
                 background: 'transparent',
+                batchSize: 1,
             },
             nanoBananaPro: {
                 aspectRatio: '3:2',
@@ -40,6 +41,7 @@ describe('GenerateSession draft migration', () => {
                 quality: 'low',
                 size: '1024x1536',
                 background: 'opaque',
+                batchSize: 7,
             },
             nanoBananaPro: {
                 aspectRatio: '16:9',
@@ -51,6 +53,7 @@ describe('GenerateSession draft migration', () => {
                 quality: 'low',
                 size: '1024x1536',
                 background: 'opaque',
+                batchSize: 4,
             },
             nanoBananaPro: {
                 aspectRatio: '16:9',

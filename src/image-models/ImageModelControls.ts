@@ -16,6 +16,7 @@ export type GptImage2Controls = {
     quality: ImageQuality;
     size: string;
     background: ImageBackground;
+    batchSize: number;
 };
 
 export type NanoBananaProControls = {
@@ -25,12 +26,13 @@ export type NanoBananaProControls = {
 
 export type ImageModelControls = GptImage2Controls | NanoBananaProControls;
 
-export type ImageModelControlId = 'quality' | 'size' | 'background' | 'aspectRatio' | 'imageSize';
+export type ImageModelControlId = 'quality' | 'size' | 'background' | 'batchSize' | 'aspectRatio' | 'imageSize';
 
 export interface ActiveImageModelControls {
     quality: ImageQuality;
     aspectRatio: string;
     background: ImageBackground;
+    batchSize: number;
     imageSize?: NanoBananaImageSize;
 }
 
@@ -66,6 +68,8 @@ interface ImageModelControlFacts {
 }
 
 const GPT_IMAGE_2_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'] as const;
+const GPT_IMAGE_2_BATCH_SIZE_MIN = 1;
+const GPT_IMAGE_2_BATCH_SIZE_MAX = 4;
 const IMAGE_QUALITIES = ['low', 'medium', 'high'] as const;
 const IMAGE_BACKGROUNDS = ['auto', 'opaque', 'transparent'] as const;
 const NANO_ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const;
@@ -77,6 +81,7 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
             quality: 'medium',
             size: '1024x1024',
             background: 'auto',
+            batchSize: 1,
         },
         generateControls: [
             {
@@ -108,6 +113,17 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
                     { value: 'auto', label: 'Auto' },
                     { value: 'opaque', label: 'Opaque' },
                     { value: 'transparent', label: 'Transparent' },
+                ],
+            },
+            {
+                id: 'batchSize',
+                label: 'BATCH SIZE',
+                kind: 'toggle',
+                options: [
+                    { value: '1', label: '1' },
+                    { value: '2', label: '2' },
+                    { value: '3', label: '3' },
+                    { value: '4', label: '4' },
                 ],
             },
         ],
@@ -219,6 +235,7 @@ export function sanitizeImageModelControls(
         quality: coerceImageQuality(record?.quality, fallbackControls.quality),
         size: coerceGptImageSize(record?.size, fallbackControls.size),
         background: coerceImageBackground(record?.background, fallbackControls.background),
+        batchSize: coerceGptBatchSize(record?.batchSize, fallbackControls.batchSize),
     };
 }
 
@@ -262,6 +279,9 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
     if (controlId === 'background') {
         return coerceImageBackground(value, defaults.background);
     }
+    if (controlId === 'batchSize') {
+        return String(coerceGptBatchSize(value, defaults.batchSize));
+    }
     return '';
 }
 
@@ -274,6 +294,7 @@ export function getActiveImageModelGenerateControls(model: ImageModelSlug, contr
             imageSize: sanitized.imageSize,
             quality: gptDefaults.quality,
             background: gptDefaults.background,
+            batchSize: 1,
         };
     }
 
@@ -283,6 +304,7 @@ export function getActiveImageModelGenerateControls(model: ImageModelSlug, contr
         imageSize: undefined,
         quality: sanitized.quality,
         background: sanitized.background,
+        batchSize: sanitized.batchSize,
     };
 }
 
@@ -318,6 +340,7 @@ export function mapImageModelGenerateProviderRequest(
         quality: ImageQuality;
         aspectRatio: string;
         background: ImageBackground;
+        batchSize?: number;
         imageSize?: NanoBananaImageSize;
         referenceImages: File[];
     },
@@ -340,6 +363,7 @@ export function mapImageModelGenerateProviderRequest(
         quality: coerceImageQuality(input.quality, 'medium'),
         size: coerceGptImageSize(input.aspectRatio, '1024x1024'),
         background: coerceImageBackground(input.background, 'auto'),
+        batchSize: coerceGptBatchSize(input.batchSize, 1),
         referenceImages: referenceRunPlan.providerReferenceImages,
     };
 }
@@ -442,6 +466,23 @@ function coerceGptImageSize(value: unknown, fallback: string): string {
 
     const normalized = value.trim();
     return (GPT_IMAGE_2_SIZES as readonly string[]).includes(normalized) ? normalized : fallback;
+}
+
+function coerceGptBatchSize(value: unknown, fallback: number): number {
+    const parsed = typeof value === 'number'
+        ? value
+        : typeof value === 'string'
+            ? Number(value.trim())
+            : NaN;
+
+    if (!Number.isFinite(parsed)) {
+        return fallback;
+    }
+
+    return Math.min(
+        GPT_IMAGE_2_BATCH_SIZE_MAX,
+        Math.max(GPT_IMAGE_2_BATCH_SIZE_MIN, Math.trunc(parsed)),
+    );
 }
 
 function coerceNanoAspectRatio(value: unknown, fallback: NanoBananaAspectRatio): NanoBananaAspectRatio {
