@@ -3,6 +3,7 @@ import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-
 import type { ArchiveImage } from '../db/types';
 import { getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
 import { useGenerateController } from '../generate-session/useGenerateController';
+import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -247,6 +248,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
         }
     };
 
+    const handlePaste = (e: React.ClipboardEvent) => {
+        const files = getImageFilesFromClipboard(e);
+        if (files.length === 0) {
+            return;
+        }
+
+        e.preventDefault();
+        addReferenceFiles(files);
+    };
+
     const handleTranslateGoal = async () => {
         if (!reasoningApiKey || !goal.trim()) {
             return;
@@ -308,7 +319,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
 
 
     return (
-        <div className="generate-container">
+        <div className="generate-container" onPaste={handlePaste}>
             <header className="view-header">
                 <h1>Create Magic</h1>
                 <p>Harness the power of {activeModel.label} to bring your ideas to life.</p>
