@@ -2,8 +2,9 @@ import React from 'react';
 import { downloadArchiveImagesAsZip } from '../archive/ArchiveExport';
 import ImageCard from '../components/ImageCard';
 import type { ArchiveImage } from '../db/types';
-import { Image as ImageIcon, Search, Download, Trash2, X, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, Search, Download, Trash2, X, Loader2, Star } from 'lucide-react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { filterArchiveImages } from '../hooks/useImageArchive';
 
 interface ArchiveViewProps {
     images: ArchiveImage[];
@@ -11,6 +12,7 @@ interface ArchiveViewProps {
     onDeleteImage: (id: string) => void;
     onEditImage: (image: ArchiveImage) => void;
     onOpenImage: (image: ArchiveImage) => void;
+    onToggleFavorite: (image: ArchiveImage) => void;
     onToggleSelection: (id: string) => void;
     onToggleSelectAll: (ids: string[]) => void;
     onClearSelection: () => void;
@@ -24,6 +26,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
     onDeleteImage,
     onEditImage,
     onOpenImage,
+    onToggleFavorite,
     onToggleSelection,
     onToggleSelectAll,
     onClearSelection,
@@ -31,6 +34,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
     onBulkDownloadError,
 }) => {
     const [search, setSearch] = useLocalStorage('archive_search', '');
+    const [favoritesOnly, setFavoritesOnly] = useLocalStorage('archive_favorites_only', false);
     const [isZipping, setIsZipping] = React.useState(false);
 
     const handleBulkDownload = async () => {
@@ -46,9 +50,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
         }
     };
 
-    const filteredImages = images.filter(img =>
-        img.prompt.toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredImages = filterArchiveImages(images, { search, favoritesOnly });
     const filteredImageIds = filteredImages.map((image) => image.id);
     const allFilteredSelected = filteredImageIds.length > 0 && filteredImageIds.every((id) => selectedIds.has(id));
 
@@ -67,6 +69,15 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                             disabled={filteredImages.length === 0}
                         >
                             {allFilteredSelected ? 'Deselect All' : 'Select All'}
+                        </button>
+                        <button
+                            className={`btn-ghost archive-filter-toggle ${favoritesOnly ? 'active' : ''}`}
+                            onClick={() => setFavoritesOnly((current) => !current)}
+                            aria-pressed={favoritesOnly}
+                            title={favoritesOnly ? 'Show all archive images' : 'Show favorites only'}
+                        >
+                            <Star size={18} />
+                            Favorites
                         </button>
                         <div className="search-box glass-panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
                             <Search size={18} className="search-icon" style={{ position: 'absolute', left: '1rem', pointerEvents: 'none' }} />
@@ -96,9 +107,9 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                     <div className="empty-state glass-panel">
                         <Search size={48} className="dim-icon" />
                         <h3>No Matches</h3>
-                        <p>No archived images match the current search.</p>
-                        <button className="btn-ghost" onClick={() => setSearch('')}>
-                            <X size={18} /> Clear Search
+                        <p>No archived images match the current filters.</p>
+                        <button className="btn-ghost" onClick={() => { setSearch(''); setFavoritesOnly(false); }}>
+                            <X size={18} /> Clear Filters
                         </button>
                     </div>
                 </div>
@@ -110,6 +121,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                             image={img}
                             onDelete={onDeleteImage}
                             onEdit={onEditImage}
+                            onToggleFavorite={onToggleFavorite}
                             onClick={() => onOpenImage(img)}
                             selected={selectedIds.has(img.id)}
                             onSelect={() => onToggleSelection(img.id)}

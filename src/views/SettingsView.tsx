@@ -1,19 +1,26 @@
 import React, { useState } from 'react';
-import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell } from 'lucide-react';
 import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
+import type { CompletionNotificationReadiness } from '../app/CompletionNotificationPort';
 
 interface SettingsViewProps {
     apiKey: string | null;
     googleApiKey: string | null;
+    completionNotificationsEnabled: boolean;
+    completionNotificationReadiness: CompletionNotificationReadiness;
     onApiKeyChange: (key: string) => void;
     onGoogleApiKeyChange: (key: string) => void;
+    onCompletionNotificationsChange: (enabled: boolean) => void;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({
     apiKey,
     googleApiKey,
+    completionNotificationsEnabled,
+    completionNotificationReadiness,
     onApiKeyChange,
     onGoogleApiKeyChange,
+    onCompletionNotificationsChange,
 }) => {
     return (
         <div className="settings-container">
@@ -41,6 +48,24 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 initialKey={googleApiKey ?? ''}
                 onSaveKey={onGoogleApiKeyChange}
             />
+
+            <section className="settings-section glass-panel">
+                <div className="section-title">
+                    <Bell size={20} className={completionNotificationsEnabled ? 'icon-green' : 'icon-purple'} />
+                    <h2>Completion Notifications</h2>
+                    <span className="status-badge">{getReadinessLabel(completionNotificationReadiness)}</span>
+                </div>
+
+                <label className="settings-toggle-row">
+                    <input
+                        type="checkbox"
+                        checked={completionNotificationsEnabled}
+                        onChange={(event) => onCompletionNotificationsChange(event.target.checked)}
+                        disabled={completionNotificationReadiness === 'unsupported' || completionNotificationReadiness === 'insecure-context'}
+                    />
+                    <span>Notify when runs finish in the background</span>
+                </label>
+            </section>
         </div>
     );
 };
@@ -120,5 +145,20 @@ const ProviderKeySection: React.FC<ProviderKeySectionProps> = ({
         </section>
     );
 };
+
+function getReadinessLabel(readiness: CompletionNotificationReadiness) {
+    switch (readiness) {
+        case 'unsupported':
+            return 'Unsupported';
+        case 'insecure-context':
+            return 'Unavailable';
+        case 'denied':
+            return 'Denied';
+        case 'granted':
+            return 'Allowed';
+        case 'default':
+            return 'Off';
+    }
+}
 
 export default SettingsView;

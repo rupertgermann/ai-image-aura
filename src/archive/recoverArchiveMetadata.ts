@@ -21,6 +21,7 @@ interface ArchiveMetadataRecord {
     model?: string;
     width?: number;
     height?: number;
+    favorite?: boolean;
     style?: string;
     lighting?: string;
     palette?: string;
@@ -75,6 +76,7 @@ export async function recoverArchiveMetadataFromManifests(
             model: image.model,
             width: image.width,
             height: image.height,
+            favorite: image.favorite,
             style: image.style,
             lighting: image.lighting,
             palette: image.palette,

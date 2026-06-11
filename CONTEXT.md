@@ -44,6 +44,11 @@ An optional input image supplied alongside the prompt to guide generation or
 editing. Distinct from the **source image** in the Editor (the canvas being
 transformed), which is always the first image sent on an edit.
 
+## Favorite
+
+A user-marked archive image kept easy to find with the Archive favorites filter.
+It is a lightweight flag on an archive image, not a named collection.
+
 ## Image layer
 
 A user-controlled image element that participates in the Editor composition as

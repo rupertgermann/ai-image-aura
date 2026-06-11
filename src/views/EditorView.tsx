@@ -9,6 +9,7 @@ import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
 import { OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
 import { getImageModelReferenceLimitMessage, getImageModelUiChoices } from '../image-models/ImageModelControls';
+import { getImageFilesFromClipboard } from '../references/clipboard';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
@@ -96,6 +97,16 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
         onSave,
     });
     const aiReferenceWarning = getImageModelReferenceLimitMessage(aiEditModel, referenceImages.length, 'AI transforms');
+
+    const handleReferencePaste = (event: React.ClipboardEvent) => {
+        const files = getImageFilesFromClipboard(event);
+        if (files.length === 0) {
+            return;
+        }
+
+        event.preventDefault();
+        addReferenceFiles(files);
+    };
 
     useEffect(() => {
         const isTextInput = (target: EventTarget | null) => {
@@ -352,6 +363,8 @@ const EditorView: React.FC<EditorViewProps> = ({ image, getProviderKey, onSave }
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={handleDrop}
+                                onPaste={handleReferencePaste}
+                                tabIndex={0}
                             >
                                 <label>ADD VISUAL CONTEXT (OPTIONAL) {isDragging && '- DROP TO UPLOAD'}</label>
                                 <div className="reference-grid mini">

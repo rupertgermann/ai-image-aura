@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History } from 'lucide-react';
+import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History, Star } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
 import { lineageStore } from '../lineage/LineageStore';
@@ -15,6 +15,7 @@ interface ImageDetailModalProps {
     onEdit: () => void;
     onDelete: () => void;
     onCreateSimilar: () => void;
+    onToggleFavorite: () => void;
     onReplayGenerate: (stepId: string) => void;
     onReplayEditor: (stepId: string) => void;
     onForkFromStep: (stepId: string) => void;
@@ -23,7 +24,7 @@ interface ImageDetailModalProps {
 }
 
 const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
-    image, images, onClose, onEdit, onDelete, onCreateSimilar, onReplayGenerate, onReplayEditor, onForkFromStep, onNext, onPrevious
+    image, images, onClose, onEdit, onDelete, onCreateSimilar, onToggleFavorite, onReplayGenerate, onReplayEditor, onForkFromStep, onNext, onPrevious
 }) => {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [copied, setCopied] = useState(false);
@@ -112,6 +113,13 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         {comparisonError && <div className="comparison-error">{comparisonError}</div>}
 
                         <div className="floating-actions">
+                            <button
+                                className={`btn-ghost favorite-action ${image.favorite ? 'active' : ''}`}
+                                onClick={onToggleFavorite}
+                                aria-pressed={!!image.favorite}
+                            >
+                                <Star size={18} /> {image.favorite ? 'Favorited' : 'Favorite'}
+                            </button>
                             <button className="btn-primary" onClick={downloadImage}>
                                 <Download size={18} /> Download
                             </button>

@@ -59,6 +59,11 @@ function App() {
                     onEdit={() => archiveController.selectedImage && archiveController.editImage(archiveController.selectedImage)}
                     onDelete={() => archiveController.selectedImage && archiveController.requestDelete([archiveController.selectedImage.id])}
                     onCreateSimilar={archiveController.createSimilar}
+                    onToggleFavorite={() => {
+                        if (archiveController.selectedImage) {
+                            void archiveViewProps.onToggleFavorite(archiveController.selectedImage)
+                        }
+                    }}
                     onReplayGenerate={(stepId) => {
                         archiveController.closeImage()
                         void replayGenerateFromLineageStep(stepId)

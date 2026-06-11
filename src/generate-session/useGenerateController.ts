@@ -6,9 +6,14 @@ import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkfl
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
-import { createAutopilotSession, type AutopilotSession } from '../autopilot/AutopilotSession';
+import { createAutopilotSession, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
+import {
+    browserCompletionNotificationPort,
+    type CompletionNotificationPayload,
+    type CompletionNotificationPort,
+} from '../app/CompletionNotificationPort';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -42,6 +47,9 @@ interface UseGenerateControllerOptions {
     createAutopilot?: typeof createAutopilotSession;
     evaluate?: typeof satisfactionEvaluator.evaluate;
     refine?: typeof promptRefiner.refine;
+    completionNotificationsEnabled?: boolean;
+    completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
+    isDocumentHidden?: () => boolean;
 }
 
 interface BuildGeneratedArchiveImageInput {
@@ -119,6 +127,54 @@ export async function buildGeneratedArchiveImageForSave({
     });
 }
 
+export function notifyGenerateCompletion({
+    enabled,
+    documentHidden,
+    notificationPort,
+    title,
+    body,
+}: CompletionNotificationPayload & {
+    enabled: boolean;
+    documentHidden: boolean;
+    notificationPort: Pick<CompletionNotificationPort, 'showCompletion'>;
+}) {
+    if (!enabled || !documentHidden) {
+        return;
+    }
+
+    notificationPort.showCompletion({ title, body });
+}
+
+function createAutopilotCompletionNotification(result: AutopilotSessionResult): CompletionNotificationPayload {
+    if (result.status === 'failed') {
+        return {
+            title: 'Autopilot failed',
+            body: result.error?.message ?? 'The Autopilot run stopped before finishing.',
+        };
+    }
+
+    if (result.status === 'cancelled') {
+        return {
+            title: 'Autopilot stopped',
+            body: 'Showing the best result so far.',
+        };
+    }
+
+    if (result.status === 'max-iterations') {
+        return {
+            title: 'Autopilot complete',
+            body: 'The run reached the iteration limit.',
+        };
+    }
+
+    return {
+        title: 'Autopilot complete',
+        body: result.bestIteration
+            ? `Best result selected from iteration ${result.bestIteration.iterationNumber}.`
+            : 'Your Autopilot run is complete.',
+    };
+}
+
 export function useGenerateController({
     apiKey,
     reasoningApiKey,
@@ -135,6 +191,9 @@ export function useGenerateController({
     createAutopilot = createAutopilotSession,
     evaluate,
     refine,
+    completionNotificationsEnabled = false,
+    completionNotificationPort = browserCompletionNotificationPort,
+    isDocumentHidden = () => typeof document !== 'undefined' && document.hidden,
 }: UseGenerateControllerOptions) {
     const [currentResult, setCurrentResult] = useState<string | null>(null);
     const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
@@ -188,6 +247,8 @@ export function useGenerateController({
             running: false,
         }));
 
+        let completionNotification: CompletionNotificationPayload | null = null;
+
         try {
             const controls = getActiveGenerateControls(draft);
             const usedReferenceImages = referenceImages.slice();
@@ -213,12 +274,29 @@ export function useGenerateController({
             setCurrentResultReferences(usedReferences);
             updateDraft({ isSaved: false });
             await session.saveCurrentResult(imageUrl, usedReferences);
+            completionNotification = {
+                title: 'Generation complete',
+                body: 'Your image is ready in AURA.',
+            };
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to generate image');
+            const message = err instanceof Error ? err.message : 'Failed to generate image';
+            setError(message);
+            completionNotification = {
+                title: 'Generation failed',
+                body: message,
+            };
         } finally {
+            if (completionNotification) {
+                notifyGenerateCompletion({
+                    enabled: completionNotificationsEnabled,
+                    documentHidden: isDocumentHidden(),
+                    notificationPort: completionNotificationPort,
+                    ...completionNotification,
+                });
+            }
             setLoading(false);
         }
-    }, [apiKey, draft, referenceImages, session, updateDraft, workflow]);
+    }, [apiKey, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
     const runAutopilot = useCallback(async (input: { goal: string; maxIterations?: number; satisfactionThreshold?: number }) => {
         if (!apiKey) {
@@ -245,6 +323,8 @@ export function useGenerateController({
             bestIterationNumber: null,
             lastErrorIteration: null,
         });
+
+        let completionNotification: CompletionNotificationPayload | null = null;
 
         try {
             const runReferenceImages = referenceImages.slice();
@@ -308,12 +388,35 @@ export function useGenerateController({
                 bestIterationNumber: outcome.result.bestIteration?.iterationNumber ?? current.bestIterationNumber,
             }));
 
+            completionNotification = createAutopilotCompletionNotification(outcome.result);
+
             return outcome.result;
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Autopilot failed';
+            setError(message);
+            setAutopilot((current) => ({
+                ...current,
+                running: false,
+                status: 'failed',
+            }));
+            completionNotification = {
+                title: 'Autopilot failed',
+                body: message,
+            };
+            return null;
         } finally {
+            if (completionNotification) {
+                notifyGenerateCompletion({
+                    enabled: completionNotificationsEnabled,
+                    documentHidden: isDocumentHidden(),
+                    notificationPort: completionNotificationPort,
+                    ...completionNotification,
+                });
+            }
             autopilotSessionRef.current = null;
             setLoading(false);
         }
-    }, [apiKey, createAutopilot, draft, evaluate, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
+    }, [apiKey, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();

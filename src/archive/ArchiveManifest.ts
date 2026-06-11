@@ -21,6 +21,7 @@ export interface ArchiveManifestImage {
     model?: string;
     width?: number;
     height?: number;
+    favorite?: boolean;
     style?: string;
     lighting?: string;
     palette?: string;
@@ -155,6 +156,7 @@ function parseArchiveManifestImage(value: unknown): ArchiveManifestImage {
         model: optionalString(value.model),
         width: optionalNumber(value.width),
         height: optionalNumber(value.height),
+        favorite: optionalBoolean(value.favorite),
         style: optionalString(value.style),
         lighting: optionalString(value.lighting),
         palette: optionalString(value.palette),
@@ -302,6 +304,10 @@ function optionalString(value: unknown) {
 
 function optionalNumber(value: unknown) {
     return typeof value === 'number' ? value : undefined;
+}
+
+function optionalBoolean(value: unknown) {
+    return typeof value === 'boolean' ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

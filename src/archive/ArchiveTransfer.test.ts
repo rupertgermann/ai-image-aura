@@ -179,6 +179,35 @@ describe('ArchiveTransfer', () => {
         ]);
     });
 
+    it('round-trips favorite flags through the archive manifest', async () => {
+        const sourceImages = createImages();
+        sourceImages[0] = {
+            ...sourceImages[0]!,
+            favorite: true,
+        };
+
+        const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: createStore() });
+        const zip = await JSZip.loadAsync(zipBytes);
+        const manifest = JSON.parse(await zip.file('archive-manifest.json')!.async('text')) as {
+            images: Array<{ id: string; favorite?: boolean }>;
+        };
+
+        expect(manifest.images).toEqual([
+            expect.objectContaining({ id: 'image-1', favorite: true }),
+            expect.not.objectContaining({ id: 'image-2', favorite: true }),
+            expect.not.objectContaining({ id: 'image-3', favorite: true }),
+        ]);
+
+        const archiveStore = new InMemoryArchiveStore();
+        await importArchiveZip(zipBytes, {
+            archiveStore,
+            lineageStore: createStore(),
+        });
+
+        expect(archiveStore.images.get('image-1')?.favorite).toBe(true);
+        expect(archiveStore.images.get('image-2')?.favorite).toBeUndefined();
+    });
+
     it('round-trips layered image assets and stable layer ids', async () => {
         const sourceLineage = createStore();
         const sourceImages = [createLayeredImage()];

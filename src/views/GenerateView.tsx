@@ -3,6 +3,7 @@ import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X } from 'lucide-
 import type { ArchiveImage } from '../db/types';
 import { getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
 import { useGenerateController } from '../generate-session/useGenerateController';
+import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -11,6 +12,7 @@ import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
 import { createSatisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { resolveReasoningClient } from '../autopilot/ReasoningClient';
+import type { CompletionNotificationPort } from '../app/CompletionNotificationPort';
 import {
     buildImageModelGenerateReferenceRunPlan,
     coerceImageModelControlValue,
@@ -30,6 +32,9 @@ import {
 interface GenerateViewProps {
     getProviderKey: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    completionNotificationsEnabled?: boolean;
+    completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
+    isDocumentHidden?: () => boolean;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -157,7 +162,13 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
     );
 };
 
-const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage }) => {
+const GenerateView: React.FC<GenerateViewProps> = ({
+    getProviderKey,
+    onSaveImage,
+    completionNotificationsEnabled,
+    completionNotificationPort,
+    isDocumentHidden,
+}) => {
     const [draft, setDraft] = useGenerateDraft();
     const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
@@ -211,6 +222,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
         onSaveImage,
         evaluate: satisfactionEvaluator.evaluate,
         refine: promptRefiner.refine,
+        completionNotificationsEnabled,
+        completionNotificationPort,
+        isDocumentHidden,
     });
 
     const handleNextReference = () => {
@@ -245,6 +259,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
         if (files.length > 0) {
             addReferenceFiles(files);
         }
+    };
+
+    const handlePaste = (e: React.ClipboardEvent) => {
+        const files = getImageFilesFromClipboard(e);
+        if (files.length === 0) {
+            return;
+        }
+
+        e.preventDefault();
+        addReferenceFiles(files);
     };
 
     const handleTranslateGoal = async () => {
@@ -308,7 +332,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({ getProviderKey, onSaveImage
 
 
     return (
-        <div className="generate-container">
+        <div className="generate-container" onPaste={handlePaste}>
             <header className="view-header">
                 <h1>Create Magic</h1>
                 <p>Harness the power of {activeModel.label} to bring your ideas to life.</p>

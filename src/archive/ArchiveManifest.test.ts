@@ -35,6 +35,21 @@ describe('ArchiveManifest', () => {
         ]);
     });
 
+    it('preserves favorite flags while keeping legacy images non-favorite by omission', () => {
+        const manifest = parseArchiveManifest({
+            version: ARCHIVE_MANIFEST_VERSION,
+            images: [
+                createManifestImage({ id: 'favorite-image', favorite: true }),
+                createManifestImage({ id: 'legacy-image' }),
+            ],
+        });
+
+        expect(manifest.images).toEqual([
+            expect.objectContaining({ id: 'favorite-image', favorite: true }),
+            expect.not.objectContaining({ id: 'legacy-image', favorite: true }),
+        ]);
+    });
+
     it('rejects malformed layer stack entries', () => {
         expect(() => parseArchiveManifest({
             version: ARCHIVE_MANIFEST_VERSION,
@@ -264,6 +279,20 @@ function createManifestLayerStack() {
                 locked: false,
             },
         ],
+    };
+}
+
+function createManifestImage(overrides: Record<string, unknown> = {}) {
+    return {
+        id: 'image-1',
+        prompt: 'prompt',
+        quality: 'high',
+        aspectRatio: '1024x1024',
+        background: 'transparent',
+        timestamp: '2026-06-05T10:00:00.000Z',
+        imageFileName: 'aura-image-1.png',
+        references: [],
+        ...overrides,
     };
 }
 
