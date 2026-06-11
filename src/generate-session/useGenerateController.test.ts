@@ -46,6 +46,7 @@ describe('Generate controller Image model archive metadata', () => {
             nanoBananaPro: {
                 aspectRatio: '16:9',
                 imageSize: '4K',
+                batchSize: 1,
             },
         });
 

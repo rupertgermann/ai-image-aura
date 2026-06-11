@@ -28,6 +28,7 @@ describe('GenerateSession draft migration', () => {
             nanoBananaPro: {
                 aspectRatio: '3:2',
                 imageSize: '1K',
+                batchSize: 1,
             },
             isSaved: true,
         });
@@ -46,6 +47,7 @@ describe('GenerateSession draft migration', () => {
             nanoBananaPro: {
                 aspectRatio: '16:9',
                 imageSize: '4K',
+                batchSize: 9,
             },
         })).toMatchObject({
             model: 'nano-banana-pro',
@@ -58,6 +60,7 @@ describe('GenerateSession draft migration', () => {
             nanoBananaPro: {
                 aspectRatio: '16:9',
                 imageSize: '4K',
+                batchSize: 4,
             },
         });
     });

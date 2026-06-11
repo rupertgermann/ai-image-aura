@@ -87,6 +87,38 @@ describe('ImageWorkflow', () => {
         }));
     });
 
+    it('uses provider slot errors when batch generation partially fails', async () => {
+        const generate = vi.fn(async () => [
+            { b64_json: 'generated-0' },
+            { error: 'Google Gemini API Error: overloaded' },
+            { b64_json: 'generated-2' },
+        ]);
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        await expect(workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            batchSize: 3,
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        })).resolves.toEqual([
+            { slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,generated-0' },
+            { slotIndex: 1, status: 'failed', error: 'Google Gemini API Error: overloaded' },
+            { slotIndex: 2, status: 'success', imageUrl: 'data:image/png;base64,generated-2' },
+        ]);
+    });
+
+
     it('routes edit requests through the configured provider for the default model', async () => {
         const edit = vi.fn(async () => ({ b64_json: 'edited' }));
         const providers: ImageProviderRegistry = {
@@ -612,5 +644,53 @@ describe('googleImageProvider', () => {
             aspectRatio: '1:1',
             imageSize: '1K',
         });
+    });
+
+    it('fans out Nano Banana batch generation and keeps failed slots isolated', async () => {
+        const pendingResponses: Array<(response: Response) => void> = [];
+        const fetchImpl = vi.fn<typeof fetch>(() => new Promise<Response>((resolve) => {
+            pendingResponses.push(resolve);
+        }));
+        const provider = createGoogleImageProvider(fetchImpl);
+
+        const resultPromise = provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+                capabilities: { transformMask: false },
+            },
+            prompt: 'a luminous teapot city',
+            aspectRatio: '16:9',
+            imageSize: '2K',
+            batchSize: 3,
+            referenceImages: [],
+        });
+
+        await Promise.resolve();
+        expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+        pendingResponses[0]?.(new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ inlineData: { data: 'gemini-image-0' } }] } }],
+        })));
+        pendingResponses[1]?.(new Response(JSON.stringify({
+            error: { message: 'quota exceeded' },
+        }), { status: 429 }));
+        pendingResponses[2]?.(new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ inlineData: { data: 'gemini-image-2' } }] } }],
+        })));
+
+        await expect(resultPromise).resolves.toEqual([
+            { b64_json: 'gemini-image-0' },
+            { error: 'quota exceeded' },
+            { b64_json: 'gemini-image-2' },
+        ]);
     });
 });

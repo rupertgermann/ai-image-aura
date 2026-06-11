@@ -56,6 +56,7 @@ describe('runGenerateAutopilot', () => {
                 nanoBananaPro: {
                     aspectRatio: '1:1',
                     imageSize: '1K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },
@@ -146,6 +147,7 @@ describe('runGenerateAutopilot', () => {
                 nanoBananaPro: {
                     aspectRatio: '16:9',
                     imageSize: '4K',
+                    batchSize: 1,
                 },
                 isSaved: false,
             },
