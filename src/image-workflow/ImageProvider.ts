@@ -20,6 +20,7 @@ export interface ImageProviderRequest {
     batchSize?: number;
     referenceImages?: File[];
     maskImage?: File | Blob | null;
+    onPartialImage?: (partial: ImageProviderResponse) => void;
 }
 
 export type ImageProviderResponse = OpenAiImageResponse;
@@ -43,6 +44,7 @@ export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImag
         batchSize: request.batchSize,
         referenceImages: request.referenceImages,
         maskImage: request.maskImage,
+        onPartialImage: request.onPartialImage,
     });
 
     return {

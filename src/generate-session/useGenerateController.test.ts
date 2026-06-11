@@ -7,6 +7,7 @@ import {
     buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
     notifyGenerateCompletion,
+    shouldStreamGeneratePartials,
     snapshotGeneratedReferenceImages,
 } from './useGenerateController';
 
@@ -94,6 +95,34 @@ describe('Generate controller batch result slots', () => {
                 error: 'content filter',
             },
         ]);
+    });
+});
+
+describe('Generate controller partial preview gating', () => {
+    it('streams partial previews only for single-slot GPT Image 2 runs', () => {
+        expect(shouldStreamGeneratePartials(createDraft({
+            model: OPENAI_IMAGE_MODEL,
+            gptImage2: {
+                quality: 'high',
+                size: '1024x1024',
+                background: 'auto',
+                batchSize: 1,
+            },
+        }))).toBe(true);
+
+        expect(shouldStreamGeneratePartials(createDraft({
+            model: OPENAI_IMAGE_MODEL,
+            gptImage2: {
+                quality: 'high',
+                size: '1024x1024',
+                background: 'auto',
+                batchSize: 2,
+            },
+        }))).toBe(false);
+
+        expect(shouldStreamGeneratePartials(createDraft({
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+        }))).toBe(false);
     });
 });
 

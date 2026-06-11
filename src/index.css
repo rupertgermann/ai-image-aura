@@ -791,6 +791,28 @@ textarea.aura-input {
     background: var(--color-charcoal);
 }
 
+.partial-result-image {
+    opacity: 0.88;
+}
+
+.partial-result-banner {
+    position: absolute;
+    top: var(--spacing-24);
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--element-gap);
+    padding: var(--spacing-8) var(--spacing-16);
+    transform: translateX(-50%);
+    background: var(--color-snow);
+    color: var(--color-charcoal);
+    white-space: nowrap;
+}
+
+.partial-result-banner span {
+    color: var(--color-steel);
+}
+
 .result-batch-container {
     width: 100%;
     min-height: 100%;

@@ -14,6 +14,7 @@ import {
     type CompletionNotificationPayload,
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
+import { resolveImageModelConfig } from '../utils/openaiModels';
 
 interface AutopilotProgressState {
     running: boolean;
@@ -214,6 +215,7 @@ export function useGenerateController({
     const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
     const [currentRunDraft, setCurrentRunDraft] = useState<GenerateDraft | null>(null);
     const [currentRunLineageSource, setCurrentRunLineageSource] = useState<GenerateLineageSource | null>(null);
+    const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
@@ -224,6 +226,7 @@ export function useGenerateController({
         lastErrorIteration: null,
     });
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
+    const partialRunIdRef = useRef(0);
 
     const updateDraft = useCallback((patch: Partial<GenerateDraft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
@@ -265,6 +268,9 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        const partialRunId = partialRunIdRef.current + 1;
+        partialRunIdRef.current = partialRunId;
+        setCurrentPartialResult(null);
         setAutopilot((current) => ({
             ...current,
             running: false,
@@ -277,6 +283,13 @@ export function useGenerateController({
             const usedReferenceImages = referenceImages.slice();
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
+            const onPartialImage = shouldStreamGeneratePartials(draft)
+                ? (imageUrl: string) => {
+                    if (partialRunIdRef.current === partialRunId) {
+                        setCurrentPartialResult(imageUrl);
+                    }
+                }
+                : undefined;
             const usedReferences = await snapshotGeneratedReferenceImages({
                 referenceImages: usedReferenceImages,
                 serializeReferenceFiles: workflow.serializeReferences,
@@ -294,6 +307,7 @@ export function useGenerateController({
                 lighting: draft.lighting,
                 palette: draft.palette,
                 referenceImages: usedReferenceImages,
+                onPartialImage,
             });
             const imageUrl = getFirstSuccessfulGeneratedImage(results);
             const batchResults = buildGenerateResultSlots(results);
@@ -302,6 +316,7 @@ export function useGenerateController({
             setCurrentRunDraft(runDraft);
             setCurrentRunLineageSource(runLineageSource);
             setCurrentResultReferences(usedReferences);
+            setCurrentPartialResult(null);
 
             if (!imageUrl) {
                 setCurrentResult(null);
@@ -324,6 +339,7 @@ export function useGenerateController({
             };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to generate image';
+            setCurrentPartialResult(null);
             setError(message);
             completionNotification = {
                 title: 'Generation failed',
@@ -359,6 +375,7 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
+        setCurrentPartialResult(null);
         setCurrentResultReferences(null);
         setCurrentBatchResults([]);
         setCurrentRunDraft(null);
@@ -545,6 +562,7 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         setCurrentResult(null);
+        setCurrentPartialResult(null);
         setCurrentBatchResults([]);
         setCurrentResultReferences(null);
         setCurrentRunDraft(null);
@@ -554,6 +572,7 @@ export function useGenerateController({
 
     return {
         currentResult,
+        currentPartialResult,
         currentBatchResults,
         loading,
         error,
@@ -568,6 +587,13 @@ export function useGenerateController({
         downloadResult,
         clear,
     };
+}
+
+export function shouldStreamGeneratePartials(draft: GenerateDraft) {
+    const model = resolveImageModelConfig(draft.model);
+    const controls = getActiveGenerateControls(draft);
+
+    return model.capabilities.partialImageStreaming && controls.batchSize === 1;
 }
 
 export function buildGenerateResultSlots(results: GenerateBatchResult[]): GenerateResultSlot[] {
