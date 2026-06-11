@@ -23,7 +23,10 @@ import {
     type CompletionNotificationPayload,
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
+import { dataURLtoFile } from '../utils/file';
 import { resolveImageModelConfig } from '../utils/openaiModels';
+
+export type { GenerateResultSlot };
 
 interface AutopilotProgressState {
     running: boolean;
@@ -99,6 +102,17 @@ interface SaveGenerateResultSlotsInput {
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
     createArchiveImageId?: () => string;
     now?: () => Date;
+}
+
+interface AddGeneratedResultAsReferenceInput {
+    slot: GenerateResultSlot;
+    addReferenceFiles: (files: File[]) => void;
+    session: Pick<GenerateSessionStore, 'saveLineageSource' | 'clearLineageSource'>;
+}
+
+interface AddGeneratedResultAsReferenceActionInput extends AddGeneratedResultAsReferenceInput {
+    capacityMessage: string | null;
+    setNotice: (message: string | null) => void;
 }
 
 interface StartGeneratePartialPreviewRunInput {
@@ -232,6 +246,50 @@ export async function saveGenerateResultSlots({
     }
 
     return nextResults;
+}
+
+export function addGeneratedResultAsReference({
+    slot,
+    addReferenceFiles,
+    session,
+}: AddGeneratedResultAsReferenceInput) {
+    if (slot.status !== 'success') {
+        return false;
+    }
+
+    addReferenceFiles([
+        dataURLtoFile(slot.imageUrl, `generated-result-${slot.slotIndex + 1}.png`),
+    ]);
+
+    if (slot.isSaved && slot.archiveImageId) {
+        session.saveLineageSource({ archiveImageId: slot.archiveImageId });
+    } else {
+        session.clearLineageSource();
+    }
+
+    return true;
+}
+
+export function addGeneratedResultAsReferenceFromAction({
+    capacityMessage,
+    setNotice,
+    ...input
+}: AddGeneratedResultAsReferenceActionInput) {
+    if (capacityMessage) {
+        setNotice(capacityMessage);
+        return false;
+    }
+
+    try {
+        const added = addGeneratedResultAsReference(input);
+        if (added) {
+            setNotice(null);
+        }
+        return added;
+    } catch (referenceError) {
+        setNotice(referenceError instanceof Error ? referenceError.message : 'Failed to use result as reference.');
+        return false;
+    }
 }
 
 export function notifyGenerateCompletion({

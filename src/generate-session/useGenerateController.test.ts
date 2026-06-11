@@ -3,6 +3,8 @@ import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageMo
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
 import {
+    addGeneratedResultAsReference,
+    addGeneratedResultAsReferenceFromAction,
     buildGenerateResultSlots,
     buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
@@ -274,6 +276,140 @@ describe('Generate controller partial preview gating', () => {
 
         secondRun.clear();
         expect(currentPartialResult).toBeNull();
+    });
+});
+
+describe('Generate controller result Reference iteration', () => {
+    it('adds a saved generated result as a Reference image and keeps its lineage source', () => {
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+
+        const added = addGeneratedResultAsReference({
+            slot: {
+                slotIndex: 2,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,c2F2ZWQtcmVzdWx0',
+                isSaved: true,
+                archiveImageId: 'archive-image-123',
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+        });
+
+        expect(added).toBe(true);
+        expect(addReferenceFiles).toHaveBeenCalledWith([
+            expect.objectContaining({
+                name: 'generated-result-3.png',
+                type: 'image/png',
+            }),
+        ]);
+        expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'archive-image-123' });
+        expect(clearLineageSource).not.toHaveBeenCalled();
+    });
+
+    it('adds an unsaved generated result as a Reference image without carrying a lineage source', () => {
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+
+        const added = addGeneratedResultAsReference({
+            slot: {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,dW5zYXZlZC1yZXN1bHQ=',
+                isSaved: false,
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+        });
+
+        expect(added).toBe(true);
+        expect(addReferenceFiles).toHaveBeenCalledWith([
+            expect.objectContaining({
+                name: 'generated-result-1.png',
+                type: 'image/png',
+            }),
+        ]);
+        expect(saveLineageSource).not.toHaveBeenCalled();
+        expect(clearLineageSource).toHaveBeenCalled();
+    });
+
+    it('blocks result Reference iteration at model capacity without changing session lineage', () => {
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+        const setNotice = vi.fn();
+
+        const added = addGeneratedResultAsReferenceFromAction({
+            slot: {
+                slotIndex: 0,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,Y2FwYWNpdHk=',
+                isSaved: true,
+                archiveImageId: 'archive-at-capacity',
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+            capacityMessage: 'Nano Banana Pro already has 14 reference images for generation. Remove one before adding another.',
+            setNotice,
+        });
+
+        expect(added).toBe(false);
+        expect(addReferenceFiles).not.toHaveBeenCalled();
+        expect(saveLineageSource).not.toHaveBeenCalled();
+        expect(clearLineageSource).not.toHaveBeenCalled();
+        expect(setNotice).toHaveBeenCalledWith(
+            'Nano Banana Pro already has 14 reference images for generation. Remove one before adding another.',
+        );
+    });
+
+    it('runs the result Reference action without mutating the draft prompt or controls', () => {
+        const draft = createDraft({
+            prompt: 'keep this prompt',
+            gptImage2: {
+                quality: 'high',
+                size: '1536x1024',
+                background: 'transparent',
+                batchSize: 4,
+            },
+        });
+        const draftBeforeAction = structuredClone(draft);
+        const addReferenceFiles = vi.fn();
+        const saveLineageSource = vi.fn();
+        const clearLineageSource = vi.fn();
+        const setNotice = vi.fn();
+
+        const added = addGeneratedResultAsReferenceFromAction({
+            slot: {
+                slotIndex: 1,
+                status: 'success',
+                imageUrl: 'data:image/png;base64,aXRlcmF0ZQ==',
+                isSaved: false,
+            },
+            addReferenceFiles,
+            session: {
+                saveLineageSource,
+                clearLineageSource,
+            },
+            capacityMessage: null,
+            setNotice,
+        });
+
+        expect(added).toBe(true);
+        expect(draft).toEqual(draftBeforeAction);
+        expect(addReferenceFiles).toHaveBeenCalledTimes(1);
+        expect(clearLineageSource).toHaveBeenCalled();
+        expect(setNotice).toHaveBeenCalledWith(null);
     });
 });
 
