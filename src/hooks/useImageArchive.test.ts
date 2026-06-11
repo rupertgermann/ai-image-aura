@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ArchiveImage } from '../db/types';
-import { sortImagesByTimestamp } from './useImageArchive';
+import { filterArchiveImages, sortImagesByTimestamp } from './useImageArchive';
 
 describe('useImageArchive helpers', () => {
     it('orders images by timestamp descending', () => {
@@ -68,4 +68,30 @@ describe('useImageArchive helpers', () => {
             'second',
         ]);
     });
+
+    it('filters by prompt search and favorites-only together', () => {
+        const images: ArchiveImage[] = [
+            createImage({ id: 'favorite-match', prompt: 'Glass city', favorite: true }),
+            createImage({ id: 'favorite-miss', prompt: 'Forest path', favorite: true }),
+            createImage({ id: 'plain-match', prompt: 'Glass teapot' }),
+        ];
+
+        expect(filterArchiveImages(images, {
+            search: 'glass',
+            favoritesOnly: true,
+        }).map((image) => image.id)).toEqual(['favorite-match']);
+    });
 });
+
+function createImage(overrides: Partial<ArchiveImage>): ArchiveImage {
+    return {
+        id: 'image',
+        url: 'data:image/png;base64,image',
+        prompt: 'prompt',
+        quality: 'high',
+        aspectRatio: '1024x1024',
+        background: 'transparent',
+        timestamp: '2026-04-02T09:00:00.000Z',
+        ...overrides,
+    };
+}

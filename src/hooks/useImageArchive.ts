@@ -13,6 +13,21 @@ export const sortImagesByTimestamp = (images: ArchiveImage[]) => {
     return [...images].sort((left, right) => right.timestamp.localeCompare(left.timestamp));
 };
 
+export function filterArchiveImages(
+    images: ArchiveImage[],
+    options: { search: string; favoritesOnly: boolean },
+) {
+    const search = options.search.trim().toLowerCase();
+
+    return images.filter((image) => {
+        if (options.favoritesOnly && !image.favorite) {
+            return false;
+        }
+
+        return search.length === 0 || image.prompt.toLowerCase().includes(search);
+    });
+}
+
 export function useImageArchive(options: UseImageArchiveOptions = {}) {
     const store = options.store ?? archiveStore;
     const onError = options.onError;

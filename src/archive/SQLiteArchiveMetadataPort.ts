@@ -3,7 +3,7 @@ import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { createDurableLayerStackMetadata } from './ArchiveAssets';
 
-type ArchiveImageRow = ArchiveImage & { ref_ids?: string; layer_stack?: string };
+type ArchiveImageRow = ArchiveImage & { favorite?: number | null; ref_ids?: string; layer_stack?: string };
 
 type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
     storedUrl: string;
@@ -34,6 +34,7 @@ export class SQLiteArchiveMetadataPort {
                 model TEXT,
                 width INTEGER,
                 height INTEGER,
+                favorite INTEGER,
                 ref_ids TEXT,
                 style TEXT
             );
@@ -44,6 +45,7 @@ export class SQLiteArchiveMetadataPort {
         await this.sql.sql`ALTER TABLE images ADD COLUMN lighting TEXT`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN palette TEXT`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN layer_stack TEXT`.catch(() => null);
+        await this.sql.sql`ALTER TABLE images ADD COLUMN favorite INTEGER`.catch(() => null);
 
         this.initialized = true;
     }
@@ -52,7 +54,7 @@ export class SQLiteArchiveMetadataPort {
         await this.init();
 
         await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, ref_ids, style, lighting, palette, layer_stack)
+            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, favorite, ref_ids, style, lighting, palette, layer_stack)
             VALUES (
                 ${record.id},
                 ${record.storedUrl},
@@ -64,6 +66,7 @@ export class SQLiteArchiveMetadataPort {
                 ${record.model || OPENAI_IMAGE_MODEL},
                 ${record.width ?? null},
                 ${record.height ?? null},
+                ${record.favorite ? 1 : null},
                 ${JSON.stringify(record.referenceIds)},
                 ${record.style || null},
                 ${record.lighting || null},
@@ -89,6 +92,7 @@ export class SQLiteArchiveMetadataPort {
             model: image.model,
             width: optionalNumber(image.width),
             height: optionalNumber(image.height),
+            favorite: parseFavorite(image.favorite),
             style: image.style,
             lighting: image.lighting,
             palette: image.palette,
@@ -117,6 +121,7 @@ export class SQLiteArchiveMetadataPort {
             model: row.model,
             width: optionalNumber(row.width),
             height: optionalNumber(row.height),
+            favorite: parseFavorite(row.favorite),
             style: row.style,
             lighting: row.lighting,
             palette: row.palette,
@@ -145,6 +150,10 @@ const parseReferenceIds = (value?: string): number[] => {
 
 const optionalNumber = (value: unknown): number | undefined => {
     return typeof value === 'number' ? value : undefined;
+};
+
+const parseFavorite = (value: unknown): boolean | undefined => {
+    return value === 1 || value === true ? true : undefined;
 };
 
 const parseLayerStack = (value?: string): ArchiveLayerStack | undefined => {

@@ -86,6 +86,16 @@ export function useAppController() {
         addToast(ids.length === 1 ? 'Image deleted permanently' : `${ids.length} images deleted permanently`, 'info');
     }, [addToast, deleteImage]);
 
+    const toggleFavorite = useCallback(async (image: ArchiveImage) => {
+        const nextFavorite = !image.favorite;
+        const savedImage = await addImage({
+            ...image,
+            favorite: nextFavorite ? true : undefined,
+        });
+        addToast(nextFavorite ? 'Added to favorites' : 'Removed from favorites', 'info');
+        return savedImage;
+    }, [addImage, addToast]);
+
     const editImage = useCallback((image: ArchiveImage) => {
         setEditingImage(image);
         changeView('editor');
@@ -202,6 +212,7 @@ export function useAppController() {
             onDeleteImage: (id: string) => archiveController.requestDelete([id]),
             onEditImage: archiveController.editImage,
             onOpenImage: archiveController.openImage,
+            onToggleFavorite: toggleFavorite,
             onToggleSelection: archiveController.toggleSelection,
             onToggleSelectAll: archiveController.toggleSelectAll,
             onClearSelection: archiveController.clearSelection,

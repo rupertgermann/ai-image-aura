@@ -854,6 +854,22 @@ textarea.aura-input {
     height: 46px;
 }
 
+.archive-filter-toggle {
+    height: 46px;
+}
+
+.archive-filter-toggle.active,
+.favorite-action.active {
+    color: var(--color-amber-glow);
+    border-color: var(--color-amber-glow);
+}
+
+.archive-filter-toggle.active svg,
+.favorite-action.active svg,
+.card-favorite-toggle.active svg {
+    fill: currentColor;
+}
+
 .search-icon {
     color: var(--color-steel);
 }
@@ -969,6 +985,33 @@ textarea.aura-input {
 .image-card:hover .card-selector,
 .card-selector.active {
     opacity: 1;
+}
+
+.card-favorite-toggle {
+    position: absolute;
+    top: var(--spacing-8);
+    right: var(--spacing-8);
+    z-index: 20;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-steel);
+    background: rgba(246, 244, 239, 0.92);
+    color: var(--color-charcoal);
+    opacity: 0.9;
+    transition: var(--transition-fast);
+}
+
+.image-card:hover .card-favorite-toggle,
+.card-favorite-toggle.active {
+    opacity: 1;
+}
+
+.card-favorite-toggle.active {
+    color: var(--color-amber-glow);
+    border-color: var(--color-amber-glow);
 }
 
 .selector-inner {

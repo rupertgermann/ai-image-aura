@@ -112,6 +112,7 @@ class LocalArchiveStore implements ArchiveStore {
         const touchedReferenceIds = getTouchedReferenceIds(existing?.referenceIds ?? [], referenceIds);
         const touchedLayerIds = getTouchedLayerIds(previousLayerIds, layerIds);
         const durableLayerStack = createDurableLayerStackMetadata(input.layerStack);
+        const favoriteMetadata = input.favorite ? { favorite: true } : {};
 
         try {
             await this.blobs.save(getArchiveImageBlobKey(id), input.url);
@@ -129,6 +130,7 @@ class LocalArchiveStore implements ArchiveStore {
                 model: input.model,
                 width: input.width,
                 height: input.height,
+                ...favoriteMetadata,
                 style: input.style,
                 lighting: input.lighting,
                 palette: input.palette,
@@ -152,6 +154,7 @@ class LocalArchiveStore implements ArchiveStore {
             model: input.model,
             width: input.width,
             height: input.height,
+            ...favoriteMetadata,
             references: input.references,
             style: input.style,
             lighting: input.lighting,
@@ -207,6 +210,7 @@ class LocalArchiveStore implements ArchiveStore {
             model: record.model,
             width: record.width,
             height: record.height,
+            ...(record.favorite ? { favorite: true } : {}),
             references: references.filter((reference): reference is string => reference !== null),
             style: record.style,
             lighting: record.lighting,
