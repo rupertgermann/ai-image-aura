@@ -23,7 +23,7 @@ export const dataURLtoFile = (dataurl: string, filename: string): File => {
 
     try {
         bstr = atob(encoded);
-    } catch (error) {
+    } catch {
         throw new Error('Invalid data URL: malformed base64 payload');
     }
 

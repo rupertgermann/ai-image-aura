@@ -18,6 +18,7 @@ export interface ImageProviderRequest {
     imageSize?: NanoBananaImageSize;
     preserveSourceDimensions?: boolean;
     referenceImages?: File[];
+    maskImage?: File | Blob | null;
 }
 
 export type ImageProviderResponse = OpenAiImageResponse;
@@ -39,6 +40,7 @@ export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImag
         size: request.size,
         background: request.background,
         referenceImages: request.referenceImages,
+        maskImage: request.maskImage,
     });
 
     return {

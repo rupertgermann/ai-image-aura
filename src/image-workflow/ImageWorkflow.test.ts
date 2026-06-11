@@ -5,7 +5,10 @@ import { createGoogleImageProvider, extractGoogleImageData } from './ImageProvid
 
 describe('ImageWorkflow', () => {
     it('routes generate requests through the configured provider for the selected model', async () => {
-        const generate = vi.fn(async (_input: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            void input;
+            return { b64_json: 'generated' };
+        });
         const providers: ImageProviderRegistry = {
             openai: {
                 generate,
@@ -76,7 +79,10 @@ describe('ImageWorkflow', () => {
     });
 
     it('falls back to the default generation size when aspect ratio value is unsupported', async () => {
-        const generate = vi.fn(async (_request: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (request: Parameters<ImageProvider['generate']>[0]) => {
+            void request;
+            return { b64_json: 'generated' };
+        });
         const workflow = createImageWorkflow({
             openai: {
                 generate,
@@ -250,8 +256,10 @@ describe('ImageWorkflow', () => {
 
     it('sends selected-layer edit requests with composition context before user references', async () => {
         let seenReferenceImages: File[] = [];
+        let seenMaskImage: File | Blob | null | undefined;
         const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
             seenReferenceImages = input.referenceImages ?? [];
+            seenMaskImage = input.maskImage;
             return { b64_json: 'edited' };
         });
         const providers: ImageProviderRegistry = {
@@ -264,6 +272,7 @@ describe('ImageWorkflow', () => {
         const sourceImage = new Blob(['selected-layer'], { type: 'image/png' });
         const compositionContext = new File(['composition'], 'composition-context.png', { type: 'image/png' });
         const userReference = new File(['reference'], 'user-reference.png', { type: 'image/png' });
+        const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
         await workflow.edit({
             apiKey: 'sk-test',
@@ -271,6 +280,7 @@ describe('ImageWorkflow', () => {
             sourceImage,
             compositionContextImage: compositionContext,
             referenceImages: [userReference],
+            maskImage,
         });
 
         expect(seenReferenceImages.map((file) => file.name)).toEqual([
@@ -278,10 +288,14 @@ describe('ImageWorkflow', () => {
             'composition-context.png',
             'user-reference.png',
         ]);
+        expect(seenMaskImage).toBe(maskImage);
     });
 
     it('maps nano-banana-pro Editor AI transforms with source handling and Reference image limits', async () => {
-        const edit = vi.fn(async (_request: Parameters<ImageProvider['edit']>[0]) => ({ b64_json: 'edited-nano' }));
+        const edit = vi.fn(async (request: Parameters<ImageProvider['edit']>[0]) => {
+            void request;
+            return { b64_json: 'edited-nano' };
+        });
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -356,6 +370,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
+                capabilities: { transformMask: false },
             },
             prompt: 'a luminous teapot city',
             aspectRatio: '16:9',
@@ -385,7 +400,10 @@ describe('googleImageProvider', () => {
     });
 
     it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
-        const generate = vi.fn(async (_request: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (request: Parameters<ImageProvider['generate']>[0]) => {
+            void request;
+            return { b64_json: 'generated' };
+        });
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -416,7 +434,10 @@ describe('googleImageProvider', () => {
     });
 
     it('uses only the first 14 references for Nano Banana generation requests', async () => {
-        const generate = vi.fn(async (_input: Parameters<ImageProvider['generate']>[0]) => ({ b64_json: 'generated' }));
+        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
+            void input;
+            return { b64_json: 'generated' };
+        });
         const workflow = createImageWorkflow({
             openai: {
                 generate: vi.fn(),
@@ -486,6 +507,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
+                capabilities: { transformMask: false },
             },
             prompt: 'make it cinematic',
             preserveSourceDimensions: true,
@@ -540,6 +562,7 @@ describe('googleImageProvider', () => {
                     edit: 'https://example.test/generate',
                 },
                 parameters: {},
+                capabilities: { transformMask: false },
             },
             prompt: 'a luminous teapot city',
             referenceImages: [],

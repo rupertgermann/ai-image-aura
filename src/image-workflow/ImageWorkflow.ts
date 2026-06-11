@@ -34,6 +34,7 @@ export interface EditImageInput {
     sourceImage: Blob;
     compositionContextImage?: File | null;
     referenceImages: File[];
+    maskImage?: File | Blob | null;
     quality?: ImageQuality;
     aspectRatio?: NanoBananaAspectRatio;
     imageSize?: NanoBananaImageSize;
@@ -81,6 +82,7 @@ export function createImageWorkflow(providers: ImageProviderRegistry = imageProv
                 apiKey: input.apiKey,
                 model,
                 prompt: input.prompt,
+                maskImage: input.maskImage,
                 ...providerRequest,
             }));
         },
