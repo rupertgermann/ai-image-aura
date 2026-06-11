@@ -9,6 +9,7 @@ import {
     notifyGenerateCompletion,
     shouldStreamGeneratePartials,
     snapshotGeneratedReferenceImages,
+    startGeneratePartialPreviewRun,
 } from './useGenerateController';
 
 describe('Generate controller Image model archive metadata', () => {
@@ -123,6 +124,44 @@ describe('Generate controller partial preview gating', () => {
         expect(shouldStreamGeneratePartials(createDraft({
             model: NANO_BANANA_PRO_IMAGE_MODEL,
         }))).toBe(false);
+    });
+
+    it('updates and clears partial preview state only for the active run', () => {
+        let currentRunId = 0;
+        let currentPartialResult: string | null = 'data:image/png;base64,old';
+        const setCurrentPartialResult = vi.fn((imageUrl: string | null) => {
+            currentPartialResult = imageUrl;
+        });
+
+        const firstRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => currentRunId,
+            setCurrentRunId: (runId) => {
+                currentRunId = runId;
+            },
+            setCurrentPartialResult,
+        });
+
+        expect(currentPartialResult).toBeNull();
+
+        firstRun.update('data:image/png;base64,partial-1');
+        expect(currentPartialResult).toBe('data:image/png;base64,partial-1');
+
+        const secondRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => currentRunId,
+            setCurrentRunId: (runId) => {
+                currentRunId = runId;
+            },
+            setCurrentPartialResult,
+        });
+
+        secondRun.update('data:image/png;base64,partial-2');
+        firstRun.update('data:image/png;base64,stale-partial');
+        firstRun.clear();
+
+        expect(currentPartialResult).toBe('data:image/png;base64,partial-2');
+
+        secondRun.clear();
+        expect(currentPartialResult).toBeNull();
     });
 });
 

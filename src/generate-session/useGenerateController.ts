@@ -89,6 +89,37 @@ interface BuildGeneratedArchiveImageForSaveInput {
     serializeReferences: () => Promise<string[]>;
 }
 
+interface StartGeneratePartialPreviewRunInput {
+    getCurrentRunId: () => number;
+    setCurrentRunId: (runId: number) => void;
+    setCurrentPartialResult: (imageUrl: string | null) => void;
+}
+
+export function startGeneratePartialPreviewRun({
+    getCurrentRunId,
+    setCurrentRunId,
+    setCurrentPartialResult,
+}: StartGeneratePartialPreviewRunInput) {
+    const runId = getCurrentRunId() + 1;
+    setCurrentRunId(runId);
+    setCurrentPartialResult(null);
+
+    const isCurrentRun = () => getCurrentRunId() === runId;
+
+    return {
+        update(imageUrl: string) {
+            if (isCurrentRun()) {
+                setCurrentPartialResult(imageUrl);
+            }
+        },
+        clear() {
+            if (isCurrentRun()) {
+                setCurrentPartialResult(null);
+            }
+        },
+    };
+}
+
 export function buildGeneratedArchiveImage({
     id,
     url,
@@ -268,9 +299,13 @@ export function useGenerateController({
 
         setLoading(true);
         setError(null);
-        const partialRunId = partialRunIdRef.current + 1;
-        partialRunIdRef.current = partialRunId;
-        setCurrentPartialResult(null);
+        const partialPreviewRun = startGeneratePartialPreviewRun({
+            getCurrentRunId: () => partialRunIdRef.current,
+            setCurrentRunId: (runId) => {
+                partialRunIdRef.current = runId;
+            },
+            setCurrentPartialResult,
+        });
         setAutopilot((current) => ({
             ...current,
             running: false,
@@ -284,11 +319,7 @@ export function useGenerateController({
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
             const onPartialImage = shouldStreamGeneratePartials(draft)
-                ? (imageUrl: string) => {
-                    if (partialRunIdRef.current === partialRunId) {
-                        setCurrentPartialResult(imageUrl);
-                    }
-                }
+                ? partialPreviewRun.update
                 : undefined;
             const usedReferences = await snapshotGeneratedReferenceImages({
                 referenceImages: usedReferenceImages,
@@ -316,7 +347,7 @@ export function useGenerateController({
             setCurrentRunDraft(runDraft);
             setCurrentRunLineageSource(runLineageSource);
             setCurrentResultReferences(usedReferences);
-            setCurrentPartialResult(null);
+            partialPreviewRun.clear();
 
             if (!imageUrl) {
                 setCurrentResult(null);
@@ -339,7 +370,7 @@ export function useGenerateController({
             };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to generate image';
-            setCurrentPartialResult(null);
+            partialPreviewRun.clear();
             setError(message);
             completionNotification = {
                 title: 'Generation failed',
