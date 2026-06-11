@@ -95,6 +95,11 @@ interface AddGeneratedResultAsReferenceInput {
     session: Pick<GenerateSessionStore, 'saveLineageSource' | 'clearLineageSource'>;
 }
 
+interface AddGeneratedResultAsReferenceActionInput extends AddGeneratedResultAsReferenceInput {
+    capacityMessage: string | null;
+    setNotice: (message: string | null) => void;
+}
+
 export function buildGeneratedArchiveImage({
     id,
     url,
@@ -168,6 +173,28 @@ export function addGeneratedResultAsReference({
     }
 
     return true;
+}
+
+export function addGeneratedResultAsReferenceFromAction({
+    capacityMessage,
+    setNotice,
+    ...input
+}: AddGeneratedResultAsReferenceActionInput) {
+    if (capacityMessage) {
+        setNotice(capacityMessage);
+        return false;
+    }
+
+    try {
+        const added = addGeneratedResultAsReference(input);
+        if (added) {
+            setNotice(null);
+        }
+        return added;
+    } catch (referenceError) {
+        setNotice(referenceError instanceof Error ? referenceError.message : 'Failed to use result as reference.');
+        return false;
+    }
 }
 
 export function notifyGenerateCompletion({

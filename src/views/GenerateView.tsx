@@ -2,7 +2,7 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
-import { addGeneratedResultAsReference, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
+import { addGeneratedResultAsReferenceFromAction, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
@@ -338,20 +338,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     };
 
     const handleUseResultAsReference = (result: Extract<GenerateResultSlot, { status: 'success' }>) => {
-        if (resultReferenceCapacityMessage) {
-            return;
-        }
-
-        try {
-            addGeneratedResultAsReference({
-                slot: result,
-                addReferenceFiles,
-                session: generateSessionStore,
-            });
-            setAutopilotNotice(null);
-        } catch (referenceError) {
-            setAutopilotNotice(referenceError instanceof Error ? referenceError.message : 'Failed to use result as reference.');
-        }
+        addGeneratedResultAsReferenceFromAction({
+            slot: result,
+            addReferenceFiles,
+            session: generateSessionStore,
+            capacityMessage: resultReferenceCapacityMessage,
+            setNotice: setAutopilotNotice,
+        });
     };
 
 
