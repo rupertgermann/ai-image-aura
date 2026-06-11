@@ -50,14 +50,6 @@ export function useEditorSession(image: ArchiveImage | null) {
         return !!draft && !!savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft);
     }, [draft, savedDraft]);
 
-    const canvasFilter = useMemo(() => {
-        if (!draft) {
-            return '';
-        }
-
-        return `brightness(${draft.adjustments.brightness}%) contrast(${draft.adjustments.contrast}%) saturate(${draft.adjustments.saturation}%) ${draft.adjustments.filter !== 'none' ? draft.adjustments.filter : ''}`;
-    }, [draft]);
-
     const commitDraft = useCallback((nextDraft: EditorDraft, recordHistory = true) => {
         setHistory((current) => {
             if (!current) {
@@ -264,7 +256,6 @@ export function useEditorSession(image: ArchiveImage | null) {
             saturation: DEFAULT_SATURATION,
             filter: DEFAULT_FILTER,
         },
-        canvasFilter,
         durableLayerStack: draft && hasDurableLayerStack(draft.layerStack) ? draft.layerStack : null,
         referenceImages: referenceCollection.files,
         referencePreviews: referenceCollection.previews,

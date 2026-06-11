@@ -58,7 +58,7 @@ export function toCompositeOperation(blendMode: ArchiveLayer['blendMode'] | unde
     return blendMode;
 }
 
-function buildCanvasFilter(adjustments: EditorAdjustments) {
+export function buildCanvasFilter(adjustments: EditorAdjustments) {
     return `brightness(${adjustments.brightness}%) contrast(${adjustments.contrast}%) saturate(${adjustments.saturation}%) ${adjustments.filter !== 'none' ? adjustments.filter : ''}`;
 }
 

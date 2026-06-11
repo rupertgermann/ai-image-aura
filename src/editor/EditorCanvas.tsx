@@ -3,7 +3,7 @@ import { Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konv
 import Konva from 'konva';
 import type { ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from './layers';
-import { renderLayerStackToBlob, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
+import { buildCanvasFilter, renderLayerStackToBlob, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
 
 export interface EditorCanvasHandle {
     exportDataUrl: () => Promise<string>;
@@ -28,6 +28,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
     onTransformLayer,
 }, ref) => {
     const transformerRef = useRef<Konva.Transformer>(null);
+    const contentLayerRef = useRef<Konva.Layer>(null);
     const layerRefs = useRef(new Map<string, Konva.Image>());
     const scale = useMemo(() => {
         const maxWidth = 920;
@@ -41,6 +42,14 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
         exportDataUrl: () => renderLayerStackToDataUrl(layerStack, adjustments),
         exportBlob: () => renderLayerStackToBlob(layerStack, adjustments),
     }), [adjustments, layerStack]);
+
+    const canvasFilter = buildCanvasFilter(adjustments);
+    useEffect(() => {
+        const canvasElement = contentLayerRef.current?.getCanvas()._canvas;
+        if (canvasElement) {
+            canvasElement.style.filter = canvasFilter;
+        }
+    }, [canvasFilter]);
 
     useEffect(() => {
         const node = primarySelectedLayerId ? layerRefs.current.get(primarySelectedLayerId) : null;
@@ -65,7 +74,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
                 }
             }}
         >
-            <Layer>
+            <Layer ref={contentLayerRef}>
                 <Rect
                     x={0}
                     y={0}
@@ -89,6 +98,8 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
                         onTransform={(patch) => onTransformLayer(layer.id, patch)}
                     />
                 ))}
+            </Layer>
+            <Layer>
                 <Transformer
                     ref={transformerRef}
                     rotateEnabled

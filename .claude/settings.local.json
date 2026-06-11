@@ -27,7 +27,10 @@
       "Bash(/bin/ls -1 docs/adr)",
       "Bash(/bin/ls CONTEXT.md)",
       "WebFetch(domain:ai.google.dev)",
-      "Bash(sort -t'#' -k2 -n)"
+      "Bash(sort -t'#' -k2 -n)",
+      "Bash(npx tsc *)",
+      "Bash(git restore *)",
+      "Read(//Users/rupertgermann/AI/gpt_image_playground/**)"
     ]
   }
 }
