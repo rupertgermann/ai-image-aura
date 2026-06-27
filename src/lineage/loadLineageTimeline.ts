@@ -1,4 +1,6 @@
 import type { LineageStore, LineageStep } from './LineageStore';
+import type { ApiCostLedger } from '../db/types';
+import { sanitizeApiCostLedger } from '../costs/apiCost';
 import { readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
 import {
     readEditorTimelineMetadata,
@@ -19,6 +21,7 @@ export interface LineageTimelineEntry {
     iterationNumber: number | null;
     evaluatorScore: number | null;
     evaluatorFeedback: string[];
+    costLedger: ApiCostLedger | null;
     replayImageDataUrl: string | null;
     runLabel: string | null;
 }
@@ -119,6 +122,7 @@ function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
         iterationNumber: autopilotMetadata?.iterationNumber ?? null,
         evaluatorScore: autopilotMetadata?.evaluatorScore ?? null,
         evaluatorFeedback: autopilotMetadata?.evaluatorFeedback ?? [],
+        costLedger: sanitizeApiCostLedger(step.metadata.costLedger) ?? null,
         replayImageDataUrl: autopilotMetadata?.replayImageDataUrl ?? null,
         runLabel: autopilotMetadata?.runLabel ?? null,
     };

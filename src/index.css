@@ -1227,7 +1227,8 @@ textarea.aura-input {
 
 .card-prompt,
 .card-tag,
-.card-date {
+.card-date,
+.card-cost {
     color: var(--color-steel);
     font-family: var(--font-suisse-intl-mono);
     font-size: var(--text-caption);
@@ -1255,13 +1256,6 @@ textarea.aura-input {
     display: flex;
     align-items: center;
     gap: 6px;
-}
-
-.card-cost {
-    color: var(--color-charcoal);
-    font-family: var(--font-suisse-intl-mono);
-    font-size: var(--text-caption);
-    line-height: var(--leading-caption);
 }
 
 .card-selector {

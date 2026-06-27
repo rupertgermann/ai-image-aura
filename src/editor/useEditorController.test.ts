@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ArchiveLayerStack } from '../db/types';
+import type { ApiCostLedger, ArchiveLayerStack } from '../db/types';
 import type { EditImageInput } from '../image-workflow/ImageWorkflow';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import type { AiTransformRenderer } from './aiTransform';
@@ -17,13 +17,17 @@ const adjustments: EditorAdjustments = {
 describe('Editor controller AI transform flow', () => {
     it('runs an end-to-end selected-layer transform and builds save-after-transform provenance', async () => {
         const draft = createDraft(createLayerStack(), ['layer-1']);
+        const costLedger = createCostLedger('ai-edit', 0.04866);
         const referenceImages = [
             new File(['reference'], 'reference.png', { type: 'image/png' }),
         ];
         const render = createRecordingRenderer();
         const editImage = vi.fn(async (input: EditImageInput) => {
             void input;
-            return 'data:image/png;base64,ai-result';
+            return {
+                imageUrl: 'data:image/png;base64,ai-result',
+                costLedger,
+            };
         });
         const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
@@ -80,6 +84,7 @@ describe('Editor controller AI transform flow', () => {
             targetIncludesBaseLayer: false,
             aiResultLayerId: 'ai-layer',
             aiResultLayerName: 'AI result',
+            costLedger,
         }));
         expect(context.layerStack?.layers.map((layer) => [layer.id, layer.visible])).toEqual([
             ['base', true],
@@ -168,6 +173,24 @@ async function runTransform(draft: EditorDraft) {
         editImage: vi.fn(async () => 'data:image/png;base64,ai-result'),
         render: createRecordingRenderer(),
     });
+}
+
+function createCostLedger(id: string, amountUsd: number): ApiCostLedger {
+    return {
+        version: 1,
+        currency: 'USD',
+        items: [{
+            id,
+            kind: 'image-edit',
+            operation: 'image-edit',
+            provider: 'openai',
+            model: 'gpt-image-2',
+            label: 'AI edit',
+            status: 'calculated',
+            currency: 'USD',
+            amountUsd,
+        }],
+    };
 }
 
 function createRecordingRenderer() {

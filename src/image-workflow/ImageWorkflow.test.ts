@@ -384,8 +384,20 @@ describe('ImageWorkflow', () => {
         }));
     });
 
-    it('routes edit requests through the configured provider for the default model', async () => {
-        const edit = vi.fn(async () => ({ b64_json: 'edited' }));
+    it('routes edit requests through the configured provider for the default model and keeps cost metadata', async () => {
+        const edit = vi.fn(async () => ({
+            b64_json: 'edited',
+            usage: {
+                input_tokens_details: {
+                    text_tokens: 100,
+                    image_tokens: 20,
+                },
+                output_tokens_details: {
+                    image_tokens: 1600,
+                },
+                total_tokens: 1720,
+            },
+        }));
         const providers: ImageProviderRegistry = {
             openai: {
                 generate: vi.fn(),
@@ -395,14 +407,23 @@ describe('ImageWorkflow', () => {
         const workflow = createImageWorkflow(providers);
         const sourceImage = new Blob(['source'], { type: 'image/png' });
 
-        const dataUrl = await workflow.edit({
+        const result = await workflow.edit({
             apiKey: 'sk-test',
             prompt: 'make it cinematic',
             sourceImage,
             referenceImages: [],
         });
 
-        expect(dataUrl).toBe('data:image/png;base64,edited');
+        expect(result).toEqual(expect.objectContaining({
+            imageUrl: 'data:image/png;base64,edited',
+            costLedger: expect.objectContaining({
+                items: [expect.objectContaining({
+                    kind: 'image-edit',
+                    label: 'AI edit',
+                    amountUsd: 0.04866,
+                })],
+            }),
+        }));
         expect(edit).toHaveBeenCalledWith(expect.objectContaining({
             apiKey: 'sk-test',
             model: expect.objectContaining({

@@ -1,4 +1,4 @@
-import type { ArchiveLayerStack } from '../db/types';
+import type { ApiCostLedger, ArchiveLayerStack } from '../db/types';
 import type { EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 import type { ImageModelSlug } from '../utils/openaiModels';
 import { fileToDataURL } from '../utils/file';
@@ -45,12 +45,14 @@ export interface AiTransformSaveProvenance extends AiTransformTargetMetadata {
     aiEditModel: ImageModelSlug;
     aiResultLayerId: string;
     aiResultLayerName: string | null;
+    costLedger?: ApiCostLedger;
     transformMask?: EditorLineageTransformMaskAsset | null;
 }
 
 export interface AiTransformProvenanceInput {
     prompt: string;
     model: ImageModelSlug;
+    costLedger?: ApiCostLedger;
     transformMask?: EditorLineageTransformMaskAsset | null;
 }
 
@@ -102,6 +104,7 @@ export function applyAiTransformResultToDraft(
             ? {
                 aiEditPrompt: provenanceInput.prompt,
                 aiEditModel: provenanceInput.model,
+                ...(provenanceInput.costLedger ? { costLedger: provenanceInput.costLedger } : {}),
                 ...(provenanceInput.transformMask ? { transformMask: provenanceInput.transformMask } : {}),
                 targetMode: targetPlan.metadata.targetMode,
                 targetLayerCount: targetPlan.metadata.targetLayerCount,

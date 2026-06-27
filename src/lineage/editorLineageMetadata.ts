@@ -1,4 +1,4 @@
-import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
+import type { ApiCostLedger, ArchiveImage, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from '../editor/layers';
 import { isImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
 
@@ -83,6 +83,7 @@ export interface EditorLineageMetadata extends Record<string, unknown> {
     targetIncludesBaseLayer: boolean | null;
     aiResultLayerId: string | null;
     aiResultLayerName: string | null;
+    costLedger?: ApiCostLedger;
     transformMaskAsset?: EditorLineageTransformMaskAsset;
 }
 
@@ -104,6 +105,7 @@ export function buildEditorLineageMetadata(input: {
     targetIncludesBaseLayer?: boolean | null;
     aiResultLayerId?: string | null;
     aiResultLayerName?: string | null;
+    costLedger?: ApiCostLedger;
     aiEditPrompt?: string | null;
     aiEditModel?: string | null;
     transformMask?: EditorLineageTransformMaskAsset | null;
@@ -164,6 +166,7 @@ export function buildEditorLineageMetadata(input: {
         targetIncludesBaseLayer: aiTransformTarget.includesBaseLayer,
         aiResultLayerId: layers.aiResultLayer?.id ?? null,
         aiResultLayerName: layers.aiResultLayer?.name ?? null,
+        ...(input.costLedger ? { costLedger: input.costLedger } : {}),
         ...(transformMask ? { transformMaskAsset: transformMask } : {}),
     };
 }

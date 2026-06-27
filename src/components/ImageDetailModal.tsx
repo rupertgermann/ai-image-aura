@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History, Star, Coins } from 'lucide-react';
+import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History, Star } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
 import { lineageStore } from '../lineage/LineageStore';
+import { buildLineageCostLedger } from '../lineage/lineageCostLedger';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig } from '../utils/openaiModels';
 import ActualParametersPanel from './ActualParametersPanel';
-import CostSummaryPanel, { getApiCostSummaryLabel } from './CostSummaryPanel';
+import CostSummaryPanel from './CostSummaryPanel';
 import {
     buildActualParameterDetails,
     getRequestedArchiveParameters,
@@ -47,7 +48,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         actualParameters: image.actualParameters,
         requestedParameters: getRequestedArchiveParameters(image),
     });
-    const costLabel = getApiCostSummaryLabel(image.costLedger);
+    const detailCostLedger = buildLineageCostLedger(timeline?.entries ?? [], image.costLedger);
 
     const copyPrompt = () => {
         navigator.clipboard.writeText(image.prompt);
@@ -203,16 +204,10 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                     <span className="status-badge">{image.style}</span>
                                 </div>
                             )}
-                            {costLabel && (
-                                <div className="info-cell">
-                                    <label><Coins size={12} /> COST</label>
-                                    <span className="status-badge">{costLabel}</span>
-                                </div>
-                            )}
                         </div>
 
                         <ActualParametersPanel details={actualParameterDetails} />
-                        <CostSummaryPanel ledger={image.costLedger} />
+                        <CostSummaryPanel ledger={detailCostLedger} />
 
                         {image.references && image.references.length > 0 && (
                             <div className="sidebar-section">

@@ -59,9 +59,15 @@ export type GenerateBatchResult =
         error: string;
     };
 
+export interface EditImageResult {
+    imageUrl: string;
+    actualParameters?: ActualImageParameters;
+    costLedger?: ApiCostLedger;
+}
+
 export interface ImageWorkflow {
     generate(input: GenerateImageInput): Promise<GenerateBatchResult[]>;
-    edit(input: EditImageInput): Promise<string>;
+    edit(input: EditImageInput): Promise<EditImageResult>;
     serializeReferences(files: File[]): Promise<string[]>;
     hydrateReferences(dataUrls: string[]): File[];
 }
@@ -140,13 +146,20 @@ export function createImageWorkflow(
                 imageSize: input.imageSize,
             });
 
-            return requestImageDataUrl(provider.edit({
+            const startedAt = now();
+            const response = await provider.edit({
                 apiKey: input.apiKey,
                 model,
                 prompt: input.prompt,
                 maskImage: input.maskImage,
                 ...providerRequest,
-            }));
+            });
+            const elapsedMs = Math.max(0, Math.round(now() - startedAt));
+
+            return mapEditResult(response, elapsedMs, {
+                provider: model.provider,
+                model: model.apiModel,
+            });
         },
 
         serializeReferences(files) {
@@ -212,16 +225,6 @@ const resolveImageProvider = (slug: ImageModelSlug = DEFAULT_IMAGE_MODEL, provid
     return { model, modelSlug: slug, provider };
 };
 
-const requestImageDataUrl = async (request: Promise<ImageProviderResponse>) => {
-    const result = await request;
-
-    if (!result.b64_json) {
-        throw new Error('No image data returned from image provider');
-    }
-
-    return `data:image/png;base64,${result.b64_json}`;
-};
-
 export function getFirstSuccessfulGeneratedImage(results: GenerateBatchResult[]): string | null {
     return results.find((result) => result.status === 'success')?.imageUrl ?? null;
 }
@@ -266,6 +269,33 @@ function mapGenerateBatchResults(
             error: response?.error ?? 'No image data returned from image provider',
         };
     });
+}
+
+function mapEditResult(
+    response: ImageProviderResponse,
+    elapsedMs: number,
+    costContext: {
+        provider: string;
+        model: string;
+    },
+): EditImageResult {
+    if (!response.b64_json) {
+        throw new Error(response.error ?? 'No image data returned from image provider');
+    }
+
+    return {
+        imageUrl: `data:image/png;base64,${response.b64_json}`,
+        actualParameters: buildActualImageParameters(response, elapsedMs),
+        costLedger: buildImageCostLedger({
+            provider: costContext.provider,
+            model: costContext.model,
+            operation: 'image-edit',
+            label: 'AI edit',
+            usage: response.usage,
+            usageScope: response.usageScope,
+            usageImageCount: response.usageImageCount,
+        }),
+    };
 }
 
 function buildActualImageParameters(response: ImageProviderResponse, elapsedMs: number): ActualImageParameters {

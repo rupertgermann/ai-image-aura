@@ -39,6 +39,7 @@ function validateEditorMetadata(metadata: Record<string, unknown>) {
     validateEditorAiEdit(metadata.aiEdit);
     validateEditorLayers(metadata.layers);
     validateTransformMaskAsset(metadata.transformMaskAsset);
+    validateCostLedger(metadata.costLedger);
 }
 
 function validateAutopilotMetadata(metadata: Record<string, unknown>) {

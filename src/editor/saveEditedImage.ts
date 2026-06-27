@@ -1,4 +1,5 @@
-import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
+import type { ApiCostLedger, ArchiveImage, ArchiveLayerStack } from '../db/types';
+import { mergeApiCostLedgers } from '../costs/apiCost';
 import { buildEditorLineageMetadata, type EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { EditorAdjustments } from './layers';
@@ -13,6 +14,7 @@ export interface EditorSaveContext {
     targetIncludesBaseLayer?: boolean | null;
     aiResultLayerId?: string | null;
     aiResultLayerName?: string | null;
+    costLedger?: ApiCostLedger;
     aiEditPrompt?: string | null;
     aiEditModel?: string | null;
     transformMask?: EditorLineageTransformMaskAsset | null;
@@ -62,6 +64,7 @@ function buildSavedImage(
             timestamp,
             references: context.references ?? sourceImage.references,
             model: context.aiEditModel ?? sourceImage.model,
+            costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
             layerStack: context.layerStack ?? undefined,
         };
     }
@@ -71,6 +74,7 @@ function buildSavedImage(
         url: updatedUrl,
         references: context.references ?? sourceImage.references,
         model: context.aiEditModel ?? sourceImage.model,
+        costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
         layerStack: context.layerStack ?? undefined,
     };
 }
@@ -103,6 +107,7 @@ function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, cont
         targetIncludesBaseLayer: context.targetIncludesBaseLayer,
         aiResultLayerId: context.aiResultLayerId,
         aiResultLayerName: context.aiResultLayerName,
+        costLedger: context.costLedger,
         aiEditPrompt: context.aiEditPrompt,
         aiEditModel: context.aiEditModel,
         transformMask: context.transformMask,
