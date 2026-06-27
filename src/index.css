@@ -875,6 +875,18 @@ textarea.aura-input {
     margin-top: var(--element-gap);
 }
 
+.result-summary-cell-parameters .result-summary-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--spacing-16);
+    row-gap: var(--element-gap);
+}
+
+.result-summary-cell-parameters .result-summary-metric {
+    flex: 0 0 max-content;
+    max-width: 100%;
+}
+
 .result-summary-metric {
     min-width: 0;
     font-family: var(--font-suisse-intl-mono);
@@ -902,6 +914,11 @@ textarea.aura-input {
     overflow-wrap: anywhere;
     color: var(--color-charcoal);
     font-weight: var(--font-weight-regular);
+}
+
+.result-summary-cell-parameters .result-summary-metric strong {
+    overflow-wrap: normal;
+    white-space: nowrap;
 }
 
 .result-summary-pair {
@@ -947,6 +964,10 @@ textarea.aura-input {
 
 .result-summary-prompt {
     grid-column: 1 / -1;
+}
+
+.result-summary-cell-parameters .result-summary-prompt {
+    flex-basis: 100%;
 }
 
 .result-summary-prompt p {
