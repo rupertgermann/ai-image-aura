@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { imageWorkflow, type EditImageInput } from '../image-workflow/ImageWorkflow';
+import { imageWorkflow, type EditImageInput, type EditImageResult } from '../image-workflow/ImageWorkflow';
 import type { ImageModelSlug } from '../utils/openaiModels';
 import {
     applyAiTransformResultToDraft,
@@ -144,7 +144,7 @@ export function useEditorController({
     };
 }
 
-type EditImage = (input: EditImageInput) => Promise<string>;
+type EditImage = (input: EditImageInput) => Promise<string | EditImageResult>;
 
 export interface RunEditorAiTransformOptions {
     apiKey: string;
@@ -178,7 +178,7 @@ export async function runEditorAiTransform({
         referenceImages,
         render,
     });
-    const resultUrl = await editImage({
+    const editResult = normalizeEditImageResult(await editImage({
         apiKey,
         model,
         prompt: trimmedPrompt,
@@ -187,7 +187,7 @@ export async function runEditorAiTransform({
         referenceImages: editInput.referenceImages,
         maskImage,
         quality: 'medium',
-    });
+    }));
     const transformMask = maskImage
         ? await blobToTransformMaskAsset(maskImage)
         : null;
@@ -195,11 +195,12 @@ export async function runEditorAiTransform({
     return applyAiTransformResultToDraft(
         draft,
         editInput.targetPlan,
-        resultUrl,
+        editResult.imageUrl,
         makeId,
         {
             prompt: trimmedPrompt,
             model,
+            costLedger: editResult.costLedger,
             transformMask,
         },
     );
@@ -229,6 +230,7 @@ export function buildEditorSaveContext({
         layerStack: draft && hasDurableLayerStack(draft.layerStack) ? draft.layerStack : null,
         aiEditPrompt: saveProvenance?.aiEditPrompt,
         aiEditModel: saveProvenance?.aiEditModel,
+        costLedger: saveProvenance?.costLedger,
         transformMask: saveProvenance?.transformMask ?? undefined,
         targetMode: saveProvenance?.targetMode,
         targetLayerCount: saveProvenance?.targetLayerCount,
@@ -236,4 +238,10 @@ export function buildEditorSaveContext({
         aiResultLayerId: saveProvenance?.aiResultLayerId,
         aiResultLayerName: saveProvenance?.aiResultLayerName,
     };
+}
+
+function normalizeEditImageResult(result: string | EditImageResult): EditImageResult {
+    return typeof result === 'string'
+        ? { imageUrl: result }
+        : result;
 }

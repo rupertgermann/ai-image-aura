@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { createImageWorkflow, type ImageProvider, type ImageProviderRegistry } from './ImageWorkflow';
-import { createGoogleImageProvider, extractGoogleImageData } from './ImageProvider';
+import { createGoogleImageProvider, extractGoogleImageData, extractGoogleUsageMetadata } from './ImageProvider';
 
 describe('ImageWorkflow', () => {
     it('routes generate requests through the configured provider for the selected model', async () => {
@@ -37,6 +37,14 @@ describe('ImageWorkflow', () => {
             actualParameters: {
                 elapsedMs: expect.any(Number),
             },
+            costLedger: expect.objectContaining({
+                currency: 'USD',
+                items: [expect.objectContaining({
+                    status: 'unavailable',
+                    provider: 'openai',
+                    model: OPENAI_IMAGE_MODEL,
+                })],
+            }),
         }]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             apiKey: 'sk-test',
@@ -88,6 +96,12 @@ describe('ImageWorkflow', () => {
                 actualParameters: {
                     elapsedMs: expect.any(Number),
                 },
+                costLedger: expect.objectContaining({
+                    items: [expect.objectContaining({
+                        label: 'Image generation 1',
+                        status: 'unavailable',
+                    })],
+                }),
             },
             { slotIndex: 1, status: 'failed', error: 'No image data returned from image provider' },
             {
@@ -97,6 +111,12 @@ describe('ImageWorkflow', () => {
                 actualParameters: {
                     elapsedMs: expect.any(Number),
                 },
+                costLedger: expect.objectContaining({
+                    items: [expect.objectContaining({
+                        label: 'Image generation 3',
+                        status: 'unavailable',
+                    })],
+                }),
             },
         ]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
@@ -136,6 +156,12 @@ describe('ImageWorkflow', () => {
                 actualParameters: {
                     elapsedMs: expect.any(Number),
                 },
+                costLedger: expect.objectContaining({
+                    items: [expect.objectContaining({
+                        label: 'Image generation 1',
+                        status: 'unavailable',
+                    })],
+                }),
             },
             { slotIndex: 1, status: 'failed', error: 'Google Gemini API Error: overloaded' },
             {
@@ -145,6 +171,12 @@ describe('ImageWorkflow', () => {
                 actualParameters: {
                     elapsedMs: expect.any(Number),
                 },
+                costLedger: expect.objectContaining({
+                    items: [expect.objectContaining({
+                        label: 'Image generation 3',
+                        status: 'unavailable',
+                    })],
+                }),
             },
         ]);
     });
@@ -187,7 +219,63 @@ describe('ImageWorkflow', () => {
                 quality: 'high',
                 elapsedMs: 275,
             },
+            costLedger: expect.objectContaining({
+                items: [expect.objectContaining({
+                    status: 'unavailable',
+                })],
+            }),
         }]);
+    });
+
+    it('calculates image generation costs from provider usage metadata', async () => {
+        const generate = vi.fn(async () => [{
+            b64_json: 'generated',
+            usage: {
+                input_tokens_details: {
+                    text_tokens: 100,
+                    image_tokens: 20,
+                },
+                output_tokens_details: {
+                    image_tokens: 1600,
+                },
+                total_tokens: 1720,
+            },
+        }]);
+        const workflow = createImageWorkflow({
+            openai: {
+                generate,
+                edit: vi.fn(),
+            },
+        });
+
+        const results = await workflow.generate({
+            apiKey: 'sk-test',
+            prompt: 'blue hour mountain',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            style: 'none',
+            lighting: 'none',
+            palette: 'none',
+            referenceImages: [],
+        });
+
+        expect(results[0]).toMatchObject({
+            status: 'success',
+            costLedger: {
+                version: 1,
+                currency: 'USD',
+                items: [expect.objectContaining({
+                    status: 'calculated',
+                    amountUsd: 0.04866,
+                    usage: expect.objectContaining({
+                        inputTextTokens: 100,
+                        inputImageTokens: 20,
+                        outputImageTokens: 1600,
+                    }),
+                })],
+            },
+        });
     });
 
     it('forwards single-slot OpenAI partial images as data URLs', async () => {
@@ -296,8 +384,20 @@ describe('ImageWorkflow', () => {
         }));
     });
 
-    it('routes edit requests through the configured provider for the default model', async () => {
-        const edit = vi.fn(async () => ({ b64_json: 'edited' }));
+    it('routes edit requests through the configured provider for the default model and keeps cost metadata', async () => {
+        const edit = vi.fn(async () => ({
+            b64_json: 'edited',
+            usage: {
+                input_tokens_details: {
+                    text_tokens: 100,
+                    image_tokens: 20,
+                },
+                output_tokens_details: {
+                    image_tokens: 1600,
+                },
+                total_tokens: 1720,
+            },
+        }));
         const providers: ImageProviderRegistry = {
             openai: {
                 generate: vi.fn(),
@@ -307,14 +407,23 @@ describe('ImageWorkflow', () => {
         const workflow = createImageWorkflow(providers);
         const sourceImage = new Blob(['source'], { type: 'image/png' });
 
-        const dataUrl = await workflow.edit({
+        const result = await workflow.edit({
             apiKey: 'sk-test',
             prompt: 'make it cinematic',
             sourceImage,
             referenceImages: [],
         });
 
-        expect(dataUrl).toBe('data:image/png;base64,edited');
+        expect(result).toEqual(expect.objectContaining({
+            imageUrl: 'data:image/png;base64,edited',
+            costLedger: expect.objectContaining({
+                items: [expect.objectContaining({
+                    kind: 'image-edit',
+                    label: 'AI edit',
+                    amountUsd: 0.04866,
+                })],
+            }),
+        }));
         expect(edit).toHaveBeenCalledWith(expect.objectContaining({
             apiKey: 'sk-test',
             model: expect.objectContaining({
@@ -649,6 +758,43 @@ describe('googleImageProvider', () => {
         });
     });
 
+    it('preserves Gemini image usage metadata when present', async () => {
+        const usageMetadata = {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 1290,
+            candidatesTokensDetails: [{ modality: 'IMAGE', tokenCount: 1290 }],
+            totalTokenCount: 2290,
+        };
+        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+            candidates: [{
+                content: {
+                    parts: [{ inlineData: { data: 'gemini-image' } }],
+                },
+            }],
+            usageMetadata,
+        })));
+        const provider = createGoogleImageProvider(fetchImpl);
+
+        const result = await provider.generate({
+            apiKey: 'google-key',
+            model: {
+                slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                provider: 'google',
+                apiModel: 'gemini-3-pro-image-preview',
+                label: 'Nano Banana Pro',
+                endpoints: {
+                    generate: 'https://example.test/generate',
+                    edit: 'https://example.test/generate',
+                },
+                parameters: {},
+                capabilities: { transformMask: false, partialImageStreaming: false },
+            },
+            prompt: 'a luminous teapot city',
+        });
+
+        expect(result).toEqual([{ b64_json: 'gemini-image', usage: usageMetadata }]);
+    });
+
     it('ignores partial image callbacks for Gemini requests', async () => {
         const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
             candidates: [{
@@ -826,6 +972,26 @@ describe('googleImageProvider', () => {
                 },
             }],
         })).toBe('snake123');
+    });
+
+    it('extracts numeric Gemini usage metadata and modality token details', () => {
+        expect(extractGoogleUsageMetadata({
+            usageMetadata: {
+                promptTokenCount: 100,
+                candidatesTokenCount: 20,
+                promptTokensDetails: [{ modality: 'TEXT', tokenCount: 100 }],
+                candidatesTokensDetails: [
+                    { modality: 'IMAGE', tokenCount: 20 },
+                    { modality: 'TEXT', tokenCount: 'ignored' },
+                ],
+            },
+        })).toEqual({
+            promptTokenCount: 100,
+            candidatesTokenCount: 20,
+            promptTokensDetails: [{ modality: 'TEXT', tokenCount: 100 }],
+            candidatesTokensDetails: [{ modality: 'IMAGE', tokenCount: 20 }],
+        });
+        expect(extractGoogleUsageMetadata({ usageMetadata: {} })).toBeNull();
     });
 
     it('uses default Gemini imageConfig values when values are not provided', async () => {

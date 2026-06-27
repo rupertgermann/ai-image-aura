@@ -3,11 +3,13 @@ import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, Chevron
 import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
 import { lineageStore } from '../lineage/LineageStore';
+import { buildLineageCostLedger } from '../lineage/lineageCostLedger';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig } from '../utils/openaiModels';
 import ActualParametersPanel from './ActualParametersPanel';
+import CostSummaryPanel from './CostSummaryPanel';
 import {
     buildActualParameterDetails,
     getRequestedArchiveParameters,
@@ -46,6 +48,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         actualParameters: image.actualParameters,
         requestedParameters: getRequestedArchiveParameters(image),
     });
+    const detailCostLedger = buildLineageCostLedger(timeline?.entries ?? [], image.costLedger);
 
     const copyPrompt = () => {
         navigator.clipboard.writeText(image.prompt);
@@ -204,6 +207,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         </div>
 
                         <ActualParametersPanel details={actualParameterDetails} />
+                        <CostSummaryPanel ledger={detailCostLedger} />
 
                         {image.references && image.references.length > 0 && (
                             <div className="sidebar-section">

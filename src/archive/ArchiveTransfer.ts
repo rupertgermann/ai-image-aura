@@ -72,6 +72,7 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
             lighting: image.lighting,
             palette: image.palette,
             actualParameters: image.actualParameters,
+            costLedger: image.costLedger,
             imageFileName,
             references,
             layerStack,
@@ -132,6 +133,7 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
             lighting: image.lighting,
             palette: image.palette,
             actualParameters: image.actualParameters,
+            costLedger: image.costLedger,
             references,
             layerStack,
         });

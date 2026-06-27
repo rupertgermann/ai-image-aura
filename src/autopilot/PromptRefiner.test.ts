@@ -14,7 +14,9 @@ describe('PromptRefiner', () => {
             goal: 'A cinematic editorial portrait',
             currentPrompt: 'portrait',
             feedback: ['The lighting should be more dramatic.'],
-        })).resolves.toBe('Cinematic fashion portrait, strong rim lighting, tailored black coat, moody editorial studio backdrop');
+        })).resolves.toEqual({
+            prompt: 'Cinematic fashion portrait, strong rim lighting, tailored black coat, moody editorial studio backdrop',
+        });
     });
 
     it('propagates API errors to the caller', async () => {
@@ -30,5 +32,36 @@ describe('PromptRefiner', () => {
             currentPrompt: 'still life',
             feedback: ['The composition should feel more intentional.'],
         })).rejects.toThrow('upstream unavailable');
+    });
+
+    it('attaches reasoning cost metadata when the client returns usage', async () => {
+        const refiner = createPromptRefiner({
+            provider: 'openai',
+            model: 'gpt-5.4',
+            createResponse: vi.fn(async () => ({
+                outputText: 'Sharper prompt',
+                usage: {
+                    input_tokens: 200,
+                    output_tokens: 30,
+                    total_tokens: 230,
+                },
+            })),
+        });
+
+        await expect(refiner.refine({
+            apiKey: 'test-key',
+            goal: 'A sharper image',
+            currentPrompt: 'image',
+            feedback: ['Be more specific.'],
+        })).resolves.toMatchObject({
+            prompt: 'Sharper prompt',
+            costLedger: {
+                items: [expect.objectContaining({
+                    operation: 'prompt-refinement',
+                    status: 'calculated',
+                    amountUsd: 0.00095,
+                })],
+            },
+        });
     });
 });

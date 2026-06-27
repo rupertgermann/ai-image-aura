@@ -135,6 +135,7 @@ class LocalArchiveStore implements ArchiveStore {
                 lighting: input.lighting,
                 palette: input.palette,
                 actualParameters: input.actualParameters,
+                costLedger: input.costLedger,
                 referenceIds,
                 layerStack: durableLayerStack,
             });
@@ -161,6 +162,7 @@ class LocalArchiveStore implements ArchiveStore {
             lighting: input.lighting,
             palette: input.palette,
             actualParameters: input.actualParameters,
+            costLedger: input.costLedger,
             layerStack: input.layerStack,
         };
     }
@@ -218,6 +220,7 @@ class LocalArchiveStore implements ArchiveStore {
             lighting: record.lighting,
             palette: record.palette,
             actualParameters: record.actualParameters,
+            costLedger: record.costLedger,
             layerStack,
         };
     }

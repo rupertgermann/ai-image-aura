@@ -1,4 +1,6 @@
 import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
+import { buildReasoningCostLedger } from '../costs/apiCost';
+import type { ApiCostLedger } from '../db/types';
 
 export const GOAL_PROMPT_TRANSLATOR_PROMPT_VERSION = 'goal-prompt-translator.v1';
 
@@ -10,7 +12,12 @@ export const GOAL_PROMPT_TRANSLATOR_SYSTEM_PROMPT = [
 ].join('\n');
 
 export interface GoalPromptTranslator {
-    translate(input: { goal: string; apiKey: string }): Promise<string>;
+    translate(input: { goal: string; apiKey: string }): Promise<GoalPromptTranslation>;
+}
+
+export interface GoalPromptTranslation {
+    prompt: string;
+    costLedger?: ApiCostLedger;
 }
 
 export function createGoalPromptTranslator(client: ReasoningClient = openAiReasoningClient): GoalPromptTranslator {
@@ -27,9 +34,28 @@ export function createGoalPromptTranslator(client: ReasoningClient = openAiReaso
                 throw new Error('Goal prompt translator returned an empty prompt');
             }
 
-            return prompt;
+            return {
+                prompt,
+                ...buildReasoningCost(client, response.usage),
+            };
         },
     };
 }
 
 export const goalPromptTranslator = createGoalPromptTranslator();
+
+function buildReasoningCost(client: ReasoningClient, usage: unknown): { costLedger?: ApiCostLedger } {
+    if (!client.provider || !client.model) {
+        return {};
+    }
+
+    return {
+        costLedger: buildReasoningCostLedger({
+            provider: client.provider,
+            model: client.model,
+            operation: 'goal-translation',
+            label: 'Goal translation',
+            usage,
+        }),
+    };
+}

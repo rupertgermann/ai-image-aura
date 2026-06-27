@@ -3,19 +3,20 @@ import {
     buildGeminiReasoningRequest,
     createGeminiReasoningClient,
     createOpenAiReasoningClient,
+    extractGeminiReasoningUsage,
     extractGeminiReasoningText,
 } from './ReasoningClient';
 
 describe('ReasoningClient', () => {
     it('wraps the OpenAI responses client', async () => {
-        const createResponse = vi.fn(async () => ({ outputText: 'translated prompt' }));
+        const createResponse = vi.fn(async () => ({ outputText: 'translated prompt', usage: { input_tokens: 10 } }));
         const client = createOpenAiReasoningClient({ createResponse });
 
         await expect(client.createResponse({
             apiKey: 'sk-test',
             systemPrompt: 'system',
             userText: 'user',
-        })).resolves.toEqual({ outputText: 'translated prompt' });
+        })).resolves.toEqual({ outputText: 'translated prompt', usage: { input_tokens: 10 } });
 
         expect(createResponse).toHaveBeenCalledWith({
             apiKey: 'sk-test',
@@ -90,5 +91,20 @@ describe('ReasoningClient', () => {
             }],
         })).toBe('first\nsecond');
         expect(extractGeminiReasoningText({ candidates: [{ content: { parts: [] } }] })).toBeNull();
+    });
+
+    it('extracts numeric Gemini reasoning usage metadata', () => {
+        expect(extractGeminiReasoningUsage({
+            usageMetadata: {
+                promptTokenCount: 120,
+                candidatesTokenCount: 30,
+                thoughtsTokenCount: 50,
+                promptTokensDetails: [{ modality: 'TEXT', tokenCount: 120 }],
+            },
+        })).toEqual({
+            promptTokenCount: 120,
+            candidatesTokenCount: 30,
+            thoughtsTokenCount: 50,
+        });
     });
 });

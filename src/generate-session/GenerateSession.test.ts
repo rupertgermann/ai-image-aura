@@ -137,6 +137,21 @@ describe('GenerateSession draft migration', () => {
                     imageUrl: 'data:image/png;base64,result-0',
                     isSaved: true,
                     archiveImageId: 'archive-0',
+                    costLedger: {
+                        version: 1,
+                        currency: 'USD',
+                        items: [{
+                            id: 'image-generation:openai:gpt-image-2',
+                            kind: 'image-generation',
+                            operation: 'image-generation',
+                            provider: 'openai',
+                            model: 'gpt-image-2',
+                            label: 'Image generation 1',
+                            status: 'calculated',
+                            currency: 'USD',
+                            amountUsd: 0.04,
+                        }],
+                    },
                 },
                 {
                     slotIndex: 1,

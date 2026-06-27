@@ -2,12 +2,14 @@ import { SQLocal } from 'sqlocal';
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { createDurableLayerStackMetadata } from './ArchiveAssets';
+import { sanitizeApiCostLedger } from '../costs/apiCost';
 
 type ArchiveImageRow = ArchiveImage & {
     favorite?: number | null;
     ref_ids?: string;
     layer_stack?: string;
     actual_parameters?: string | null;
+    cost_ledger?: string | null;
 };
 
 type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
@@ -52,6 +54,7 @@ export class SQLiteArchiveMetadataPort {
         await this.sql.sql`ALTER TABLE images ADD COLUMN layer_stack TEXT`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN favorite INTEGER`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN actual_parameters TEXT`.catch(() => null);
+        await this.sql.sql`ALTER TABLE images ADD COLUMN cost_ledger TEXT`.catch(() => null);
 
         this.initialized = true;
     }
@@ -60,7 +63,7 @@ export class SQLiteArchiveMetadataPort {
         await this.init();
 
         await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, favorite, ref_ids, style, lighting, palette, layer_stack, actual_parameters)
+            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, favorite, ref_ids, style, lighting, palette, layer_stack, actual_parameters, cost_ledger)
             VALUES (
                 ${record.id},
                 ${record.storedUrl},
@@ -78,7 +81,8 @@ export class SQLiteArchiveMetadataPort {
                 ${record.lighting || null},
                 ${record.palette || null},
                 ${record.layerStack ? JSON.stringify(createDurableLayerStackMetadata(record.layerStack)) : null},
-                ${record.actualParameters ? JSON.stringify(record.actualParameters) : null}
+                ${record.actualParameters ? JSON.stringify(record.actualParameters) : null},
+                ${record.costLedger ? JSON.stringify(record.costLedger) : null}
             )
         `;
     }
@@ -104,6 +108,7 @@ export class SQLiteArchiveMetadataPort {
             lighting: image.lighting,
             palette: image.palette,
             actualParameters: parseActualParameters(image.actual_parameters),
+            costLedger: parseCostLedger(image.cost_ledger),
             referenceIds: parseReferenceIds(image.ref_ids),
             layerStack: parseLayerStack(image.layer_stack),
         }));
@@ -134,6 +139,7 @@ export class SQLiteArchiveMetadataPort {
             lighting: row.lighting,
             palette: row.palette,
             actualParameters: parseActualParameters(row.actual_parameters),
+            costLedger: parseCostLedger(row.cost_ledger),
             referenceIds: parseReferenceIds(row.ref_ids),
             layerStack: parseLayerStack(row.layer_stack),
         };
@@ -154,6 +160,18 @@ const parseReferenceIds = (value?: string): number[] => {
         return JSON.parse(value) as number[];
     } catch {
         return [];
+    }
+};
+
+const parseCostLedger = (value?: string | null): ArchiveImage['costLedger'] | undefined => {
+    if (!value) {
+        return undefined;
+    }
+
+    try {
+        return sanitizeApiCostLedger(JSON.parse(value) as unknown);
+    } catch {
+        return undefined;
     }
 };
 

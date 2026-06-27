@@ -71,6 +71,40 @@ describe('openAiImageClient', () => {
         }
     });
 
+    it('preserves top-level usage from image responses for cost calculation', async () => {
+        const usage = {
+            input_tokens_details: {
+                text_tokens: 100,
+                image_tokens: 20,
+            },
+            output_tokens_details: {
+                image_tokens: 1600,
+            },
+            total_tokens: 1720,
+        };
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            data: [{ b64_json: 'generated' }],
+            usage,
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            const result = await openAiImageClient.createImage({
+                apiKey: 'sk-test',
+                prompt: 'a cat',
+            });
+
+            expect(result).toEqual({
+                b64_json: 'generated',
+                usage,
+                usageScope: 'result',
+                usageImageCount: 1,
+            });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('posts batched image generation requests with native n and returns every image payload', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
             data: [
@@ -108,7 +142,7 @@ describe('openAiImageClient', () => {
         const fetchMock = vi.fn(async () => createSseResponse([
             'event: image_generation.partial_image\ndata: {"type":"image_generation.partial_image","b64_json":"partial-0"}\n\n',
             'event: image_generation.partial_image\ndata: {"type":"image_generation.partial_image","partial_image":{"b64_json":"partial-1"}}\n\n',
-            'event: image_generation.completed\ndata: {"type":"image_generation.completed","size":"1536x1024","quality":"high","data":[{"b64_json":"final","revised_prompt":"a refined slow cat"}]}\n\n',
+            'event: image_generation.completed\ndata: {"type":"image_generation.completed","size":"1536x1024","quality":"high","usage":{"input_tokens_details":{"text_tokens":10},"output_tokens_details":{"image_tokens":20}},"data":[{"b64_json":"final","revised_prompt":"a refined slow cat"}]}\n\n',
         ]));
         const partials: Array<{ b64_json?: string }> = [];
 
@@ -125,6 +159,12 @@ describe('openAiImageClient', () => {
                 revised_prompt: 'a refined slow cat',
                 size: '1536x1024',
                 quality: 'high',
+                usage: {
+                    input_tokens_details: { text_tokens: 10 },
+                    output_tokens_details: { image_tokens: 20 },
+                },
+                usageScope: 'request',
+                usageImageCount: 1,
             });
             expect(partials).toEqual([
                 { b64_json: 'partial-0' },
@@ -351,6 +391,35 @@ describe('openAiResponsesClient', () => {
             });
 
             expect(result).toEqual({ outputText: 'fallback text' });
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('preserves Responses API usage for reasoning cost calculation', async () => {
+        const usage = {
+            input_tokens: 1000,
+            output_tokens: 200,
+            total_tokens: 1200,
+            input_tokens_details: {
+                cached_tokens: 100,
+            },
+        };
+        const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+            output_text: 'summary',
+            usage,
+        })));
+
+        vi.stubGlobal('fetch', fetchMock);
+        try {
+            await expect(openAiResponsesClient.createResponse({
+                apiKey: 'res-key',
+                systemPrompt: 'act',
+                userText: 'describe',
+            })).resolves.toEqual({
+                outputText: 'summary',
+                usage,
+            });
         } finally {
             vi.unstubAllGlobals();
         }

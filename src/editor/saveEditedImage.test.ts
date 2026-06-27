@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ArchiveImage } from '../db/types';
+import type { ApiCostKind, ApiCostLedger, ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
@@ -96,6 +96,37 @@ describe('saveEditedImage', () => {
                 }),
             }),
         ]);
+    });
+
+    it('adds AI edit cost to the saved image total and records the edit step cost in lineage', async () => {
+        const lineage = createStore();
+        await seedSourceLineage(lineage);
+        const generationCostLedger = createCostLedger('image-generation', 'image-generation', 0.05);
+        const editCostLedger = createCostLedger('ai-edit', 'image-edit', 0.04);
+
+        const savedImage = await saveEditedImage(
+            createArchiveImage({ costLedger: generationCostLedger }),
+            'data:image/png;base64,edited-copy',
+            {
+                ...createSaveContext(),
+                isCopy: true,
+                aiEditPrompt: 'add a moonlit skyline',
+                costLedger: editCostLedger,
+            },
+            {
+                saveImage: vi.fn(async (image) => image),
+                lineageStore: lineage,
+                clock: () => '2026-04-04T12:00:00.000Z',
+                makeId: () => 'costed-edit-copy',
+            },
+        );
+
+        expect(savedImage.costLedger?.items.map((item) => [item.id, item.amountUsd])).toEqual([
+            ['image-generation', 0.05],
+            ['ai-edit', 0.04],
+        ]);
+        const steps = await lineage.getByArchiveImageId(savedImage.id);
+        expect(steps.at(-1)?.metadata.costLedger).toEqual(editCostLedger);
     });
 
     it('writes a save-as-copy step branching from the source image', async () => {
@@ -541,6 +572,24 @@ function createSaveContext(overrides: Partial<EditorSaveContext> = {}): EditorSa
         },
         aiEditPrompt: null,
         ...overrides,
+    };
+}
+
+function createCostLedger(id: string, kind: ApiCostKind, amountUsd: number): ApiCostLedger {
+    return {
+        version: 1,
+        currency: 'USD',
+        items: [{
+            id,
+            kind,
+            operation: kind,
+            provider: 'openai',
+            model: 'gpt-image-2',
+            label: kind === 'image-edit' ? 'AI edit' : 'Image generation 1',
+            status: 'calculated',
+            currency: 'USD',
+            amountUsd,
+        }],
     };
 }
 

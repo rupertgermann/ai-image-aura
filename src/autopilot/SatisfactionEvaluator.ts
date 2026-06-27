@@ -1,4 +1,6 @@
 import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
+import { buildReasoningCostLedger } from '../costs/apiCost';
+import type { ApiCostLedger } from '../db/types';
 
 export const SATISFACTION_EVALUATOR_PROMPT_VERSION = 'satisfaction-evaluator.v1';
 
@@ -22,6 +24,7 @@ const FALLBACK_EVALUATION = {
 export interface SatisfactionEvaluation {
     score: number;
     feedback: string[];
+    costLedger?: ApiCostLedger;
 }
 
 export interface SatisfactionEvaluator {
@@ -49,7 +52,10 @@ export function createSatisfactionEvaluator(client: ReasoningClient = openAiReas
                 },
             });
 
-            return parseEvaluation(response.outputText);
+            return {
+                ...parseEvaluation(response.outputText),
+                ...buildReasoningCost(client, response.usage),
+            };
         },
     };
 }
@@ -96,3 +102,19 @@ function normalizeFeedback(value: unknown) {
 }
 
 export const satisfactionEvaluator = createSatisfactionEvaluator();
+
+function buildReasoningCost(client: ReasoningClient, usage: unknown): { costLedger?: ApiCostLedger } {
+    if (!client.provider || !client.model) {
+        return {};
+    }
+
+    return {
+        costLedger: buildReasoningCostLedger({
+            provider: client.provider,
+            model: client.model,
+            operation: 'satisfaction-evaluation',
+            label: 'Satisfaction evaluation',
+            usage,
+        }),
+    };
+}

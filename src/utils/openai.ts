@@ -28,6 +28,9 @@ export interface OpenAiImageResponse {
     revised_prompt?: string;
     size?: string;
     quality?: string;
+    usage?: unknown;
+    usageScope?: 'result' | 'request';
+    usageImageCount?: number;
 }
 
 export interface OpenAiResponsesRequest {
@@ -39,6 +42,7 @@ export interface OpenAiResponsesRequest {
 
 export interface OpenAiResponsesResponse {
     outputText: string;
+    usage?: unknown;
 }
 
 export interface OpenAiImageClient {
@@ -149,6 +153,7 @@ async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiI
         data?: OpenAiImageResponse[];
         size?: string;
         quality?: string;
+        usage?: unknown;
     } = await response.json();
 
     if (!data.data || data.data.length === 0) {
@@ -159,6 +164,11 @@ async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiI
         ...image,
         ...(image.size === undefined && data.size !== undefined ? { size: data.size } : {}),
         ...(image.quality === undefined && data.quality !== undefined ? { quality: data.quality } : {}),
+        ...(image.usage === undefined && data.usage !== undefined ? {
+            usage: data.usage,
+            usageScope: data.data && data.data.length > 1 ? 'request' as const : 'result' as const,
+            usageImageCount: data.data?.length ?? 1,
+        } : {}),
     }));
 }
 
@@ -334,7 +344,7 @@ function parseJsonRecord(value: string): Record<string, unknown> | null {
 
 function extractImageResponses(
     value: unknown,
-    inheritedParameters: Pick<OpenAiImageResponse, 'size' | 'quality'> = {},
+    inheritedParameters: Pick<OpenAiImageResponse, 'size' | 'quality' | 'usage' | 'usageScope' | 'usageImageCount'> = {},
 ): OpenAiImageResponse[] {
     if (typeof value !== 'object' || value === null) {
         return [];
@@ -344,9 +354,22 @@ function extractImageResponses(
     const actualParameters = {
         size: typeof record.size === 'string' ? record.size : inheritedParameters.size,
         quality: typeof record.quality === 'string' ? record.quality : inheritedParameters.quality,
+        usage: record.usage !== undefined ? record.usage : inheritedParameters.usage,
+        usageScope: record.usage !== undefined ? 'request' as const : inheritedParameters.usageScope,
+        usageImageCount: inheritedParameters.usageImageCount,
     };
     if (Array.isArray(record.data)) {
-        return record.data.flatMap((item) => extractImageResponses(item, actualParameters));
+        const images = record.data.flatMap((item) => extractImageResponses(item, actualParameters));
+        if (record.usage !== undefined) {
+            return images.map((image) => ({
+                ...image,
+                usage: image.usage ?? record.usage,
+                usageScope: 'request',
+                usageImageCount: images.length,
+            }));
+        }
+
+        return images;
     }
 
     if (typeof record.data === 'object' && record.data !== null) {
@@ -360,6 +383,11 @@ function extractImageResponses(
             ...(typeof record.revised_prompt === 'string' ? { revised_prompt: record.revised_prompt } : {}),
             ...(actualParameters.size ? { size: actualParameters.size } : {}),
             ...(actualParameters.quality ? { quality: actualParameters.quality } : {}),
+            ...(record.usage !== undefined || actualParameters.usage !== undefined ? {
+                usage: record.usage ?? actualParameters.usage,
+                usageScope: record.usage !== undefined ? 'result' : actualParameters.usageScope,
+                ...(actualParameters.usageImageCount ? { usageImageCount: actualParameters.usageImageCount } : {}),
+            } : {}),
         }]
         : [];
 }
@@ -439,9 +467,20 @@ export const openAiResponsesClient: OpenAiResponsesClient = {
             throw new Error('No text response returned from OpenAI');
         }
 
-        return { outputText };
+        return {
+            outputText,
+            ...(extractResponseUsage(data) !== undefined ? { usage: extractResponseUsage(data) } : {}),
+        };
     },
 };
+
+function extractResponseUsage(data: unknown): unknown {
+    if (!data || typeof data !== 'object') {
+        return undefined;
+    }
+
+    return (data as { usage?: unknown }).usage;
+}
 
 function extractResponseOutputText(data: unknown) {
     if (!data || typeof data !== 'object') {

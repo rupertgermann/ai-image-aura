@@ -2,6 +2,7 @@ import React from 'react';
 import { Download, Trash2, Edit2, Clock, Star } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { downloadArchiveImage } from '../download/download';
+import { getApiCostSummaryLabel } from './CostSummaryPanel';
 
 interface ImageCardProps {
     image: ArchiveImage;
@@ -17,6 +18,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
     image, onDelete, onEdit, onToggleFavorite, onClick, selected = false, onSelect
 }) => {
     const dateStr = new Date(image.timestamp).toLocaleDateString();
+    const costLabel = getApiCostSummaryLabel(image.costLedger);
 
     const handleDownload = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -70,6 +72,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 <p className="card-prompt" title={image.prompt}>{image.prompt}</p>
                 <div className="card-meta">
                     <span className="card-tag">{image.quality.toUpperCase()}</span>
+                    {costLabel && <span className="card-cost">{costLabel}</span>}
                     <div className="card-date">
                         <Clock size={12} />
                         <span>{dateStr}</span>

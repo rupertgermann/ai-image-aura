@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import type { ActualImageParameters, ArchiveImage } from '../db/types';
+import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
 import {
     generateSessionStore,
@@ -72,6 +72,7 @@ interface BuildGeneratedArchiveImageInput {
     draft: GenerateDraft;
     references: string[];
     actualParameters?: ActualImageParameters;
+    costLedger?: ApiCostLedger;
 }
 
 interface SnapshotGeneratedReferenceImagesInput {
@@ -86,6 +87,7 @@ interface BuildGeneratedArchiveImageForSaveInput {
     draft: GenerateDraft;
     usedReferences: string[] | null;
     actualParameters?: ActualImageParameters;
+    costLedger?: ApiCostLedger;
     serializeReferences: () => Promise<string[]>;
 }
 
@@ -153,6 +155,7 @@ export function buildGeneratedArchiveImage({
     draft,
     references,
     actualParameters,
+    costLedger,
 }: BuildGeneratedArchiveImageInput): ArchiveImage {
     const archiveFields = getActiveGenerateArchiveFields(draft);
 
@@ -171,6 +174,7 @@ export function buildGeneratedArchiveImage({
         lighting: draft.lighting,
         palette: draft.palette,
         actualParameters,
+        costLedger,
         references,
     };
 }
@@ -189,6 +193,7 @@ export async function buildGeneratedArchiveImageForSave({
     draft,
     usedReferences,
     actualParameters,
+    costLedger,
     serializeReferences,
 }: BuildGeneratedArchiveImageForSaveInput): Promise<ArchiveImage> {
     const references = usedReferences ?? await serializeReferences();
@@ -199,6 +204,7 @@ export async function buildGeneratedArchiveImageForSave({
         timestamp,
         draft,
         actualParameters,
+        costLedger,
         references,
     });
 }
@@ -234,6 +240,7 @@ export async function saveGenerateResultSlots({
             draft: runDraft ?? draft,
             usedReferences,
             actualParameters: slot.actualParameters,
+            costLedger: slot.costLedger,
             serializeReferences,
         });
         await saveGeneratedImage(image, {
@@ -509,7 +516,12 @@ export function useGenerateController({
         }
     }, [apiKey, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
-    const runAutopilot = useCallback(async (input: { goal: string; maxIterations?: number; satisfactionThreshold?: number }) => {
+    const runAutopilot = useCallback(async (input: {
+        goal: string;
+        maxIterations?: number;
+        satisfactionThreshold?: number;
+        initialCostLedger?: ApiCostLedger;
+    }) => {
         if (!apiKey) {
             setError('Please set the selected image model API key in Settings first.');
             return null;
@@ -556,6 +568,7 @@ export function useGenerateController({
                 createSession: createAutopilot,
                 evaluate,
                 refine,
+                initialCostLedger: input.initialCostLedger,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
                 },
@@ -775,6 +788,7 @@ export function buildGenerateResultSlots(results: GenerateBatchResult[]): Genera
             imageUrl: result.imageUrl,
             isSaved: false,
             actualParameters: result.actualParameters,
+            costLedger: result.costLedger,
         }
         : result);
 }
@@ -819,6 +833,7 @@ function buildAutopilotResultSlot(iteration: AutopilotIteration): Extract<Genera
         isSaved: false,
         archiveImageId: iteration.archiveImageId,
         ...(iteration.actualParameters ? { actualParameters: iteration.actualParameters } : {}),
+        ...(iteration.costLedger ? { costLedger: iteration.costLedger } : {}),
     };
 }
 

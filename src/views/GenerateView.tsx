@@ -1,12 +1,13 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
-import type { ArchiveImage } from '../db/types';
+import type { ApiCostLedger, ArchiveImage } from '../db/types';
 import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
 import { addGeneratedResultAsReferenceFromAction, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 import ActualParametersPanel from '../components/ActualParametersPanel';
+import CostSummaryPanel, { hasApiCostLedger } from '../components/CostSummaryPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import {
     buildActualParameterDetails,
@@ -187,6 +188,11 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);
     const [autopilotNotice, setAutopilotNotice] = useState<string | null>(null);
     const [translatingGoal, setTranslatingGoal] = useState(false);
+    const [goalTranslationCostContext, setGoalTranslationCostContext] = useState<{
+        goal: string;
+        prompt: string;
+        ledger: ApiCostLedger;
+    } | null>(null);
     const { prompt, model, style, lighting, palette, isSaved } = draft;
     const activeModel = resolveImageModelConfig(model);
     const activeImageApiKey = getProviderKey(activeModel.provider);
@@ -292,9 +298,15 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         setTranslatingGoal(true);
         setAutopilotNotice(null);
         try {
-            const nextPrompt = await goalPromptTranslator.translate({ goal, apiKey: reasoningApiKey });
-            updateDraft({ prompt: nextPrompt, isSaved: false });
+            const translation = await goalPromptTranslator.translate({ goal, apiKey: reasoningApiKey });
+            updateDraft({ prompt: translation.prompt, isSaved: false });
+            setGoalTranslationCostContext(translation.costLedger ? {
+                goal,
+                prompt: translation.prompt,
+                ledger: translation.costLedger,
+            } : null);
         } catch (translationError) {
+            setGoalTranslationCostContext(null);
             setAutopilotNotice(translationError instanceof Error ? translationError.message : 'Failed to translate goal');
         } finally {
             setTranslatingGoal(false);
@@ -303,10 +315,16 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
     const handleRunAutopilot = async () => {
         setAutopilotNotice(null);
+        const initialCostLedger = goalTranslationCostContext
+            && goalTranslationCostContext.goal === goal
+            && goalTranslationCostContext.prompt === draft.prompt
+            ? goalTranslationCostContext.ledger
+            : undefined;
         const result = await runAutopilot({
             goal,
             maxIterations,
             satisfactionThreshold,
+            initialCostLedger,
         });
 
         if (!result) {
@@ -348,6 +366,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const hasSingleResultActualDetails = singleResultActualDetails
         ? hasActualParameterDetails(singleResultActualDetails)
         : false;
+    const hasSingleResultMetadata = hasSingleResultActualDetails || hasApiCostLedger(singleResultSlot?.costLedger);
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
         updateDraft({
             [activeModelDraftKey]: {
@@ -714,6 +733,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                                         requestedParameters,
                                                     })}
                                                 />
+                                                <CostSummaryPanel compact ledger={result.costLedger} />
                                                 <div className="result-slot-actions">
                                                     <button
                                                         onClick={() => { void saveResult(result.slotIndex); }}
@@ -758,11 +778,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </div>
                         </div>
                     ) : currentResult ? (
-                        <div className={`result-container${hasSingleResultActualDetails ? ' has-actual-parameters' : ''}`}>
+                        <div className={`result-container${hasSingleResultMetadata ? ' has-result-metadata' : ''}`}>
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             {singleResultActualDetails && (
                                 <ActualParametersPanel details={singleResultActualDetails} />
                             )}
+                            <CostSummaryPanel ledger={singleResultSlot?.costLedger} />
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
                                 <div className="autopilot-result-banner glass-panel">
                                     <strong>

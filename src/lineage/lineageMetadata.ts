@@ -1,5 +1,6 @@
 import { isImageModelSlug, isReasoningModelSlug } from '../utils/openaiModels';
 import type { LineageStepType } from './types';
+import { sanitizeApiCostLedger } from '../costs/apiCost';
 
 export function parseLineageMetadata(
     stepType: LineageStepType,
@@ -27,6 +28,7 @@ function validateGenerateMetadata(metadata: Record<string, unknown>) {
     validateDimensions(metadata.dimensions);
     validateReferenceImages(metadata.referenceImages);
     validateActualParameters(metadata.actualParameters);
+    validateCostLedger(metadata.costLedger);
 }
 
 function validateEditorMetadata(metadata: Record<string, unknown>) {
@@ -37,6 +39,7 @@ function validateEditorMetadata(metadata: Record<string, unknown>) {
     validateEditorAiEdit(metadata.aiEdit);
     validateEditorLayers(metadata.layers);
     validateTransformMaskAsset(metadata.transformMaskAsset);
+    validateCostLedger(metadata.costLedger);
 }
 
 function validateAutopilotMetadata(metadata: Record<string, unknown>) {
@@ -48,6 +51,8 @@ function validateAutopilotMetadata(metadata: Record<string, unknown>) {
     validateReasoningModel(metadata.reasoningModel);
     validateImageModel(metadata.imageModel);
     validateDimensions(metadata.dimensions);
+    validateActualParameters(metadata.actualParameters);
+    validateCostLedger(metadata.costLedger);
 }
 
 function validateImageModel(value: unknown) {
@@ -104,6 +109,16 @@ function validateActualParameters(value: unknown) {
     }
     if (actualParameters.elapsedMs !== undefined) {
         requireFiniteNumber(actualParameters.elapsedMs, 'lineage actualParameters elapsedMs');
+    }
+}
+
+function validateCostLedger(value: unknown) {
+    if (value === undefined) {
+        return;
+    }
+
+    if (!sanitizeApiCostLedger(value)) {
+        throw new Error('Invalid lineage costLedger');
     }
 }
 

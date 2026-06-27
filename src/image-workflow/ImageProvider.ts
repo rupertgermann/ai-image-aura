@@ -73,12 +73,16 @@ export function createGoogleImageProvider(fetchImpl: typeof fetch = fetch): Imag
 
         const data: unknown = await response.json();
         const imageData = extractGoogleImageData(data);
+        const usage = extractGoogleUsageMetadata(data);
 
         if (!imageData) {
             throw new Error('No image returned from Google Gemini. The response may have been text-only or blocked by safety settings.');
         }
 
-        return { b64_json: imageData };
+        return {
+            b64_json: imageData,
+            ...(usage ? { usage } : {}),
+        };
     };
 
     return {
@@ -189,4 +193,51 @@ export function extractGoogleImageData(data: unknown): string | null {
     ));
 
     return (imagePart?.inlineData?.data ?? imagePart?.inline_data?.data ?? null) as string | null;
+}
+
+export function extractGoogleUsageMetadata(data: unknown): Record<string, unknown> | null {
+    if (!data || typeof data !== 'object') {
+        return null;
+    }
+
+    const usageMetadata = (data as { usageMetadata?: unknown }).usageMetadata;
+    if (!usageMetadata || typeof usageMetadata !== 'object' || Array.isArray(usageMetadata)) {
+        return null;
+    }
+
+    const usage: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(usageMetadata)) {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            usage[key] = value;
+            continue;
+        }
+
+        if (key === 'promptTokensDetails' || key === 'candidatesTokensDetails') {
+            const details = extractGoogleModalityTokenDetails(value);
+            if (details.length > 0) {
+                usage[key] = details;
+            }
+        }
+    }
+
+    return Object.keys(usage).length > 0 ? usage : null;
+}
+
+function extractGoogleModalityTokenDetails(value: unknown): Array<{ modality: string; tokenCount: number }> {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value.flatMap((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+            return [];
+        }
+
+        const record = item as { modality?: unknown; tokenCount?: unknown };
+        return typeof record.modality === 'string'
+            && typeof record.tokenCount === 'number'
+            && Number.isFinite(record.tokenCount)
+            ? [{ modality: record.modality, tokenCount: record.tokenCount }]
+            : [];
+    });
 }

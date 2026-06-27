@@ -1,6 +1,7 @@
-import { isLayerBlendMode, type ActualImageParameters, type ArchiveLayer, type ArchiveLayerBlendMode, type ArchiveLayerKind, type ArchiveLayerStack } from '../db/types';
+import { isLayerBlendMode, type ActualImageParameters, type ApiCostLedger, type ArchiveLayer, type ArchiveLayerBlendMode, type ArchiveLayerKind, type ArchiveLayerStack } from '../db/types';
 import { parseLineageMetadata } from '../lineage/lineageMetadata';
 import type { LineageStep } from '../lineage/types';
+import { sanitizeApiCostLedger } from '../costs/apiCost';
 
 export const ARCHIVE_MANIFEST_FILE = 'archive-manifest.json';
 export const LINEAGE_MANIFEST_FILE = 'lineage-manifest.json';
@@ -26,6 +27,7 @@ export interface ArchiveManifestImage {
     lighting?: string;
     palette?: string;
     actualParameters?: ActualImageParameters;
+    costLedger?: ApiCostLedger;
     imageFileName?: string;
     references: ArchiveManifestReference[];
     layerStack?: ArchiveManifestLayerStack;
@@ -162,6 +164,7 @@ function parseArchiveManifestImage(value: unknown): ArchiveManifestImage {
         lighting: optionalString(value.lighting),
         palette: optionalString(value.palette),
         actualParameters: optionalActualParameters(value.actualParameters),
+        costLedger: sanitizeApiCostLedger(value.costLedger),
         imageFileName: optionalString(value.imageFileName),
         references: Array.isArray(value.references) ? value.references.map(parseArchiveManifestReference) : [],
         layerStack: parseOptionalLayerStack(value.layerStack),

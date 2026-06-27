@@ -71,6 +71,36 @@ describe('ArchiveManifest', () => {
         ]);
     });
 
+    it('preserves cost ledger metadata while keeping legacy images compatible by omission', () => {
+        const costLedger = {
+            version: 1 as const,
+            currency: 'USD' as const,
+            items: [{
+                id: 'image-generation:openai:gpt-image-2',
+                kind: 'image-generation' as const,
+                operation: 'image-generation',
+                provider: 'openai',
+                model: 'gpt-image-2',
+                label: 'Image generation 1',
+                status: 'calculated' as const,
+                currency: 'USD' as const,
+                amountUsd: 0.04,
+            }],
+        };
+        const manifest = parseArchiveManifest({
+            version: ARCHIVE_MANIFEST_VERSION,
+            images: [
+                createManifestImage({ id: 'cost-image', costLedger }),
+                createManifestImage({ id: 'legacy-image' }),
+            ],
+        });
+
+        expect(manifest.images).toEqual([
+            expect.objectContaining({ id: 'cost-image', costLedger }),
+            expect.not.objectContaining({ id: 'legacy-image', costLedger: expect.anything() }),
+        ]);
+    });
+
     it('rejects malformed layer stack entries', () => {
         expect(() => parseArchiveManifest({
             version: ARCHIVE_MANIFEST_VERSION,

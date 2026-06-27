@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ApiCostKind, ApiCostLedger } from '../db/types';
 import type { LineageStep } from './LineageStore';
 import { loadLineageTimeline } from './loadLineageTimeline';
 
@@ -74,6 +75,7 @@ describe('loadLineageTimeline', () => {
                     iterationNumber: null,
                     evaluatorScore: null,
                     evaluatorFeedback: [],
+                    costLedger: null,
                     replayImageDataUrl: null,
                     runLabel: null,
                 },
@@ -88,6 +90,7 @@ describe('loadLineageTimeline', () => {
                     iterationNumber: null,
                     evaluatorScore: null,
                     evaluatorFeedback: [],
+                    costLedger: null,
                     replayImageDataUrl: null,
                     runLabel: null,
                 },
@@ -102,6 +105,7 @@ describe('loadLineageTimeline', () => {
                     iterationNumber: null,
                     evaluatorScore: null,
                     evaluatorFeedback: [],
+                    costLedger: null,
                     replayImageDataUrl: null,
                     runLabel: null,
                 },
@@ -212,6 +216,48 @@ describe('loadLineageTimeline', () => {
                 stepType: 'generation',
                 runLabel: null,
             }),
+        ]);
+    });
+
+    it('preserves step cost ledgers for detail-view totals', async () => {
+        const generationCostLedger = createCostLedger('image-generation', 'image-generation', 0.05);
+        const editCostLedger = createCostLedger('ai-edit', 'image-edit', 0.04);
+        const timeline = await loadLineageTimeline('image-1', createStore({
+            byArchiveImageId: {
+                'image-1': [
+                    createStep({
+                        id: 'step-1',
+                        archiveImageId: 'image-1',
+                        stepType: 'generation',
+                        timestamp: '2026-04-04T09:00:00.000Z',
+                        metadata: {
+                            prompt: 'cosmic koi pond',
+                            costLedger: generationCostLedger,
+                        },
+                    }),
+                    createStep({
+                        id: 'step-2',
+                        archiveImageId: 'image-1',
+                        parentStepId: 'step-1',
+                        stepType: 'ai-edit',
+                        timestamp: '2026-04-04T10:00:00.000Z',
+                        metadata: {
+                            editPrompt: 'add aurora reflections',
+                            costLedger: editCostLedger,
+                        },
+                    }),
+                ],
+            },
+            byId: {},
+            children: {
+                'step-1': [],
+                'step-2': [],
+            },
+        }));
+
+        expect(timeline.entries.map((entry) => entry.costLedger?.items[0]?.id)).toEqual([
+            'image-generation',
+            'ai-edit',
         ]);
     });
 
@@ -426,5 +472,23 @@ function createStep(overrides: Partial<LineageStep> & Pick<LineageStep, 'id' | '
         parentStepId: null,
         metadata: {},
         ...overrides,
+    };
+}
+
+function createCostLedger(id: string, kind: ApiCostKind, amountUsd: number): ApiCostLedger {
+    return {
+        version: 1,
+        currency: 'USD',
+        items: [{
+            id,
+            kind,
+            operation: kind,
+            provider: 'openai',
+            model: 'gpt-image-2',
+            label: kind === 'image-edit' ? 'AI edit' : 'Image generation 1',
+            status: 'calculated',
+            currency: 'USD',
+            amountUsd,
+        }],
     };
 }
