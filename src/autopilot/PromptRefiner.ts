@@ -1,4 +1,6 @@
 import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
+import { buildReasoningCostLedger } from '../costs/apiCost';
+import type { ApiCostLedger } from '../db/types';
 
 export const PROMPT_REFINER_PROMPT_VERSION = 'prompt-refiner.v1';
 
@@ -10,7 +12,12 @@ export const PROMPT_REFINER_SYSTEM_PROMPT = [
 ].join('\n');
 
 export interface PromptRefiner {
-    refine(input: { goal: string; currentPrompt: string; feedback: string[]; apiKey: string }): Promise<string>;
+    refine(input: { goal: string; currentPrompt: string; feedback: string[]; apiKey: string }): Promise<PromptRefinement>;
+}
+
+export interface PromptRefinement {
+    prompt: string;
+    costLedger?: ApiCostLedger;
 }
 
 export function createPromptRefiner(client: ReasoningClient = openAiReasoningClient): PromptRefiner {
@@ -31,9 +38,28 @@ export function createPromptRefiner(client: ReasoningClient = openAiReasoningCli
                 throw new Error('Prompt refiner returned an empty prompt');
             }
 
-            return prompt;
+            return {
+                prompt,
+                ...buildReasoningCost(client, response.usage),
+            };
         },
     };
 }
 
 export const promptRefiner = createPromptRefiner();
+
+function buildReasoningCost(client: ReasoningClient, usage: unknown): { costLedger?: ApiCostLedger } {
+    if (!client.provider || !client.model) {
+        return {};
+    }
+
+    return {
+        costLedger: buildReasoningCostLedger({
+            provider: client.provider,
+            model: client.model,
+            operation: 'prompt-refinement',
+            label: 'Prompt refinement',
+            usage,
+        }),
+    };
+}

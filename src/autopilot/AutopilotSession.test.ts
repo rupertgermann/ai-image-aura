@@ -4,6 +4,7 @@ import type { LineageMetadataPort, LineageStep } from '../lineage/LineageStore';
 import { createLineageStore, type LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { GEMINI_FLASH_REASONING_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import type { ApiCostLedger, ApiCostLineItem } from '../db/types';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -172,6 +173,45 @@ describe('AutopilotSession', () => {
         }));
     });
 
+    it('includes initial reasoning costs in the final best iteration total', async () => {
+        const lineage = createStore();
+        const initialCostLedger = createCostLedger(createCostItem('goal-translation', 0.00055));
+        const imageCostLedger = createCostLedger(createCostItem('image-generation', 0.04));
+        const evaluationCostLedger = createCostLedger(createCostItem('satisfaction-evaluation', 0.005275));
+
+        const result = await createAutopilotSession({
+            goal: 'A cinematic portrait',
+            initialPrompt: 'prompt 1',
+            settings: createSettings(),
+            apiKey: 'key',
+            maxIterations: 1,
+            satisfactionThreshold: 90,
+            initialCostLedger,
+            generate: vi.fn().mockResolvedValueOnce({
+                imageDataUrl: 'data:image/png;base64,one',
+                costLedger: imageCostLedger,
+            }),
+            evaluate: vi.fn().mockResolvedValueOnce({
+                score: 95,
+                feedback: ['Strong match.'],
+                costLedger: evaluationCostLedger,
+            }),
+            refine: vi.fn(),
+            lineageStore: lineage,
+        }).run();
+
+        expect(result.bestIteration?.costLedger?.items.map((item) => item.id)).toEqual([
+            'goal-translation',
+            'image-generation',
+            'satisfaction-evaluation',
+        ]);
+        expect(result.bestIteration?.costLedger?.items.reduce((sum, item) => sum + (item.amountUsd ?? 0), 0)).toBeCloseTo(0.045825);
+        expect(result.iterations[0]?.costLedger?.items.map((item) => item.id)).toEqual([
+            'image-generation',
+            'satisfaction-evaluation',
+        ]);
+    });
+
     it('freezes the Reference image snapshot for every iteration', async () => {
         const lineage = createStore();
         const firstReference = new File(['reference-0'], 'ref-0.png', { type: 'image/png' });
@@ -315,5 +355,27 @@ function createSettings(
         palette: 'copper + teal + cream',
         referenceImages: [],
         ...overrides,
+    };
+}
+
+function createCostLedger(item: ApiCostLineItem): ApiCostLedger {
+    return {
+        version: 1,
+        currency: 'USD',
+        items: [item],
+    };
+}
+
+function createCostItem(id: string, amountUsd: number): ApiCostLineItem {
+    return {
+        id,
+        kind: id === 'image-generation' ? 'image-generation' : 'reasoning',
+        operation: id,
+        provider: id === 'image-generation' ? 'openai' : 'openai',
+        model: id === 'image-generation' ? 'gpt-image-2' : 'gpt-5.4',
+        label: id,
+        status: 'calculated',
+        currency: 'USD',
+        amountUsd,
     };
 }

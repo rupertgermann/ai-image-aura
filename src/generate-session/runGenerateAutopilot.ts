@@ -6,6 +6,7 @@ import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
+import type { ApiCostLedger } from '../db/types';
 
 interface RunGenerateAutopilotInput {
     goal: string;
@@ -20,6 +21,7 @@ interface RunGenerateAutopilotInput {
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     evaluate?: typeof satisfactionEvaluator.evaluate;
     refine?: typeof promptRefiner.refine;
+    initialCostLedger?: ApiCostLedger;
     maxIterations?: number;
     satisfactionThreshold?: number;
     onSessionCreated?: (session: ReturnType<typeof createAutopilotSession>) => void;
@@ -59,6 +61,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
         reasoningApiKey: input.reasoningApiKey,
         reasoningModel: input.reasoningModel,
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
+        initialCostLedger: input.initialCostLedger,
         maxIterations: input.maxIterations,
         satisfactionThreshold: input.satisfactionThreshold,
         generate: (request) => generateSingleImage(workflow, request),
@@ -87,6 +90,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
                 imageUrl: result.bestIteration.imageDataUrl,
                 isSaved: false,
                 actualParameters: result.bestIteration.actualParameters,
+                costLedger: result.bestIteration.costLedger,
                 archiveImageId: result.bestIteration.archiveImageId,
             }],
             references: usedReferences,
@@ -121,5 +125,6 @@ async function generateSingleImage(
     return {
         imageDataUrl: result.imageUrl,
         actualParameters: result.actualParameters,
+        costLedger: result.costLedger,
     };
 }

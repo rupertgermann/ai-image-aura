@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { ActualImageParameters, ArchiveImage } from '../db/types';
+import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
+import { sanitizeApiCostLedger } from '../costs/apiCost';
 import {
     buildActiveImageModelControls,
     buildImageModelArchiveFields,
@@ -65,6 +66,7 @@ export type GenerateResultSlot =
         imageUrl: string;
         isSaved: boolean;
         actualParameters?: ActualImageParameters;
+        costLedger?: ApiCostLedger;
         archiveImageId?: string;
     }
     | {
@@ -482,6 +484,7 @@ function sanitizeGenerateResultSlot(value: unknown): GenerateResultSlot | null {
             imageUrl: record.imageUrl,
             isSaved: record.isSaved === true,
             actualParameters: sanitizeActualParameters(record.actualParameters),
+            costLedger: sanitizeApiCostLedger(record.costLedger),
             ...(typeof record.archiveImageId === 'string' && record.archiveImageId
                 ? { archiveImageId: record.archiveImageId }
                 : {}),

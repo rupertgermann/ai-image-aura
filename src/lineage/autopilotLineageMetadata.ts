@@ -5,6 +5,7 @@ import {
     type NanoBananaProControls,
 } from '../image-models/ImageModelControls';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import type { ActualImageParameters, ApiCostLedger } from '../db/types';
 import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
@@ -81,6 +82,8 @@ export interface AutopilotLineageMetadata extends Record<string, unknown> {
     evaluatorFeedback: string[];
     outputImageDataUrl: string;
     runLabel: string;
+    actualParameters?: ActualImageParameters;
+    costLedger?: ApiCostLedger;
 }
 
 export interface AutopilotTimelineMetadata {
@@ -116,6 +119,8 @@ export function buildAutopilotLineageMetadata(input: {
     prompt: string;
     settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>;
     outputImageDataUrl: string;
+    actualParameters?: ActualImageParameters;
+    costLedger?: ApiCostLedger;
 }): AutopilotLineageMetadata {
     const model = isImageModelSlug(input.settings.model) ? input.settings.model : DEFAULT_IMAGE_MODEL;
     const controls = buildAutopilotImageModelControls(model, input.settings);
@@ -163,6 +168,8 @@ export function buildAutopilotLineageMetadata(input: {
         evaluatorFeedback: feedback,
         outputImageDataUrl: input.outputImageDataUrl,
         runLabel,
+        ...(input.actualParameters ? { actualParameters: input.actualParameters } : {}),
+        ...(input.costLedger ? { costLedger: input.costLedger } : {}),
     };
 }
 

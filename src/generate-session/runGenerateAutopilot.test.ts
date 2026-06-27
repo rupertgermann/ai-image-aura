@@ -6,6 +6,21 @@ import type { LineageStep, SaveLineageStepInput } from '../lineage/LineageStore'
 
 describe('runGenerateAutopilot', () => {
     it('delegates to AutopilotSession and persists the best result', async () => {
+        const initialCostLedger = {
+            version: 1 as const,
+            currency: 'USD' as const,
+            items: [{
+                id: 'goal-translation',
+                kind: 'reasoning' as const,
+                operation: 'goal-translation',
+                provider: 'openai' as const,
+                model: 'gpt-5.4',
+                label: 'Goal translation',
+                status: 'calculated' as const,
+                currency: 'USD' as const,
+                amountUsd: 0.00055,
+            }],
+        };
         const run = vi.fn(async () => ({
             status: 'satisfied' as const,
             error: null,
@@ -72,6 +87,7 @@ describe('runGenerateAutopilot', () => {
                 save: vi.fn(),
             },
             createSession,
+            initialCostLedger,
             onSessionCreated,
         });
 
@@ -81,6 +97,7 @@ describe('runGenerateAutopilot', () => {
             reasoningApiKey: 'reasoning-key',
             reasoningModel: 'gemini-2.5-flash',
             initialParentStepId: 'step-parent',
+            initialCostLedger,
         }));
         expect(run).toHaveBeenCalledOnce();
         expect(onSessionCreated).toHaveBeenCalledWith(expect.objectContaining({ run, cancel }));

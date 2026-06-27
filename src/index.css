@@ -813,12 +813,12 @@ textarea.aura-input {
     color: var(--color-steel);
 }
 
-.result-container.has-actual-parameters {
+.result-container.has-result-metadata {
     gap: var(--spacing-16);
     padding-bottom: var(--spacing-16);
 }
 
-.result-container.has-actual-parameters .result-image {
+.result-container.has-result-metadata .result-image {
     height: auto;
     max-height: min(70vh, 720px);
     flex: 1;
@@ -887,13 +887,73 @@ textarea.aura-input {
     color: var(--color-charcoal);
 }
 
+.cost-summary-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--element-gap);
+    margin: 0 var(--spacing-16);
+    padding: var(--card-padding);
+    border: 1px solid var(--color-steel);
+    background: var(--color-snow);
+    color: var(--color-charcoal);
+}
+
 .result-slot-card .actual-parameters-panel,
-.modal-sidebar .actual-parameters-panel {
+.modal-sidebar .actual-parameters-panel,
+.result-slot-card .cost-summary-panel,
+.modal-sidebar .cost-summary-panel {
     margin: 0;
 }
 
-.actual-parameters-panel.compact {
+.actual-parameters-panel.compact,
+.cost-summary-panel.compact {
     padding: var(--spacing-8);
+}
+
+.cost-total-list,
+.cost-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--element-gap);
+}
+
+.cost-total-row,
+.cost-line-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--spacing-16);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
+.cost-total-row span,
+.cost-line-item span {
+    color: var(--color-steel);
+    text-transform: uppercase;
+}
+
+.cost-total-row strong,
+.cost-line-item strong {
+    color: var(--color-charcoal);
+    font-weight: var(--font-weight-regular);
+    white-space: nowrap;
+}
+
+.cost-line-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cost-line-item small {
+    grid-column: 1 / -1;
+    color: var(--color-steel);
+    overflow-wrap: anywhere;
+}
+
+.cost-line-item.unavailable strong {
+    color: var(--color-amber-glow);
 }
 
 .actual-parameter-list {
@@ -1187,12 +1247,21 @@ textarea.aura-input {
     align-items: center;
     justify-content: space-between;
     gap: var(--element-gap);
+    flex-wrap: wrap;
 }
 
-.card-date {
+.card-date,
+.card-cost {
     display: flex;
     align-items: center;
     gap: 6px;
+}
+
+.card-cost {
+    color: var(--color-charcoal);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
 }
 
 .card-selector {

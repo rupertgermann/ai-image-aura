@@ -10,6 +10,8 @@ import {
 } from '../image-models/ImageModelControls';
 import { DEFAULT_IMAGE_MODEL, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
 import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, type ImageProviderResponse } from './ImageProvider';
+import { buildImageCostLedger } from '../costs/apiCost';
+import type { ApiCostLedger } from '../db/types';
 
 export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
 export { NANO_REFERENCE_LIMIT } from '../image-models/ImageModelControls';
@@ -49,6 +51,7 @@ export type GenerateBatchResult =
         status: 'success';
         imageUrl: string;
         actualParameters?: ActualImageParameters;
+        costLedger?: ApiCostLedger;
     }
     | {
         slotIndex: number;
@@ -100,7 +103,10 @@ export function createImageWorkflow(
                     ...(onPartialImage ? { onPartialImage } : {}),
                 });
                 const elapsedMs = Math.max(0, Math.round(now() - startedAt));
-                const results = mapGenerateBatchResults(responses, batchSize, elapsedMs);
+                const results = mapGenerateBatchResults(responses, batchSize, elapsedMs, {
+                    provider: model.provider,
+                    model: model.apiModel,
+                });
 
                 if (!hasSuccessfulGeneratedImage(results) && batchSize === 1) {
                     const [result] = results;
@@ -228,6 +234,10 @@ function mapGenerateBatchResults(
     responses: ImageProviderResponse[],
     batchSize: number,
     elapsedMs: number,
+    costContext: {
+        provider: string;
+        model: string;
+    },
 ): GenerateBatchResult[] {
     return Array.from({ length: batchSize }, (_, slotIndex) => {
         const response = responses[slotIndex];
@@ -238,6 +248,15 @@ function mapGenerateBatchResults(
                 status: 'success',
                 imageUrl: `data:image/png;base64,${response.b64_json}`,
                 actualParameters: buildActualImageParameters(response, elapsedMs),
+                costLedger: buildImageCostLedger({
+                    provider: costContext.provider,
+                    model: costContext.model,
+                    operation: 'image-generation',
+                    label: `Image generation ${slotIndex + 1}`,
+                    usage: response.usage,
+                    usageScope: response.usageScope,
+                    usageImageCount: response.usageImageCount,
+                }),
             };
         }
 

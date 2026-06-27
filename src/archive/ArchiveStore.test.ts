@@ -271,6 +271,54 @@ describe('ArchiveStore layer asset ownership', () => {
         ]));
     });
 
+    it('persists cost ledger metadata and treats legacy metadata as absent', async () => {
+        const { store, metadata } = createStore();
+        const costLedger = {
+            version: 1 as const,
+            currency: 'USD' as const,
+            items: [{
+                id: 'image-generation:openai:gpt-image-2',
+                kind: 'image-generation' as const,
+                operation: 'image-generation',
+                provider: 'openai',
+                model: 'gpt-image-2',
+                label: 'Image generation 1',
+                status: 'calculated' as const,
+                currency: 'USD' as const,
+                amountUsd: 0.04,
+            }],
+        };
+
+        await store.save(createImageInput({
+            id: 'cost-image',
+            costLedger,
+        }));
+        metadata.records.set('legacy-image', {
+            id: 'legacy-image',
+            storedUrl: 'data:image/png;base64,legacy',
+            prompt: 'legacy prompt',
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+            timestamp: '2026-06-05T08:00:00.000Z',
+            width: 1024,
+            height: 1024,
+            referenceIds: [],
+        });
+
+        expect(metadata.records.get('cost-image')?.costLedger).toEqual(costLedger);
+        await expect(store.list()).resolves.toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                id: 'cost-image',
+                costLedger,
+            }),
+            expect.not.objectContaining({
+                id: 'legacy-image',
+                costLedger: expect.anything(),
+            }),
+        ]));
+    });
+
     it('recovers orphaned image blobs when metadata is missing', async () => {
         const { store, metadata, blobs } = createStore();
         blobs.blobs.set('img_orphaned-image', 'data:image/png;base64,orphaned');
@@ -323,6 +371,7 @@ function createImageInput(overrides: Partial<ArchiveImage> = {}) {
         favorite: overrides.favorite,
         references: overrides.references,
         actualParameters: overrides.actualParameters,
+        costLedger: overrides.costLedger,
         layerStack: overrides.layerStack,
     };
 }
