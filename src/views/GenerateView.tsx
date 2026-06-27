@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
-import type { ApiCostLedger, ArchiveImage } from '../db/types';
+import type { ApiCostLedger, ApiCostLineItem, ArchiveImage } from '../db/types';
 import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
 import { addGeneratedResultAsReferenceFromAction, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
@@ -13,7 +13,9 @@ import {
     buildActualParameterDetails,
     getRequestedGenerateParameters,
     hasActualParameterDetails,
+    type ActualParameterDetails,
 } from '../generate-session/actualParameters';
+import { calculateApiCostTotals, formatUsd } from '../costs/apiCost';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
@@ -44,6 +46,8 @@ interface GenerateViewProps {
     completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
     isDocumentHidden?: () => boolean;
 }
+
+type SuccessfulGenerateResultSlot = Extract<GenerateResultSlot, { status: 'success' }>;
 
 const EXAMPLE_PROMPTS = [
     "a lobster piloting a vintage scooter",
@@ -169,6 +173,154 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
         </div>
     );
 };
+
+interface ResultSummaryTableProps {
+    actualDetails: ActualParameterDetails | null;
+    costLedger?: ApiCostLedger;
+    resultSlot: SuccessfulGenerateResultSlot | null;
+    isSaved: boolean;
+    resultReferenceCapacityMessage: string | null;
+    onSave: () => void;
+    onDownload: () => void;
+    onUseAsReference: (result: SuccessfulGenerateResultSlot) => void;
+    onClear: () => void;
+}
+
+const ResultSummaryTable: React.FC<ResultSummaryTableProps> = ({
+    actualDetails,
+    costLedger,
+    resultSlot,
+    isSaved,
+    resultReferenceCapacityMessage,
+    onSave,
+    onDownload,
+    onUseAsReference,
+    onClear,
+}) => {
+    const hasActualDetails = actualDetails ? hasActualParameterDetails(actualDetails) : false;
+    const hasCostLedger = hasApiCostLedger(costLedger);
+    const costTotals = hasCostLedger ? calculateApiCostTotals(costLedger) : null;
+
+    return (
+        <table className="result-summary-table" aria-label="Generated image details and actions">
+            <tbody>
+                <tr>
+                    <td className="result-summary-cell result-summary-cell-parameters">
+                        <label className="section-label">Actual Parameters</label>
+                        {hasActualDetails && actualDetails ? (
+                            <div className="result-summary-metrics">
+                                {actualDetails.rows.map((row) => (
+                                    <div
+                                        key={row.label}
+                                        className={`result-summary-metric result-summary-metric-compare${row.changed ? ' changed' : ''}`}
+                                    >
+                                        <span className="result-summary-metric-label">{row.label}</span>
+                                        <div className="result-summary-pair">
+                                            <span>
+                                                <small>Requested</small>
+                                                <strong>{row.requested ?? 'Not set'}</strong>
+                                            </span>
+                                            <span>
+                                                <small>Actual</small>
+                                                <strong>{row.actual}</strong>
+                                            </span>
+                                        </div>
+                                        {row.changed && <em>Changed</em>}
+                                    </div>
+                                ))}
+                                {actualDetails.elapsedLabel && (
+                                    <div className="result-summary-metric">
+                                        <span className="result-summary-metric-label">Elapsed</span>
+                                        <strong>{actualDetails.elapsedLabel}</strong>
+                                    </div>
+                                )}
+                                {actualDetails.revisedPrompt && (
+                                    <div className="result-summary-metric result-summary-prompt">
+                                        <span className="result-summary-metric-label">Rewritten Prompt</span>
+                                        <p>{actualDetails.revisedPrompt}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <span className="result-summary-empty">Not returned</span>
+                        )}
+                    </td>
+                    <td className="result-summary-cell result-summary-cell-cost">
+                        <label className="section-label">API Cost</label>
+                        {hasCostLedger ? (
+                            <div className="result-summary-metrics">
+                                <div className="result-summary-metric">
+                                    <span className="result-summary-metric-label">Total</span>
+                                    <strong>{formatResultSummaryTotal(costTotals)}</strong>
+                                </div>
+                                {costLedger.items.map((item) => (
+                                    <div key={item.id} className={`result-summary-metric ${item.status}`}>
+                                        <span className="result-summary-metric-label">{item.label}</span>
+                                        <strong>{formatResultSummaryLineItem(item)}</strong>
+                                        {item.note && <small className="result-summary-note">{item.note}</small>}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <span className="result-summary-empty">Unavailable</span>
+                        )}
+                    </td>
+                    <td className="result-summary-cell result-summary-cell-actions">
+                        <label className="section-label">Actions</label>
+                        <div className="result-summary-actions">
+                            <button
+                                onClick={onSave}
+                                className="btn-amber"
+                                disabled={isSaved}
+                            >
+                                <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
+                            </button>
+                            <button className="btn-ghost result-summary-action" onClick={onDownload}>
+                                <Download size={16} /> Download
+                            </button>
+                            {resultSlot && (
+                                <button
+                                    className="btn-ghost result-summary-action"
+                                    onClick={() => onUseAsReference(resultSlot)}
+                                    disabled={!!resultReferenceCapacityMessage}
+                                    title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
+                                >
+                                    <ImagePlus size={16} /> Reference
+                                </button>
+                            )}
+                            <button
+                                onClick={onClear}
+                                className="btn-ghost btn-icon result-summary-clear"
+                                title="Clear result"
+                                aria-label="Clear result"
+                            >
+                                <Trash2 size={16} />
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    );
+};
+
+function formatResultSummaryTotal(totals: ReturnType<typeof calculateApiCostTotals> | null) {
+    if (!totals) {
+        return 'Unavailable';
+    }
+
+    if (typeof totals.totalUsd === 'number') {
+        return formatUsd(totals.totalUsd);
+    }
+
+    return totals.status === 'partial' ? 'Partial' : 'Unavailable';
+}
+
+function formatResultSummaryLineItem(item: ApiCostLineItem) {
+    return item.status === 'calculated' && typeof item.amountUsd === 'number'
+        ? formatUsd(item.amountUsd)
+        : 'Unavailable';
+}
 
 const GenerateView: React.FC<GenerateViewProps> = ({
     getProviderKey,
@@ -363,10 +515,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
             requestedParameters,
         })
         : null;
-    const hasSingleResultActualDetails = singleResultActualDetails
-        ? hasActualParameterDetails(singleResultActualDetails)
-        : false;
-    const hasSingleResultMetadata = hasSingleResultActualDetails || hasApiCostLedger(singleResultSlot?.costLedger);
     const updateImageModelControl = (controlId: ImageModelControlId, value: string) => {
         updateDraft({
             [activeModelDraftKey]: {
@@ -376,7 +524,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         } as Partial<GenerateDraft>);
     };
 
-    const handleUseResultAsReference = (result: Extract<GenerateResultSlot, { status: 'success' }>) => {
+    const handleUseResultAsReference = (result: SuccessfulGenerateResultSlot) => {
         addGeneratedResultAsReferenceFromAction({
             slot: result,
             addReferenceFiles,
@@ -778,12 +926,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </div>
                         </div>
                     ) : currentResult ? (
-                        <div className={`result-container${hasSingleResultMetadata ? ' has-result-metadata' : ''}`}>
+                        <div className="result-container has-result-summary">
                             <img src={currentResult} alt="Generated result" className="result-image" />
-                            {singleResultActualDetails && (
-                                <ActualParametersPanel details={singleResultActualDetails} />
-                            )}
-                            <CostSummaryPanel ledger={singleResultSlot?.costLedger} />
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
                                 <div className="autopilot-result-banner glass-panel">
                                     <strong>
@@ -798,31 +942,17 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     </span>
                                 </div>
                             )}
-                            <div className="result-actions">
-                                <button
-                                    onClick={() => { void save(); }}
-                                    className="btn-amber"
-                                    disabled={singleResultSlot?.isSaved ?? isSaved}
-                                >
-                                    <Archive size={18} /> {(singleResultSlot?.isSaved ?? isSaved) ? 'Saved to Archive' : 'Save to Archive'}
-                                </button>
-                                <button className="btn-ghost" onClick={download}>
-                                    <Download size={18} /> Download
-                                </button>
-                                {singleResultSlot && (
-                                    <button
-                                        className="btn-ghost"
-                                        onClick={() => handleUseResultAsReference(singleResultSlot)}
-                                        disabled={!!resultReferenceCapacityMessage}
-                                        title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
-                                    >
-                                        <ImagePlus size={18} /> Use as Reference
-                                    </button>
-                                )}
-                                <button onClick={() => { void clear(); }} className="btn-ghost">
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
+                            <ResultSummaryTable
+                                actualDetails={singleResultActualDetails}
+                                costLedger={singleResultSlot?.costLedger}
+                                resultSlot={singleResultSlot}
+                                isSaved={singleResultSlot?.isSaved ?? isSaved}
+                                resultReferenceCapacityMessage={resultReferenceCapacityMessage}
+                                onSave={() => { void save(); }}
+                                onDownload={download}
+                                onUseAsReference={handleUseResultAsReference}
+                                onClear={() => { void clear(); }}
+                            />
                         </div>
                     ) : (
                         <div className="empty-preview">
