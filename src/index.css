@@ -2236,6 +2236,18 @@ textarea.aura-input {
     text-align: center;
 }
 
+.warning-box,
+.success-box {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-8);
+}
+
+.warning-box svg,
+.success-box svg {
+    flex: 0 0 auto;
+}
+
 .modal-icon {
     width: 48px;
     height: 48px;
@@ -2342,8 +2354,9 @@ textarea.aura-input {
     align-items: center;
     gap: var(--spacing-16);
     color: var(--color-charcoal);
-    font-family: var(--font-suisse-intl);
-    font-size: var(--text-body);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
 }
 
 .settings-toggle-row input {
