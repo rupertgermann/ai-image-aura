@@ -27,7 +27,7 @@ describe('Image model controls', () => {
             {
                 id: 'quality',
                 label: 'QUALITY',
-                kind: 'toggle',
+                kind: 'select',
                 options: [
                     { value: 'low', label: 'Low' },
                     { value: 'medium', label: 'Medium' },
@@ -48,7 +48,7 @@ describe('Image model controls', () => {
             {
                 id: 'background',
                 label: 'BACKGROUND',
-                kind: 'toggle',
+                kind: 'select',
                 options: [
                     { value: 'auto', label: 'Auto' },
                     { value: 'opaque', label: 'Opaque' },
@@ -58,7 +58,7 @@ describe('Image model controls', () => {
             {
                 id: 'batchSize',
                 label: 'BATCH SIZE',
-                kind: 'toggle',
+                kind: 'select',
                 options: [
                     { value: '1', label: '1' },
                     { value: '2', label: '2' },

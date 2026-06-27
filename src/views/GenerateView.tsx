@@ -695,28 +695,30 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     </div>
 
                     <div className="options-grid">
-                        {getImageModelGenerateControls(model).map((control) => (
-                            <div className="option-group" key={control.id}>
-                                <label>{control.label}</label>
-                                {control.kind === 'select' ? (
-                                    <CustomSelect
-                                        value={String(activeModelControls[control.id] ?? '')}
-                                        onChange={(value) => updateImageModelControl(control.id, value)}
-                                        options={control.options}
-                                    />
-                                ) : (
-                                    <div className="toggle-group">
-                                        {control.options.map((option) => (
-                                            <button
-                                                key={option.value}
-                                                className={String(activeModelControls[control.id] ?? '') === option.value ? 'active' : ''}
-                                                onClick={() => updateImageModelControl(control.id, option.value)}
-                                            >{option.label}</button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                        <div className="image-model-options-grid">
+                            {getImageModelGenerateControls(model).map((control) => (
+                                <div className="option-group" key={control.id}>
+                                    <label>{control.label}</label>
+                                    {control.kind === 'select' ? (
+                                        <CustomSelect
+                                            value={String(activeModelControls[control.id] ?? '')}
+                                            onChange={(value) => updateImageModelControl(control.id, value)}
+                                            options={control.options}
+                                        />
+                                    ) : (
+                                        <div className="toggle-group">
+                                            {control.options.map((option) => (
+                                                <button
+                                                    key={option.value}
+                                                    className={String(activeModelControls[control.id] ?? '') === option.value ? 'active' : ''}
+                                                    onClick={() => updateImageModelControl(control.id, option.value)}
+                                                >{option.label}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
 
                         <div className="option-group">
                             <label>STYLE</label>
