@@ -813,15 +813,155 @@ textarea.aura-input {
     color: var(--color-steel);
 }
 
-.result-container.has-result-metadata {
+.result-container.has-result-summary {
     gap: var(--spacing-16);
     padding-bottom: var(--spacing-16);
 }
 
-.result-container.has-result-metadata .result-image {
+.result-container.has-result-summary .result-image {
     height: auto;
     max-height: min(70vh, 720px);
     flex: 1;
+}
+
+.result-summary-table {
+    width: calc(100% - (var(--spacing-16) * 2));
+    margin: 0 var(--spacing-16);
+    border: 1px solid var(--color-steel);
+    border-collapse: collapse;
+    table-layout: fixed;
+    background: var(--color-snow);
+    color: var(--color-charcoal);
+}
+
+.result-summary-cell {
+    padding: var(--card-padding);
+    vertical-align: top;
+    border-left: 1px solid var(--color-steel);
+}
+
+.result-summary-cell:first-child {
+    border-left: 0;
+}
+
+.result-summary-cell-parameters {
+    width: 42%;
+}
+
+.result-summary-cell-cost {
+    width: 20%;
+}
+
+.result-summary-cell-actions {
+    width: 38%;
+}
+
+.result-summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--element-gap);
+    margin-top: var(--element-gap);
+}
+
+.result-summary-metric {
+    min-width: 0;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
+.result-summary-metric-label,
+.result-summary-empty,
+.result-summary-metric small {
+    color: var(--color-steel);
+    text-transform: uppercase;
+}
+
+.result-summary-empty {
+    display: block;
+    margin-top: var(--element-gap);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
+.result-summary-metric strong {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--color-charcoal);
+    font-weight: var(--font-weight-regular);
+}
+
+.result-summary-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--element-gap);
+}
+
+.result-summary-pair span {
+    min-width: 0;
+}
+
+.result-summary-pair small {
+    display: block;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.result-summary-metric em {
+    display: inline-flex;
+    margin-top: 4px;
+    padding: 2px 6px;
+    border: 1px solid var(--color-amber-glow);
+    color: var(--color-amber-glow);
+    font-style: normal;
+    text-transform: uppercase;
+}
+
+.result-summary-metric.changed {
+    padding-left: var(--spacing-8);
+    border-left: 2px solid var(--color-amber-glow);
+}
+
+.result-summary-metric.unavailable strong {
+    color: var(--color-amber-glow);
+}
+
+.result-summary-note {
+    display: block;
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+}
+
+.result-summary-prompt {
+    grid-column: 1 / -1;
+}
+
+.result-summary-prompt p {
+    max-height: 4.5em;
+    margin: 0;
+    overflow: auto;
+    color: var(--color-charcoal);
+    overflow-wrap: anywhere;
+}
+
+.result-summary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--element-gap);
+    margin-top: var(--element-gap);
+}
+
+.result-summary-actions .btn-ghost {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: var(--text-caption);
+}
+
+.result-summary-actions .btn-icon {
+    width: 36px;
+    padding: 0;
 }
 
 .result-batch-container {
@@ -2188,6 +2328,12 @@ textarea.aura-input {
     .editor-container {
         height: auto;
     }
+
+    .result-summary-cell-parameters,
+    .result-summary-cell-cost,
+    .result-summary-cell-actions {
+        width: auto;
+    }
 }
 
 @media (max-width: 800px) {
@@ -2233,6 +2379,37 @@ textarea.aura-input {
 
     .view-wrapper {
         padding: var(--spacing-24);
+    }
+
+    .result-summary-table,
+    .result-summary-table tbody,
+    .result-summary-table tr,
+    .result-summary-cell {
+        display: block;
+        width: calc(100% - (var(--spacing-16) * 2));
+    }
+
+    .result-summary-table tbody,
+    .result-summary-table tr,
+    .result-summary-cell {
+        width: 100%;
+    }
+
+    .result-summary-cell {
+        border-left: 0;
+        border-top: 1px solid var(--color-steel);
+    }
+
+    .result-summary-cell:first-child {
+        border-top: 0;
+    }
+
+    .result-summary-actions {
+        align-items: stretch;
+    }
+
+    .result-summary-action {
+        flex: 1 1 132px;
     }
 
     .header-flex,
