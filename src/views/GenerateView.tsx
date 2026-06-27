@@ -641,21 +641,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 <p>Up to {maxIterations} iterations and roughly {maxApiCalls} API calls using {activeModel.label} for images and {activeReasoningModel.label} for reasoning.</p>
                             </div>
 
-                            {showCostDisclosure && (
-                                <div className="autopilot-confirmation glass-panel">
-                                    <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
-                                    <div className="autopilot-confirmation-actions">
-                                        <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
-                                        <button
-                                            className="btn-amber"
-                                            onClick={() => {
-                                                setShowCostDisclosure(false);
-                                                void handleRunAutopilot();
-                                            }}
-                                        >Confirm Run</button>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     )}
 
@@ -767,15 +752,32 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     </div>
 
                     {isAutopilotMode ? (
-                        <button
-                            className="btn-amber"
-                            onClick={() => setShowCostDisclosure(true)}
-                            disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey || !reasoningApiKey}
-                            style={{ width: '100%' }}
-                        >
-                            {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
-                            {loading ? 'Autopilot Running...' : 'Run Autopilot'}
-                        </button>
+                        <>
+                            {showCostDisclosure && (
+                                <div className="autopilot-confirmation glass-panel">
+                                    <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
+                                    <div className="autopilot-confirmation-actions">
+                                        <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
+                                        <button
+                                            className="btn-amber"
+                                            onClick={() => {
+                                                setShowCostDisclosure(false);
+                                                void handleRunAutopilot();
+                                            }}
+                                        >Confirm Run</button>
+                                    </div>
+                                </div>
+                            )}
+                            <button
+                                className="btn-amber"
+                                onClick={() => setShowCostDisclosure(true)}
+                                disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey || !reasoningApiKey}
+                                style={{ width: '100%' }}
+                            >
+                                {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
+                                {loading ? 'Autopilot Running...' : 'Run Autopilot'}
+                            </button>
+                        </>
                     ) : (
                         <button
                             className="btn-amber"
