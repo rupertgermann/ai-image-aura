@@ -118,9 +118,10 @@ interface CustomSelectProps {
     value: string;
     options: CustomSelectOption[];
     onChange: (value: string) => void;
+    className?: string;
 }
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange }) => {
+const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange, className }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
     useEffect(() => {
@@ -133,7 +134,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange })
     }, [open]);
     const selected = options.find((o) => o.value === value);
     return (
-        <div ref={ref} style={{ position: 'relative' }}>
+        <div ref={ref} className={className} style={{ position: 'relative' }}>
             <button
                 type="button"
                 className="custom-select-trigger"
@@ -676,6 +677,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div className="prompt-header">
                             <label>PROMPT</label>
                             <CustomSelect
+                                className="example-prompt-select"
                                 value=""
                                 onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
                                 options={[

@@ -569,6 +569,11 @@ textarea {
     min-height: 42px;
 }
 
+.generate-container textarea.prompt-input {
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
 textarea.prompt-input,
 textarea.aura-input {
     padding-top: var(--spacing-8);
@@ -580,8 +585,8 @@ textarea.aura-input {
 }
 
 .example-prompt-select {
-    max-width: 220px;
-    height: 36px;
+    flex: 0 1 360px;
+    width: min(360px, 52vw);
     color: var(--color-steel);
     cursor: pointer;
 }
@@ -642,7 +647,8 @@ textarea.aura-input {
     background: transparent;
     color: var(--color-charcoal);
     font-family: var(--font-suisse-intl-mono);
-    font-size: var(--text-body);
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
     text-align: left;
 }
 
