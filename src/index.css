@@ -616,6 +616,28 @@ textarea.aura-input {
     gap: var(--spacing-16);
 }
 
+.autopilot-inline-btn,
+.autopilot-live-header .btn-ghost,
+.autopilot-confirmation-actions .btn-ghost {
+    font-size: var(--text-caption);
+    line-height: var(--leading-caption);
+}
+
+.autopilot-metric,
+.autopilot-disclosure strong,
+.autopilot-live-header strong {
+    color: var(--color-steel);
+    font-family: var(--font-suisse-intl-mono);
+    font-size: var(--text-caption);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--leading-caption);
+}
+
+.autopilot-disclosure strong,
+.autopilot-live-header strong {
+    text-transform: uppercase;
+}
+
 .toggle-group {
     display: grid;
     grid-auto-columns: 1fr;
