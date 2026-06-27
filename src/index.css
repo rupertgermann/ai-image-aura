@@ -549,6 +549,7 @@ textarea {
 }
 
 .section-desc,
+.field-relationship-note,
 .empty-state p,
 .confirm-body p,
 .autopilot-disclosure p,
@@ -736,6 +737,15 @@ textarea.aura-input {
 .custom-select-option.selected {
     background: var(--color-amber-glow);
     color: var(--color-snow);
+}
+
+.toggle-group button:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+}
+
+.toggle-group button:disabled:hover {
+    color: var(--color-steel);
 }
 
 .select-swatches {
@@ -2315,6 +2325,12 @@ textarea.aura-input {
     max-width: 800px;
 }
 
+.settings-model-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--spacing-24);
+}
+
 .input-group {
     display: flex;
     gap: var(--spacing-16);
@@ -2474,6 +2490,10 @@ textarea.aura-input {
     .modal-content.confirm-dialog {
         align-items: stretch;
         flex-direction: column;
+    }
+
+    .settings-model-grid {
+        grid-template-columns: 1fr;
     }
 
     .search-box,

@@ -27,12 +27,10 @@ import {
     coerceImageModelControlValue,
     getImageModelGenerateControls,
     getImageModelReferenceCapacityMessage,
-    getImageModelUiChoices,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
 import {
     OPENAI_RESPONSES_MODEL,
-    REASONING_MODEL_REGISTRY,
     resolveImageModelConfig,
     resolveReasoningModelConfig,
     type Provider,
@@ -335,7 +333,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
     const [maxIterations, setMaxIterations] = useLocalStorage('generate_autopilot_max_iterations', DEFAULT_AUTOPILOT_MAX_ITERATIONS);
     const [satisfactionThreshold, setSatisfactionThreshold] = useLocalStorage('generate_autopilot_threshold', DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD);
-    const [reasoningModel, setReasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+    const [reasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);
@@ -547,23 +545,29 @@ const GenerateView: React.FC<GenerateViewProps> = ({
             <div className="generate-grid">
                 <section className="controls-panel glass-panel">
                     <div className="input-section">
-                        <label>IMAGE MODEL</label>
-                        <div className="toggle-group">
-                            {getImageModelUiChoices().map((choice) => {
-                                const hasKey = !!getProviderKey(choice.provider);
-                                return (
-                                    <button
-                                        key={choice.slug}
-                                        className={model === choice.slug ? 'active' : ''}
-                                        onClick={() => updateDraft({ model: choice.slug })}
-                                        disabled={!hasKey}
-                                        title={hasKey ? choice.label : `Add a ${choice.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
-                                    >
-                                        {choice.label}
-                                    </button>
-                                );
-                            })}
+                        <div className="prompt-header">
+                            <label>{isAutopilotMode ? 'STARTING PROMPT' : 'PROMPT'}</label>
+                            <CustomSelect
+                                className="example-prompt-select"
+                                value=""
+                                onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
+                                options={[
+                                    { value: '', label: 'Example prompts...' },
+                                    ...EXAMPLE_PROMPTS.map((e) => ({ value: e, label: e })),
+                                ]}
+                            />
                         </div>
+                        <textarea
+                            placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
+                            value={prompt}
+                            onChange={(e) => updateDraft({ prompt: e.target.value })}
+                            className="prompt-input"
+                        />
+                        {isAutopilotMode && (
+                            <p className="field-relationship-note">
+                                Autopilot starts with this prompt, then scores and refines each result against the goal below.
+                            </p>
+                        )}
                     </div>
 
                     <div className="input-section">
@@ -583,27 +587,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     {isAutopilotMode && (
                         <div className="autopilot-panel glass-panel">
                             <div className="input-section">
-                                <label>REASONING MODEL</label>
-                                <div className="toggle-group">
-                                    {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((modelSlug) => {
-                                        const config = resolveReasoningModelConfig(modelSlug);
-                                        const hasKey = !!getProviderKey(config.provider);
-                                        return (
-                                            <button
-                                                key={modelSlug}
-                                                className={reasoningModel === modelSlug ? 'active' : ''}
-                                                onClick={() => setReasoningModel(modelSlug)}
-                                                disabled={!hasKey}
-                                                title={hasKey ? config.label : `Add a ${config.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
-                                            >
-                                                {config.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            <div className="input-section">
                                 <div className="prompt-header">
                                     <label>GOAL</label>
                                     <button
@@ -620,6 +603,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     onChange={(e) => setGoal(e.target.value)}
                                     className="prompt-input autopilot-goal-input"
                                 />
+                                <p className="field-relationship-note">
+                                    The goal is the target Autopilot evaluates against; the starting prompt above is the first image attempt.
+                                </p>
                             </div>
 
                             <div className="autopilot-settings-grid">
@@ -672,27 +658,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             )}
                         </div>
                     )}
-
-                    <div className="input-section">
-                        <div className="prompt-header">
-                            <label>PROMPT</label>
-                            <CustomSelect
-                                className="example-prompt-select"
-                                value=""
-                                onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
-                                options={[
-                                    { value: '', label: 'Example prompts...' },
-                                    ...EXAMPLE_PROMPTS.map((e) => ({ value: e, label: e })),
-                                ]}
-                            />
-                        </div>
-                        <textarea
-                            placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
-                            value={prompt}
-                            onChange={(e) => updateDraft({ prompt: e.target.value })}
-                            className="prompt-input"
-                        />
-                    </div>
 
                     <div className="options-grid">
                         <div className="image-model-options-grid">

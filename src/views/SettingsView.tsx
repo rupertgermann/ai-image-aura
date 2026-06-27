@@ -1,6 +1,18 @@
 import React, { useState } from 'react';
-import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell } from 'lucide-react';
-import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
+import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell, SlidersHorizontal } from 'lucide-react';
+import { getImageModelUiChoices } from '../image-models/ImageModelControls';
+import { useGenerateDraft } from '../generate-session/GenerateSession';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import {
+    GOOGLE_PROVIDER,
+    OPENAI_IMAGE_MODEL,
+    OPENAI_PROVIDER,
+    OPENAI_RESPONSES_MODEL,
+    REASONING_MODEL_REGISTRY,
+    resolveReasoningModelConfig,
+    type Provider,
+    type ReasoningModelSlug,
+} from '../utils/openaiModels';
 import type { CompletionNotificationReadiness } from '../app/CompletionNotificationPort';
 
 interface SettingsViewProps {
@@ -49,6 +61,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 onSaveKey={onGoogleApiKeyChange}
             />
 
+            <ModelPreferencesSection
+                apiKey={apiKey}
+                googleApiKey={googleApiKey}
+            />
+
             <section className="settings-section glass-panel">
                 <div className="section-title">
                     <Bell size={20} className={completionNotificationsEnabled ? 'icon-green' : 'icon-purple'} />
@@ -67,6 +84,78 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </label>
             </section>
         </div>
+    );
+};
+
+interface ModelPreferencesSectionProps {
+    apiKey: string | null;
+    googleApiKey: string | null;
+}
+
+const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
+    apiKey,
+    googleApiKey,
+}) => {
+    const [draft, setDraft] = useGenerateDraft();
+    const [reasoningModel, setReasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+
+    return (
+        <section className="settings-section glass-panel">
+            <div className="section-title">
+                <SlidersHorizontal size={20} className="icon-purple" />
+                <h2>Model Preferences</h2>
+            </div>
+
+            <p className="section-desc">
+                These selections control the Generate module. Provider keys still decide which models are available.
+            </p>
+
+            <div className="settings-model-grid">
+                <div className="input-section">
+                    <label>IMAGE MODEL</label>
+                    <div className="toggle-group">
+                        {getImageModelUiChoices().map((choice) => {
+                            const hasKey = hasProviderKey(choice.provider, apiKey, googleApiKey);
+                            return (
+                                <button
+                                    key={choice.slug}
+                                    className={draft.model === choice.slug ? 'active' : ''}
+                                    onClick={() => setDraft((current) => ({
+                                        ...current,
+                                        model: choice.slug,
+                                    }))}
+                                    disabled={!hasKey}
+                                    title={hasKey ? choice.label : `Add a ${getProviderLabel(choice.provider)} API key above`}
+                                >
+                                    {choice.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div className="input-section">
+                    <label>REASONING MODEL</label>
+                    <div className="toggle-group">
+                        {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((modelSlug) => {
+                            const config = resolveReasoningModelConfig(modelSlug);
+                            const hasKey = hasProviderKey(config.provider, apiKey, googleApiKey);
+                            return (
+                                <button
+                                    key={modelSlug}
+                                    className={reasoningModel === modelSlug ? 'active' : ''}
+                                    onClick={() => setReasoningModel(modelSlug)}
+                                    disabled={!hasKey}
+                                    title={hasKey ? config.label : `Add a ${getProviderLabel(config.provider)} API key above`}
+                                >
+                                    {config.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </section>
     );
 };
 
@@ -145,6 +234,15 @@ const ProviderKeySection: React.FC<ProviderKeySectionProps> = ({
         </section>
     );
 };
+
+function hasProviderKey(provider: Provider, apiKey: string | null, googleApiKey: string | null) {
+    const key = provider === GOOGLE_PROVIDER ? googleApiKey : apiKey;
+    return !!key && key.length > 5;
+}
+
+function getProviderLabel(provider: Provider) {
+    return provider === OPENAI_PROVIDER ? 'OpenAI' : 'Google';
+}
 
 function getReadinessLabel(readiness: CompletionNotificationReadiness) {
     switch (readiness) {
