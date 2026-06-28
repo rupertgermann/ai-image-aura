@@ -1332,6 +1332,15 @@ textarea.aura-input {
     min-height: 100%;
 }
 
+.archive-toolbar {
+    align-items: center;
+}
+
+.archive-toolbar .btn-ghost {
+    height: 46px;
+    padding: 0 12px;
+}
+
 .search-box {
     width: 300px;
     position: relative;
@@ -1339,6 +1348,16 @@ textarea.aura-input {
 
 .search-box input {
     height: 46px;
+}
+
+.archive-search-box {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.archive-search-box input {
+    padding-left: 48px;
 }
 
 .archive-filter-toggle {
@@ -1359,6 +1378,14 @@ textarea.aura-input {
 
 .search-icon {
     color: var(--color-steel);
+}
+
+.archive-search-icon {
+    position: absolute;
+    top: 50%;
+    left: 16px;
+    pointer-events: none;
+    transform: translateY(-50%);
 }
 
 .image-grid {

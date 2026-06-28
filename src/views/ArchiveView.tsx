@@ -62,7 +62,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         <h1>Archive</h1>
                         <p>Your creative collection across time.</p>
                     </div>
-                    <div className="header-actions">
+                    <div className="header-actions archive-toolbar">
                         <button
                             className="btn-ghost"
                             onClick={() => onToggleSelectAll(filteredImageIds)}
@@ -79,15 +79,14 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                             <Star size={18} />
                             Favorites
                         </button>
-                        <div className="search-box glass-panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
-                            <Search size={18} className="search-icon" style={{ position: 'absolute', left: '1rem', pointerEvents: 'none' }} />
+                        <div className="search-box archive-search-box glass-panel">
+                            <Search size={18} className="search-icon archive-search-icon" />
                             <input
                                 type="text"
                                 placeholder="Search prompts..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="aura-input"
-                                style={{ paddingLeft: '3rem' }}
                             />
                         </div>
                     </div>
