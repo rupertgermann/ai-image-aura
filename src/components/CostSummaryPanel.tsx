@@ -17,27 +17,21 @@ const CostSummaryPanel: React.FC<CostSummaryPanelProps> = ({
         return null;
     }
 
-    const totals = calculateApiCostTotals(ledger);
-    const hasReasoningCosts = ledger.items.some((item) => item.kind === 'reasoning');
-    const showSeparateTotals = hasReasoningCosts && !compact;
+    const totalRows = buildCostTotalRows(ledger, { compact });
 
     return (
         <div className={`cost-summary-panel${compact ? ' compact' : ''}`}>
             <label className="section-label">API Cost</label>
 
             <div className="cost-total-list">
-                {showSeparateTotals && (
+                {totalRows.map((row) => (
                     <CostTotalRow
-                        label="Image generation"
-                        amountUsd={totals.imageGenerationTotalUsd}
-                        unavailableLabel={getUnavailableLabel(ledger.items.filter((item) => item.kind !== 'reasoning'))}
+                        key={row.id}
+                        label={row.label}
+                        amountUsd={row.amountUsd}
+                        unavailableLabel={row.unavailableLabel}
                     />
-                )}
-                <CostTotalRow
-                    label={showSeparateTotals ? 'Autopilot API total' : 'Total'}
-                    amountUsd={totals.totalUsd}
-                    unavailableLabel={totals.status === 'unavailable' ? 'Unavailable' : totals.status === 'partial' ? 'Partial' : undefined}
-                />
+                ))}
             </div>
 
             {!compact && showBreakdown && (
@@ -54,6 +48,58 @@ const CostSummaryPanel: React.FC<CostSummaryPanelProps> = ({
         </div>
     );
 };
+
+interface CostTotalRowModel {
+    id: string;
+    label: string;
+    amountUsd?: number;
+    unavailableLabel?: string;
+}
+
+export function buildCostTotalRows(
+    ledger: ApiCostLedger,
+    options: { compact?: boolean } = {},
+): CostTotalRowModel[] {
+    const totals = calculateApiCostTotals(ledger);
+    const totalUnavailableLabel = totals.status === 'unavailable'
+        ? 'Unavailable'
+        : totals.status === 'partial'
+            ? 'Partial'
+            : undefined;
+    const rows: CostTotalRowModel[] = [{
+        id: 'total',
+        label: 'Total',
+        amountUsd: totals.totalUsd,
+        unavailableLabel: totalUnavailableLabel,
+    }];
+
+    if (options.compact || !ledger.items.some((item) => item.kind === 'reasoning')) {
+        return rows;
+    }
+
+    const imageItems = ledger.items.filter((item) => item.kind !== 'reasoning');
+    const reasoningItems = ledger.items.filter((item) => item.kind === 'reasoning');
+
+    if (imageItems.length > 0) {
+        rows.push({
+            id: 'image-generation',
+            label: 'Image generation',
+            amountUsd: totals.imageGenerationTotalUsd,
+            unavailableLabel: getUnavailableLabel(imageItems),
+        });
+    }
+
+    if (reasoningItems.length > 0) {
+        rows.push({
+            id: 'reasoning',
+            label: 'Reasoning',
+            amountUsd: totals.reasoningTotalUsd,
+            unavailableLabel: getUnavailableLabel(reasoningItems),
+        });
+    }
+
+    return rows;
+}
 
 function CostTotalRow({
     label,

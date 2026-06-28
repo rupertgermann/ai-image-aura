@@ -48,7 +48,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         actualParameters: image.actualParameters,
         requestedParameters: getRequestedArchiveParameters(image),
     });
-    const detailCostLedger = buildLineageCostLedger(timeline?.entries ?? [], image.costLedger);
+    const detailCostLedger = resolveImageDetailCostLedger(image.costLedger, timeline?.entries ?? []);
 
     const copyPrompt = () => {
         navigator.clipboard.writeText(image.prompt);
@@ -333,5 +333,12 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         </div>
     );
 };
+
+export function resolveImageDetailCostLedger(
+    imageCostLedger: ArchiveImage['costLedger'],
+    entries: LineageTimelineData['entries'],
+) {
+    return imageCostLedger ?? buildLineageCostLedger(entries);
+}
 
 export default ImageDetailModal;
