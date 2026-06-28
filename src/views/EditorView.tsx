@@ -13,6 +13,7 @@ import { getImageFilesFromClipboard } from '../references/clipboard';
 import { renderAiTransformEditInput } from '../editor/aiTransform';
 import { classifyTransformMaskCoverage } from '../editor/transformMask';
 import type { EditorReplay } from '../lineage/replayLineageStep';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface EditorViewProps {
     image: ArchiveImage | null;
@@ -24,8 +25,8 @@ interface EditorViewProps {
 const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, onSave }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
-    const [adjustmentsOpen, setAdjustmentsOpen] = useState(true);
-    const [filtersOpen, setFiltersOpen] = useState(true);
+    const [adjustmentsOpen, setAdjustmentsOpen] = useLocalStorage('editor_adjustments_open', true);
+    const [filtersOpen, setFiltersOpen] = useLocalStorage('editor_filters_open', true);
     const [maskEditorOpen, setMaskEditorOpen] = useState(false);
     const [maskTargetUrl, setMaskTargetUrl] = useState<string | null>(null);
     const [maskLoading, setMaskLoading] = useState(false);
