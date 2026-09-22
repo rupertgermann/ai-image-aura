@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
+import type { LineageStore } from '../lineage/LineageStore';
+import { readGenerateLineageImageModel } from '../lineage/generateLineageMetadata';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
 import {
     buildActiveImageModelControls,
@@ -357,6 +359,30 @@ export function createGenerateSessionStore(deps: CreateGenerateSessionStoreDeps 
 }
 
 export const generateSessionStore = createGenerateSessionStore();
+
+export async function transferSimilarFromArchive(
+    image: ArchiveImage,
+    sessionStore: Pick<GenerateSessionStore, 'transferFromArchive'>,
+    lineageStore: Pick<LineageStore, 'getByArchiveImageId'>,
+): Promise<void> {
+    if (image.model !== QWEN_IMAGE_2_1_IMAGE_MODEL) {
+        await sessionStore.transferFromArchive(image);
+        return;
+    }
+
+    const steps = await lineageStore.getByArchiveImageId(image.id);
+    for (let index = steps.length - 1; index >= 0; index--) {
+        const step = steps[index];
+        if (step.stepType !== 'generation' && step.stepType !== 'reference-generation') continue;
+        const imageModel = readGenerateLineageImageModel(step.metadata);
+        if (imageModel?.slug === QWEN_IMAGE_2_1_IMAGE_MODEL) {
+            await sessionStore.transferFromArchive(image, undefined, { qwenImage2_1: imageModel.controls });
+            return;
+        }
+    }
+
+    await sessionStore.transferFromArchive(image);
+}
 
 function getDefaultLocalStorage(): Storage {
     if (typeof window !== 'undefined') {

@@ -6,14 +6,14 @@ export const PROVIDER_API_KEY_STORAGE_KEYS: Record<Exclude<Provider, typeof LOCA
 };
 export const LOCAL_SERVER_URL_STORAGE_KEY = 'aura_local_server_url';
 
-export type ProviderKeySet = Record<Provider, string | null | undefined>;
+export type ProviderCredentialSet = Record<Provider, string | null | undefined>;
 
-export function createProviderKeyResolver(keys: ProviderKeySet) {
+export function createProviderCredentialResolver(credentials: ProviderCredentialSet) {
     return {
-        getKey(provider: Provider) {
+        getCredential(provider: Provider) {
             return provider === LOCAL_PROVIDER
-                ? normalizeLocalServerUrl(keys.local)
-                : normalizeKey(keys[provider]);
+                ? normalizeLocalServerUrl(credentials.local)
+                : normalizeKey(credentials[provider]);
         },
     };
 }

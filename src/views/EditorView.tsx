@@ -18,11 +18,11 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 interface EditorViewProps {
     image: ArchiveImage | null;
     replay?: EditorReplay | null;
-    getProviderKey: (provider: Provider) => string | null;
+    getProviderCredential: (provider: Provider) => string | null;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, onSave }) => {
+const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCredential, onSave }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
     const [adjustmentsOpen, setAdjustmentsOpen] = useLocalStorage('editor_adjustments_open', true);
@@ -38,7 +38,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const paintingMaskRef = useRef(false);
     const activeModel = resolveImageModelConfig(aiEditModel);
-    const activeApiKey = getProviderKey(activeModel.provider);
+    const imageCredential = getProviderCredential(activeModel.provider);
     const supportsTransformMask = imageModelSupportsTransformMask(aiEditModel);
     const {
         brightness,
@@ -96,7 +96,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
         handleDragLeave,
         handleDrop,
     } = useEditorController({
-        apiKey: activeApiKey,
+        imageCredential,
         model: aiEditModel,
         isCanvasReady: isReady,
         draft,
@@ -485,7 +485,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                                 <label>MODEL</label>
                                 <div className="toggle-group">
                                     {getImageModelUiChoices().map((choice) => {
-                                        const available = !!getProviderKey(choice.provider);
+                                        const available = !!getProviderCredential(choice.provider);
                                         return (
                                             <button
                                                 key={choice.slug}
@@ -501,7 +501,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                                         );
                                     })}
                                 </div>
-                                {!getProviderKey(LOCAL_PROVIDER) && activeModel.provider !== LOCAL_PROVIDER && (
+                                {!getProviderCredential(LOCAL_PROVIDER) && activeModel.provider !== LOCAL_PROVIDER && (
                                     <div className="info-message mini">Save a Local server URL in Settings to use Qwen Image 2.1.</div>
                                 )}
                             </div>
@@ -512,7 +512,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                                 onChange={(e) => setAiPrompt(e.target.value)}
                                 className="aura-input"
                                 style={{ minHeight: '100px', resize: 'vertical' }}
-                                disabled={aiLoading || !activeApiKey || !isCanvasReady}
+                                disabled={aiLoading || !imageCredential || !isCanvasReady}
                             />
                             {supportsTransformMask && (
                                 <div className="transform-mask-controls">
@@ -539,7 +539,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                             <button
                                 className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
-                                disabled={aiLoading || !aiPrompt.trim() || !activeApiKey || !isCanvasReady}
+                                disabled={aiLoading || !aiPrompt.trim() || !imageCredential || !isCanvasReady}
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
@@ -585,7 +585,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
 
                             {aiError && <div className="error-message mini">{aiError}</div>}
                             {aiReferenceWarning && <div className="info-message mini">{aiReferenceWarning}</div>}
-                            {!activeApiKey && <div className="error-message mini">{activeModel.provider === LOCAL_PROVIDER
+                            {!imageCredential && <div className="error-message mini">{activeModel.provider === LOCAL_PROVIDER
                                 ? 'Set Local server URL in Settings'
                                 : `Set ${getProviderLabel(activeModel.provider)} API key in Settings`}</div>}
                         </div>

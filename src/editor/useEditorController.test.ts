@@ -32,7 +32,7 @@ describe('Editor controller AI transform flow', () => {
         const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
         const result = await runEditorAiTransform({
-            apiKey: 'sk-test',
+            imageCredential: 'sk-test',
             model: OPENAI_IMAGE_MODEL,
             prompt: '  replace the jacket  ',
             draft,
@@ -46,7 +46,7 @@ describe('Editor controller AI transform flow', () => {
 
         expect(render).toHaveBeenCalledTimes(2);
         expect(editImage).toHaveBeenCalledWith(expect.objectContaining({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: OPENAI_IMAGE_MODEL,
             prompt: 'replace the jacket',
             sourceImage: expect.any(Blob),
@@ -117,7 +117,7 @@ describe('Editor controller AI transform flow', () => {
             costLedger: localCostLedger,
         }));
         const result = await runEditorAiTransform({
-            apiKey: 'http://127.0.0.1:1234',
+            imageCredential: 'http://127.0.0.1:1234',
             model: QWEN_IMAGE_2_1_IMAGE_MODEL,
             prompt: 'replace the jacket',
             draft: createDraft(createLayerStack(), ['layer-1']),
@@ -218,7 +218,7 @@ describe('Editor controller AI transform flow', () => {
 
 async function runTransform(draft: EditorDraft) {
     return runEditorAiTransform({
-        apiKey: 'sk-test',
+        imageCredential: 'sk-test',
         model: OPENAI_IMAGE_MODEL,
         prompt: 'replace the jacket',
         draft,

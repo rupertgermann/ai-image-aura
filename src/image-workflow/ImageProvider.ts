@@ -9,7 +9,7 @@ import { GOOGLE_PROVIDER, OPENAI_PROVIDER, type ImageModelConfig, type NanoBanan
 import { createLocalImageProvider } from './LocalImageProvider';
 
 export interface ImageProviderRequest {
-    apiKey: string;
+    credential: string;
     model: ImageModelConfig;
     prompt: string;
     quality?: ImageQuality;
@@ -35,7 +35,7 @@ export type ImageProviderRegistry = Partial<Record<Provider, ImageProvider>>;
 
 export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImageClient): ImageProvider {
     const toOpenAiRequest = (request: ImageProviderRequest) => ({
-        apiKey: request.apiKey,
+        apiKey: request.credential,
         apiModel: request.model.apiModel,
         endpoints: request.model.endpoints,
         prompt: request.prompt,
@@ -62,7 +62,7 @@ export function createGoogleImageProvider(fetchImpl: typeof fetch = fetch): Imag
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-goog-api-key': request.apiKey,
+                'x-goog-api-key': request.credential,
             },
             body: JSON.stringify(await buildGoogleImageRequest(request)),
         });

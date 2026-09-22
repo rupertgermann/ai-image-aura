@@ -17,7 +17,7 @@ export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
 export { NANO_REFERENCE_LIMIT } from '../image-models/ImageModelControls';
 
 export interface GenerateImageInput {
-    apiKey: string;
+    credential: string;
     model?: ImageModelSlug;
     prompt: string;
     quality: ImageQuality;
@@ -33,7 +33,7 @@ export interface GenerateImageInput {
 }
 
 export interface EditImageInput {
-    apiKey: string;
+    credential: string;
     model?: ImageModelSlug;
     prompt: string;
     sourceImage: Blob;
@@ -103,7 +103,7 @@ export function createImageWorkflow(
             try {
                 const startedAt = now();
                 const responses = await provider.generate({
-                    apiKey: input.apiKey,
+                    credential: input.credential,
                     model,
                     prompt: buildGenerationPrompt(modelSlug, input),
                     ...providerRequest,
@@ -150,7 +150,7 @@ export function createImageWorkflow(
 
             const startedAt = now();
             const response = await provider.edit({
-                apiKey: input.apiKey,
+                credential: input.credential,
                 model,
                 prompt: input.prompt,
                 maskImage: input.maskImage,

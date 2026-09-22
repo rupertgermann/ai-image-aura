@@ -21,7 +21,7 @@ interface SettingsViewProps {
     apiKey: string | null;
     googleApiKey: string | null;
     localServerUrl: string | null;
-    getProviderKey: (provider: Provider) => string | null;
+    getProviderCredential: (provider: Provider) => string | null;
     completionNotificationsEnabled: boolean;
     completionNotificationReadiness: CompletionNotificationReadiness;
     onApiKeyChange: (key: string) => void;
@@ -34,7 +34,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     apiKey,
     googleApiKey,
     localServerUrl,
-    getProviderKey,
+    getProviderCredential,
     completionNotificationsEnabled,
     completionNotificationReadiness,
     onApiKeyChange,
@@ -75,7 +75,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             />
 
             <ModelPreferencesSection
-                getProviderKey={getProviderKey}
+                getProviderCredential={getProviderCredential}
             />
 
             <section className="settings-section glass-panel">
@@ -100,11 +100,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 };
 
 interface ModelPreferencesSectionProps {
-    getProviderKey: (provider: Provider) => string | null;
+    getProviderCredential: (provider: Provider) => string | null;
 }
 
 const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
-    getProviderKey,
+    getProviderCredential,
 }) => {
     const [draft, setDraft] = useGenerateDraft();
     const [reasoningModel, setReasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
@@ -125,7 +125,7 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                     <label>IMAGE MODEL</label>
                     <div className="toggle-group">
                         {getImageModelUiChoices().map((choice) => {
-                            const hasKey = !!getProviderKey(choice.provider);
+                            const hasCredential = !!getProviderCredential(choice.provider);
                             return (
                                 <button
                                     key={choice.slug}
@@ -134,8 +134,8 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                                         ...current,
                                         model: choice.slug,
                                     }))}
-                                    disabled={!hasKey}
-                                    title={hasKey ? choice.label : getProviderSetupHint(choice.provider)}
+                                    disabled={!hasCredential}
+                                    title={hasCredential ? choice.label : getProviderSetupHint(choice.provider)}
                                 >
                                     {choice.label}
                                 </button>
@@ -149,14 +149,14 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                     <div className="toggle-group">
                         {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((modelSlug) => {
                             const config = resolveReasoningModelConfig(modelSlug);
-                            const hasKey = !!getProviderKey(config.provider);
+                            const hasCredential = !!getProviderCredential(config.provider);
                             return (
                                 <button
                                     key={modelSlug}
                                     className={reasoningModel === modelSlug ? 'active' : ''}
                                     onClick={() => setReasoningModel(modelSlug)}
-                                    disabled={!hasKey}
-                                    title={hasKey ? config.label : getProviderSetupHint(config.provider)}
+                                    disabled={!hasCredential}
+                                    title={hasCredential ? config.label : getProviderSetupHint(config.provider)}
                                 >
                                     {config.label}
                                 </button>

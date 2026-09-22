@@ -41,7 +41,7 @@ import {
 } from '../utils/openaiModels';
 
 interface GenerateViewProps {
-    getProviderKey: (provider: Provider) => string | null;
+    getProviderCredential: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     completionNotificationsEnabled?: boolean;
     completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
@@ -325,7 +325,7 @@ function formatResultSummaryLineItem(item: ApiCostLineItem) {
 }
 
 const GenerateView: React.FC<GenerateViewProps> = ({
-    getProviderKey,
+    getProviderCredential,
     onSaveImage,
     completionNotificationsEnabled,
     completionNotificationPort,
@@ -349,9 +349,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     } | null>(null);
     const { prompt, model, style, lighting, palette, isSaved } = draft;
     const activeModel = resolveImageModelConfig(model);
-    const activeImageApiKey = getProviderKey(activeModel.provider);
+    const imageCredential = getProviderCredential(activeModel.provider);
     const activeReasoningModel = resolveReasoningModelConfig(reasoningModel);
-    const reasoningApiKey = getProviderKey(activeReasoningModel.provider);
+    const reasoningApiKey = getProviderCredential(activeReasoningModel.provider);
     const reasoningClient = useMemo(() => resolveReasoningClient(reasoningModel), [reasoningModel]);
     const goalPromptTranslator = useMemo(() => createGoalPromptTranslator(reasoningClient), [reasoningClient]);
     const satisfactionEvaluator = useMemo(() => createSatisfactionEvaluator(reasoningClient), [reasoningClient]);
@@ -384,7 +384,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         downloadResult,
         clear,
     } = useGenerateController({
-        apiKey: activeImageApiKey,
+        imageCredential,
         reasoningApiKey,
         reasoningModel,
         draft,
@@ -593,7 +593,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <label>IMAGE MODEL</label>
                         <div className="toggle-group">
                             {getImageModelUiChoices().map((choice) => {
-                                const available = !!getProviderKey(choice.provider);
+                                const available = !!getProviderCredential(choice.provider);
                                 return (
                                     <button
                                         key={choice.slug}
@@ -607,7 +607,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 );
                             })}
                         </div>
-                        {!getProviderKey(LOCAL_PROVIDER) && !isLocalImageModel && (
+                        {!getProviderCredential(LOCAL_PROVIDER) && !isLocalImageModel && (
                             <p className="field-relationship-note">Save a Local server URL in Settings to use Qwen Image 2.1.</p>
                         )}
                     </div>
@@ -803,7 +803,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             <button
                                 className="btn-amber"
                                 onClick={() => setShowCostDisclosure(true)}
-                                disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey || !reasoningApiKey}
+                                disabled={loading || !prompt.trim() || !goal.trim() || !imageCredential || !reasoningApiKey}
                                 style={{ width: '100%' }}
                             >
                                 {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -814,7 +814,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <button
                             className="btn-amber"
                             onClick={() => { void generate(); }}
-                            disabled={loading || !prompt.trim() || !activeImageApiKey}
+                            disabled={loading || !prompt.trim() || !imageCredential}
                             style={{ width: '100%' }}
                         >
                             {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -842,7 +842,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         </div>
                     )}
 
-                    {!activeImageApiKey && (
+                    {!imageCredential && (
                         <div className="error-message">{activeModel.provider === LOCAL_PROVIDER
                             ? 'Local server URL missing. Go to Settings to configure.'
                             : `${getProviderLabel(activeModel.provider)} API key missing. Go to Settings to configure.`}</div>

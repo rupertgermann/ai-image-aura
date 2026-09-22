@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
-import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
+import { DEFAULT_GENERATE_DRAFT, type GenerateBatchSnapshot, type GenerateDraft } from './GenerateSession';
+import type { SaveLineageStepInput } from '../lineage/LineageStore';
 import {
     addGeneratedResultAsReference,
     addGeneratedResultAsReferenceFromAction,
@@ -13,6 +16,7 @@ import {
     shouldStreamGeneratePartials,
     snapshotGeneratedReferenceImages,
     startGeneratePartialPreviewRun,
+    useGenerateController,
 } from './useGenerateController';
 
 describe('Generate controller Image model archive metadata', () => {
@@ -461,6 +465,78 @@ describe('Generate controller result Reference iteration', () => {
 });
 
 describe('Generate controller Reference image provenance', () => {
+    it('uses only Qwen provider references in the batch snapshot, archive image, and lineage', async () => {
+        const selectedFiles = Array.from({ length: 12 }, (_, index) =>
+            new File([`reference-${index}`], `reference-${index}.png`, { type: 'image/png' }),
+        );
+        const selectedDataUrls = selectedFiles.map((_, index) => `data:image/png;base64,reference-${index}`);
+        const serializeReferenceFiles = vi.fn(async (files: File[]) =>
+            files.map((file) => selectedDataUrls[selectedFiles.indexOf(file)]),
+        );
+        const generate = vi.fn(async () => [{
+            slotIndex: 0,
+            status: 'success' as const,
+            imageUrl: 'data:image/png;base64,result',
+        }]);
+        const saveCurrentBatch = vi.fn(async (batch: GenerateBatchSnapshot) => { void batch; });
+        const draft = createDraft({ model: QWEN_IMAGE_2_1_IMAGE_MODEL });
+        const controller: { current: ReturnType<typeof useGenerateController> | null } = { current: null };
+
+        renderToStaticMarkup(createElement(() => {
+            controller.current = useGenerateController({
+                imageCredential: 'http://127.0.0.1:1234',
+                draft,
+                setDraft: vi.fn(),
+                referenceImages: selectedFiles,
+                replaceReferences: vi.fn(),
+                serializeReferences: vi.fn(async () => selectedDataUrls),
+                onSaveImage: vi.fn(async (image) => image),
+                session: {
+                    loadCurrentBatch: vi.fn(async () => null),
+                    saveCurrentBatch,
+                    clearCurrentResult: vi.fn(async () => undefined),
+                    consumeTransferredReferences: vi.fn(async () => []),
+                    loadLineageSource: vi.fn(() => null),
+                    saveLineageSource: vi.fn(),
+                    clearLineageSource: vi.fn(),
+                },
+                workflow: { generate, serializeReferences: serializeReferenceFiles },
+            });
+            return null;
+        }));
+        await controller.current!.generate();
+
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
+            referenceImages: selectedFiles.slice(0, 10),
+        }));
+        expect(serializeReferenceFiles).toHaveBeenCalledWith(selectedFiles.slice(0, 10));
+        const snapshot = saveCurrentBatch.mock.calls[0]?.[0];
+        expect(snapshot?.references).toEqual(selectedDataUrls.slice(0, 10));
+
+        const saveImage = vi.fn(async (image) => image);
+        const saveLineage = vi.fn(async (step: SaveLineageStepInput) => ({ ...step, id: 'step-1' }));
+        await saveGenerateResultSlots({
+            results: snapshot!.results,
+            draft,
+            runDraft: snapshot!.draft,
+            usedReferences: snapshot!.references,
+            runLineageSource: snapshot!.lineageSource,
+            serializeReferences: vi.fn(async () => selectedDataUrls),
+            saveImage,
+            lineageStore: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage },
+            sessionStore: { loadLineageSource: vi.fn(() => null), clearLineageSource: vi.fn() },
+            createArchiveImageId: () => 'qwen-archive',
+        });
+
+        expect(saveImage.mock.calls[0]?.[0].references).toEqual(selectedDataUrls.slice(0, 10));
+        expect(saveLineage).toHaveBeenCalledWith(expect.objectContaining({
+            metadata: expect.objectContaining({
+                referenceCount: 10,
+                referenceImages: expect.objectContaining({ count: 10 }),
+            }),
+        }));
+    });
+
     it('saves an over-limit Nano Banana Pro result from the used Reference image snapshot', async () => {
         const draft = createDraft({
             model: NANO_BANANA_PRO_IMAGE_MODEL,

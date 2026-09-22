@@ -63,7 +63,6 @@ function buildSavedImage(
             url: updatedUrl,
             timestamp,
             references: context.references ?? sourceImage.references,
-            model: context.aiEditModel ?? sourceImage.model,
             costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
             layerStack: context.layerStack ?? undefined,
         };
@@ -73,7 +72,6 @@ function buildSavedImage(
         ...sourceImage,
         url: updatedUrl,
         references: context.references ?? sourceImage.references,
-        model: context.aiEditModel ?? sourceImage.model,
         costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
         layerStack: context.layerStack ?? undefined,
     };

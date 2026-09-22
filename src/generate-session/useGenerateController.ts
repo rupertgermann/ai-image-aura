@@ -15,6 +15,7 @@ import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResu
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
+import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
@@ -45,7 +46,7 @@ interface AutopilotProgressState {
 }
 
 interface UseGenerateControllerOptions {
-    apiKey: string | null;
+    imageCredential: string | null;
     reasoningApiKey?: string | null;
     reasoningModel?: string;
     draft: GenerateDraft;
@@ -349,7 +350,7 @@ function createAutopilotCompletionNotification(result: AutopilotSessionResult): 
 }
 
 export function useGenerateController({
-    apiKey,
+    imageCredential,
     reasoningApiKey,
     reasoningModel,
     draft,
@@ -411,7 +412,7 @@ export function useGenerateController({
     }, [replaceReferences, session]);
 
     const generate = useCallback(async () => {
-        if (!apiKey) {
+        if (!imageCredential) {
             setError(missingImageCredentialMessage(draft.model));
             return;
         }
@@ -438,7 +439,7 @@ export function useGenerateController({
 
         try {
             const controls = getActiveGenerateControls(draft);
-            const usedReferenceImages = referenceImages.slice();
+            const usedReferenceImages = buildImageModelGenerateReferenceRunPlan(draft.model, referenceImages).providerReferenceImages.slice();
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
             const onPartialImage = shouldStreamGeneratePartials(draft)
@@ -449,7 +450,7 @@ export function useGenerateController({
                 serializeReferenceFiles: workflow.serializeReferences,
             });
             const results = await workflow.generate({
-                apiKey,
+                credential: imageCredential,
                 model: draft.model,
                 prompt: draft.prompt,
                 quality: controls.quality,
@@ -515,7 +516,7 @@ export function useGenerateController({
             }
             setLoading(false);
         }
-    }, [apiKey, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
+    }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
     const runAutopilot = useCallback(async (input: {
         goal: string;
@@ -523,7 +524,7 @@ export function useGenerateController({
         satisfactionThreshold?: number;
         initialCostLedger?: ApiCostLedger;
     }) => {
-        if (!apiKey) {
+        if (!imageCredential) {
             setError(missingImageCredentialMessage(draft.model));
             return null;
         }
@@ -559,7 +560,7 @@ export function useGenerateController({
             const runReferenceImages = referenceImages.slice();
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
-                apiKey,
+                imageCredential,
                 reasoningApiKey,
                 reasoningModel,
                 draft,
@@ -660,7 +661,7 @@ export function useGenerateController({
             autopilotSessionRef.current = null;
             setLoading(false);
         }
-    }, [apiKey, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
+    }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();

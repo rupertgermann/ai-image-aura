@@ -58,7 +58,7 @@ describe('runGenerateAutopilot', () => {
 
         const outcome = await runGenerateAutopilot({
             goal: 'A cinematic portrait',
-            apiKey: 'key',
+            imageCredential: 'key',
             reasoningApiKey: 'reasoning-key',
             reasoningModel: 'gemini-2.5-flash',
             draft: {
@@ -169,7 +169,7 @@ describe('runGenerateAutopilot', () => {
 
         const outcome = await runGenerateAutopilot({
             goal: 'A cinematic portrait',
-            apiKey: 'key',
+            imageCredential: 'key',
             reasoningApiKey: 'reasoning-key',
             draft: {
                 model: NANO_BANANA_PRO_IMAGE_MODEL,
@@ -289,7 +289,7 @@ describe('runGenerateAutopilot', () => {
 
         const outcome = await runGenerateAutopilot({
             goal: 'A paper crane',
-            apiKey: 'http://127.0.0.1:1234',
+            imageCredential: 'http://127.0.0.1:1234',
             reasoningApiKey: 'hosted-reasoning-key',
             reasoningModel: 'gpt-5.4',
             draft: {
@@ -317,7 +317,7 @@ describe('runGenerateAutopilot', () => {
         });
 
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-            apiKey: 'http://127.0.0.1:1234',
+            credential: 'http://127.0.0.1:1234',
             model: QWEN_IMAGE_2_1_IMAGE_MODEL,
             aspectRatio: '16:9',
             imageSize: '2K',

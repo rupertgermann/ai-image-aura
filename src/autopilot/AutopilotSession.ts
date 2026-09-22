@@ -49,9 +49,9 @@ export interface AutopilotSession {
 interface CreateAutopilotSessionInput {
     goal: string;
     initialPrompt: string;
-    settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>;
-    apiKey: string;
-    reasoningApiKey?: string;
+    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>;
+    imageCredential: string;
+    reasoningApiKey: string;
     reasoningModel?: string;
     initialParentStepId?: string | null;
     initialCostLedger?: ApiCostLedger;
@@ -83,7 +83,7 @@ class DefaultAutopilotSession implements AutopilotSession {
         const refine = this.input.refine ?? ((input) => promptRefiner.refine(input));
         const maxIterations = Math.max(1, Math.min(MAX_AUTOPILOT_ITERATIONS, this.input.maxIterations ?? DEFAULT_AUTOPILOT_MAX_ITERATIONS));
         const satisfactionThreshold = Math.max(0, Math.min(100, this.input.satisfactionThreshold ?? DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD));
-        const reasoningApiKey = this.input.reasoningApiKey ?? this.input.apiKey;
+        const reasoningApiKey = this.input.reasoningApiKey;
         const iterations: AutopilotIteration[] = [];
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
         const runSettings = snapshotAutopilotSettings(this.input.settings);
@@ -97,7 +97,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                 const iterationSettings = snapshotAutopilotSettings(runSettings);
                 const generatedImage = normalizeAutopilotGeneratedImage(await generate({
                     ...iterationSettings,
-                    apiKey: this.input.apiKey,
+                    credential: this.input.imageCredential,
                     prompt: currentPrompt,
                 }));
                 const imageDataUrl = generatedImage.imageDataUrl;
@@ -254,8 +254,8 @@ function normalizePromptRefinement(result: string | { prompt: string; costLedger
 }
 
 function snapshotAutopilotSettings(
-    settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>,
-): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
+    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>,
+): Omit<GenerateImageInput, 'credential' | 'prompt'> {
     return {
         ...settings,
         referenceImages: settings.referenceImages.slice(),

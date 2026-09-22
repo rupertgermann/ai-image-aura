@@ -35,7 +35,7 @@ export async function testLocalServerConnection(
 
 export function createLocalImageProvider(fetchImpl: typeof fetch = fetch): ImageProvider {
     async function requestImages(request: ImageProviderRequest, edit: boolean): Promise<ImageProviderResponse[]> {
-        const serverUrl = request.apiKey.replace(/\/+$/, '');
+        const serverUrl = request.credential.replace(/\/+$/, '');
         const images = request.referenceImages ?? [];
         const endpoint = edit || images.length > 0 ? request.model.endpoints.edit : request.model.endpoints.generate;
         const url = `${serverUrl}${endpoint}`;

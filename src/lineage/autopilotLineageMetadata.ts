@@ -126,7 +126,7 @@ export function buildAutopilotLineageMetadata(input: {
         feedback: string[];
     };
     prompt: string;
-    settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>;
+    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>;
     outputImageDataUrl: string;
     actualParameters?: ActualImageParameters;
     costLedger?: ApiCostLedger;
@@ -248,7 +248,7 @@ export function readAutopilotLineageReasoningModel(metadata: Record<string, unkn
 
 function buildAutopilotImageModelControls(
     model: ImageModelSlug,
-    settings: Omit<GenerateImageInput, 'apiKey' | 'prompt'>,
+    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>,
 ): ImageModelControls {
     switch (model) {
         case OPENAI_IMAGE_MODEL:

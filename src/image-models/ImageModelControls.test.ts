@@ -18,6 +18,23 @@ import {
 import { IMAGE_MODEL_REGISTRY, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('Image model controls', () => {
+    it('keeps a snapped Qwen edit request within the one-megapixel budget', () => {
+        const request = mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            sourceImage: new File(['source'], 'source.png'), referenceImages: [],
+            sourceDimensions: { width: 2000, height: 1000 },
+        });
+        expect(request.size).toBe('1440x704');
+        const [width, height] = request.size!.split('x').map(Number);
+        expect(width * height).toBeLessThanOrEqual(1024 * 1024);
+        expect(width % 32).toBe(0);
+        expect(height % 32).toBe(0);
+
+        const nearSquare = mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            sourceImage: new File(['source'], 'source.png'), referenceImages: [],
+            sourceDimensions: { width: 1010, height: 1010 },
+        });
+        expect(nearSquare.size).toBe('992x992');
+    });
     it('maps every Qwen aspect ratio and resolution to the fixed sd-server size', () => {
         const sizes = {
             '1:1': ['1024x1024', '2048x2048'],
@@ -59,7 +76,7 @@ describe('Image model controls', () => {
             sourceImage: files[0], compositionContextImage: files[1], referenceImages: files.slice(2),
             sourceDimensions: { width: 2048, height: 1024 },
         })).toEqual({
-            size: '1440x736',
+            size: '1440x704',
             referenceImages: files.slice(0, 10),
         });
         expect(mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {

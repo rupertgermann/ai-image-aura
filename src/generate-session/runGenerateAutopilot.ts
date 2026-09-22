@@ -10,8 +10,8 @@ import type { ApiCostLedger } from '../db/types';
 
 interface RunGenerateAutopilotInput {
     goal: string;
-    apiKey: string;
-    reasoningApiKey?: string;
+    imageCredential: string;
+    reasoningApiKey: string;
     reasoningModel?: string;
     draft: GenerateDraft;
     referenceImages: File[];
@@ -57,7 +57,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
             palette: input.draft.palette,
             referenceImages: usedReferenceImages,
         },
-        apiKey: input.apiKey,
+        imageCredential: input.imageCredential,
         reasoningApiKey: input.reasoningApiKey,
         reasoningModel: input.reasoningModel,
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,

@@ -1,8 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import type { StorageProvider } from '../services/StorageService';
-import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, getActiveGenerateArchiveFields, getActiveGenerateControls, sanitizeGenerateDraft, type GenerateBatchSnapshot } from './GenerateSession';
+import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, getActiveGenerateArchiveFields, getActiveGenerateControls, sanitizeGenerateDraft, transferSimilarFromArchive, type GenerateBatchSnapshot } from './GenerateSession';
+import type { LineageStep } from '../lineage/LineageStore';
 
 describe('GenerateSession draft migration', () => {
+    it('Create Similar restores the saved Qwen batch size from generation lineage', async () => {
+        const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider() });
+        const image = {
+            id: 'saved-qwen-batch-result', url: 'data:image/png;base64,AA', prompt: 'cutout',
+            model: 'qwen-image-2.1', quality: '2K', aspectRatio: '3:4', background: 'transparent',
+            timestamp: '2026-09-22T10:00:00.000Z',
+        };
+        const generationStep: LineageStep = {
+            id: 'generation-step', archiveImageId: image.id, parentStepId: null,
+            stepType: 'generation', timestamp: image.timestamp,
+            metadata: { imageModel: { slug: 'qwen-image-2.1', controls: {
+                aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3,
+            } } },
+        };
+        const laterEdit: LineageStep = {
+            ...generationStep, id: 'later-edit', stepType: 'manual-edit', timestamp: '2026-09-22T11:00:00.000Z',
+            metadata: {},
+        };
+
+        await transferSimilarFromArchive(image, store, {
+            getByArchiveImageId: async () => [generationStep, laterEdit],
+        });
+
+        expect(store.readDraft()).toMatchObject({
+            model: 'qwen-image-2.1', prompt: 'cutout',
+            qwenImage2_1: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3 },
+        });
+        expect(store.loadLineageSource()).toEqual({ archiveImageId: image.id });
+    });
     it('keeps Qwen controls in the draft and restores them from an archive image', async () => {
         const draft = sanitizeGenerateDraft({
             ...DEFAULT_GENERATE_DRAFT,

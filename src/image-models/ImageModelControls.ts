@@ -731,8 +731,17 @@ function getQwenEditSize(dimensions: { width: number; height: number } | undefin
     }
 
     const scale = Math.min(1, Math.sqrt((1024 * 1024) / (dimensions.width * dimensions.height)));
-    const snap = (edge: number) => Math.max(32, Math.round(edge * scale / 32) * 32);
-    return `${snap(dimensions.width)}x${snap(dimensions.height)}`;
+    const snap = (edge: number) => Math.max(32, Math.min(Math.round(edge * scale / 32), Math.floor(edge / 32)) * 32);
+    let width = snap(dimensions.width);
+    let height = snap(dimensions.height);
+    const aspectRatio = dimensions.width / dimensions.height;
+    while (width * height > 1024 * 1024) {
+        const widthError = width > 32 ? Math.abs((width - 32) / height - aspectRatio) : Infinity;
+        const heightError = height > 32 ? Math.abs(width / (height - 32) - aspectRatio) : Infinity;
+        if (widthError <= heightError) width -= 32;
+        else height -= 32;
+    }
+    return `${width}x${height}`;
 }
 
 function getExactDimensions(size: string) {

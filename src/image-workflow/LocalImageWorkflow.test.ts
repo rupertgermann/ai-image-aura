@@ -9,7 +9,7 @@ const imageResponse = (images = ['image']) => new Response(JSON.stringify({
 
 function generateInput(overrides: Partial<GenerateImageInput> = {}): GenerateImageInput {
     return {
-        apiKey: SERVER_URL,
+        credential: SERVER_URL,
         model: 'qwen-image-2.1',
         prompt: 'a fox',
         quality: 'medium',
@@ -79,7 +79,7 @@ describe('local image workflow', () => {
             new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }));
 
         const result = await workflow.edit({
-            apiKey: SERVER_URL,
+            credential: SERVER_URL,
             model: 'qwen-image-2.1',
             prompt: 'replace the fox with a cat',
             sourceImage: new Blob(['source'], { type: 'image/png' }),
@@ -108,7 +108,7 @@ describe('local image workflow', () => {
         const fetchImpl = vi.fn<typeof fetch>(async () => imageResponse());
         const workflow = createImageWorkflow({ local: createLocalImageProvider(fetchImpl) });
         await workflow.edit({
-            apiKey: SERVER_URL,
+            credential: SERVER_URL,
             model: 'qwen-image-2.1',
             prompt: 'change the color',
             sourceImage: new Blob(['source'], { type: 'image/png' }),
@@ -217,7 +217,7 @@ describe('local image workflow', () => {
         });
 
         const results = await workflow.generate(generateInput({
-            apiKey: `${SERVER_URL}/`,
+            credential: `${SERVER_URL}/`,
             style: 'watercolor',
             lighting: 'golden hour',
             palette: 'warm',

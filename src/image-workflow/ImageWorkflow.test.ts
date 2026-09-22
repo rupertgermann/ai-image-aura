@@ -19,7 +19,7 @@ describe('ImageWorkflow', () => {
         const workflow = createImageWorkflow(providers);
 
         const results = await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -47,7 +47,7 @@ describe('ImageWorkflow', () => {
             }),
         }]);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: expect.objectContaining({
                 slug: OPENAI_IMAGE_MODEL,
                 provider: 'openai',
@@ -76,7 +76,7 @@ describe('ImageWorkflow', () => {
         });
 
         const results = await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -138,7 +138,7 @@ describe('ImageWorkflow', () => {
         });
 
         await expect(workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -198,7 +198,7 @@ describe('ImageWorkflow', () => {
         });
 
         const results = await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'medium',
             aspectRatio: 'auto',
@@ -249,7 +249,7 @@ describe('ImageWorkflow', () => {
         });
 
         const results = await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -292,7 +292,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -328,7 +328,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -365,7 +365,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
             quality: 'high',
@@ -408,7 +408,7 @@ describe('ImageWorkflow', () => {
         const sourceImage = new Blob(['source'], { type: 'image/png' });
 
         const result = await workflow.edit({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'make it cinematic',
             sourceImage,
             referenceImages: [],
@@ -425,7 +425,7 @@ describe('ImageWorkflow', () => {
             }),
         }));
         expect(edit).toHaveBeenCalledWith(expect.objectContaining({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: expect.objectContaining({
                 slug: OPENAI_IMAGE_MODEL,
                 provider: 'openai',
@@ -451,7 +451,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: 'unsupported-size',
@@ -481,7 +481,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: ' 1536x1024 ',
@@ -511,7 +511,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
             quality: 'high',
@@ -542,7 +542,7 @@ describe('ImageWorkflow', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
             quality: 'high',
@@ -569,7 +569,7 @@ describe('ImageWorkflow', () => {
         });
 
         await expect(workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -598,7 +598,7 @@ describe('ImageWorkflow', () => {
         const userReference = new File(['reference'], 'user-reference.png', { type: 'image/png' });
 
         await workflow.edit({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'make it cinematic',
             sourceImage,
             referenceImages: [userReference],
@@ -631,7 +631,7 @@ describe('ImageWorkflow', () => {
         const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
         await workflow.edit({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             prompt: 'replace the sky',
             sourceImage,
             compositionContextImage: compositionContext,
@@ -667,7 +667,7 @@ describe('ImageWorkflow', () => {
         );
 
         await workflow.edit({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'make it cinematic',
             sourceImage: new Blob(['source'], { type: 'image/png' }),
@@ -715,7 +715,7 @@ describe('googleImageProvider', () => {
         const reference = new File(['reference'], 'reference.png', { type: 'image/png' });
 
         const result = await provider.generate({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: {
                 slug: NANO_BANANA_PRO_IMAGE_MODEL,
                 provider: 'google',
@@ -776,7 +776,7 @@ describe('googleImageProvider', () => {
         const provider = createGoogleImageProvider(fetchImpl);
 
         const result = await provider.generate({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: {
                 slug: NANO_BANANA_PRO_IMAGE_MODEL,
                 provider: 'google',
@@ -807,7 +807,7 @@ describe('googleImageProvider', () => {
         const onPartialImage = vi.fn();
 
         const result = await provider.generate({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: {
                 slug: NANO_BANANA_PRO_IMAGE_MODEL,
                 provider: 'google',
@@ -850,7 +850,7 @@ describe('googleImageProvider', () => {
         });
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
             quality: 'high',
@@ -887,7 +887,7 @@ describe('googleImageProvider', () => {
         );
 
         await workflow.generate({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
             quality: 'high',
@@ -930,7 +930,7 @@ describe('googleImageProvider', () => {
         const provider = createGoogleImageProvider(fetchImpl);
 
         await provider.edit({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: {
                 slug: NANO_BANANA_PRO_IMAGE_MODEL,
                 provider: 'google',
@@ -1005,7 +1005,7 @@ describe('googleImageProvider', () => {
         const provider = createGoogleImageProvider(fetchImpl);
 
         await provider.generate({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: {
                 slug: NANO_BANANA_PRO_IMAGE_MODEL,
                 provider: 'google',
@@ -1038,7 +1038,7 @@ describe('googleImageProvider', () => {
         const provider = createGoogleImageProvider(fetchImpl);
 
         const resultPromise = provider.generate({
-            apiKey: 'google-key',
+            credential: 'google-key',
             model: {
                 slug: NANO_BANANA_PRO_IMAGE_MODEL,
                 provider: 'google',
