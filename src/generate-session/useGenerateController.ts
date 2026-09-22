@@ -608,7 +608,7 @@ export function useGenerateController({
                 setCurrentResult(outcome.result.bestIteration.imageDataUrl);
                 setCurrentBatchResults([bestSlot]);
                 setCurrentResultReferences(usedReferences);
-                setCurrentRunDraft(null);
+                setCurrentRunDraft(outcome.runDraft);
                 setCurrentRunLineageSource(lineageSource);
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
@@ -617,7 +617,7 @@ export function useGenerateController({
                 await session.saveCurrentBatch({
                     results: [bestSlot],
                     references: usedReferences,
-                    draft: null,
+                    draft: outcome.runDraft,
                     lineageSource,
                 });
             }

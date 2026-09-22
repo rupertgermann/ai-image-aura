@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments, EditorDraft } from './layers';
 import { pushHistory, redoHistory, undoHistory } from './layers';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import {
     applyAiTransformResultToDraft,
+    getAiTransformReferenceWarning,
     getAiTransformSaveProvenance,
     renderAiTransformEditInput,
     type AiTransformRenderer,
@@ -18,6 +19,18 @@ const adjustments: EditorAdjustments = {
 };
 
 describe('Editor AI transforms', () => {
+    it('warns for the Qwen references that will be omitted from a selected-layer edit', () => {
+        const layerStack = createLayerStack();
+
+        expect(getAiTransformReferenceWarning(QWEN_IMAGE_2_1_IMAGE_MODEL, 9, createDraft(layerStack, ['layer-1']))).toBe(
+            'Qwen Image 2.1 uses the first 8 reference images for AI transforms.',
+        );
+        expect(getAiTransformReferenceWarning(QWEN_IMAGE_2_1_IMAGE_MODEL, 9, createDraft(layerStack, ['base']))).toBeNull();
+        expect(getAiTransformReferenceWarning(QWEN_IMAGE_2_1_IMAGE_MODEL, 10, createDraft(layerStack, ['base']))).toBe(
+            'Qwen Image 2.1 uses the first 9 reference images for AI transforms.',
+        );
+    });
+
     it('renders selected layers as the editable source and the full composition as context', async () => {
         const layerStack = createLayerStack();
         const userReferences = [

@@ -363,7 +363,7 @@ export const generateSessionStore = createGenerateSessionStore();
 export async function transferSimilarFromArchive(
     image: ArchiveImage,
     sessionStore: Pick<GenerateSessionStore, 'transferFromArchive'>,
-    lineageStore: Pick<LineageStore, 'getByArchiveImageId'>,
+    lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'getById'>,
 ): Promise<void> {
     if (image.model !== QWEN_IMAGE_2_1_IMAGE_MODEL) {
         await sessionStore.transferFromArchive(image);
@@ -371,14 +371,18 @@ export async function transferSimilarFromArchive(
     }
 
     const steps = await lineageStore.getByArchiveImageId(image.id);
-    for (let index = steps.length - 1; index >= 0; index--) {
-        const step = steps[index];
-        if (step.stepType !== 'generation' && step.stepType !== 'reference-generation') continue;
-        const imageModel = readGenerateLineageImageModel(step.metadata);
-        if (imageModel?.slug === QWEN_IMAGE_2_1_IMAGE_MODEL) {
-            await sessionStore.transferFromArchive(image, undefined, { qwenImage2_1: imageModel.controls });
-            return;
+    const visited = new Set<string>();
+    let step = steps.at(-1) ?? null;
+    while (step && !visited.has(step.id)) {
+        visited.add(step.id);
+        if (step.stepType === 'generation' || step.stepType === 'reference-generation') {
+            const imageModel = readGenerateLineageImageModel(step.metadata);
+            if (imageModel?.slug === QWEN_IMAGE_2_1_IMAGE_MODEL) {
+                await sessionStore.transferFromArchive(image, undefined, { qwenImage2_1: imageModel.controls });
+                return;
+            }
         }
+        step = step.parentStepId ? await lineageStore.getById(step.parentStepId) : null;
     }
 
     await sessionStore.transferFromArchive(image);

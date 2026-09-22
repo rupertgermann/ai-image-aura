@@ -71,7 +71,7 @@ describe('runGenerateAutopilot', () => {
                     quality: 'high',
                     size: '1024x1024',
                     background: 'transparent',
-                    batchSize: 1,
+                    batchSize: 4,
                 },
                 nanoBananaPro: {
                     aspectRatio: '1:1',
@@ -115,7 +115,10 @@ describe('runGenerateAutopilot', () => {
                 archiveImageId: 'autopilot:run:iteration:1',
             }],
             references: [],
-            draft: null,
+            draft: expect.objectContaining({
+                prompt: 'refined prompt',
+                gptImage2: expect.objectContaining({ batchSize: 1 }),
+            }),
             lineageSource: { archiveImageId: 'autopilot:run:iteration:1', stepId: 'step-1' },
         });
         expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'autopilot:run:iteration:1', stepId: 'step-1' });
@@ -230,7 +233,11 @@ describe('runGenerateAutopilot', () => {
                 archiveImageId: expect.stringMatching(/^autopilot:/),
             }],
             references: selectedReferenceDataUrls.slice(0, 14),
-            draft: null,
+            draft: expect.objectContaining({
+                model: NANO_BANANA_PRO_IMAGE_MODEL,
+                prompt: 'best prompt',
+                nanoBananaPro: expect.objectContaining({ batchSize: 1 }),
+            }),
             lineageSource: {
                 archiveImageId: expect.stringMatching(/^autopilot:/),
                 stepId: 'step-2',
@@ -344,6 +351,12 @@ describe('runGenerateAutopilot', () => {
             reasoningTotalUsd: 0.003,
         });
         expect(saveCurrentBatch).toHaveBeenCalledWith(expect.objectContaining({
+            draft: expect.objectContaining({
+                prompt: 'paper crane',
+                qwenImage2_1: expect.objectContaining({
+                    aspectRatio: '16:9', imageSize: '2K', background: 'transparent', batchSize: 1,
+                }),
+            }),
             results: [expect.objectContaining({ costLedger: expect.objectContaining({
                 items: expect.arrayContaining([
                     expect.objectContaining({ provider: 'local', amountUsd: 0 }),

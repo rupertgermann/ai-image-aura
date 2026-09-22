@@ -19,12 +19,14 @@ describe('GenerateSession draft migration', () => {
             } } },
         };
         const laterEdit: LineageStep = {
-            ...generationStep, id: 'later-edit', stepType: 'manual-edit', timestamp: '2026-09-22T11:00:00.000Z',
+            ...generationStep, id: 'later-edit', parentStepId: generationStep.id,
+            stepType: 'manual-edit', timestamp: '2026-09-22T11:00:00.000Z',
             metadata: {},
         };
 
         await transferSimilarFromArchive(image, store, {
             getByArchiveImageId: async () => [generationStep, laterEdit],
+            getById: async (stepId) => stepId === generationStep.id ? generationStep : null,
         });
 
         expect(store.readDraft()).toMatchObject({
@@ -32,6 +34,38 @@ describe('GenerateSession draft migration', () => {
             qwenImage2_1: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3 },
         });
         expect(store.loadLineageSource()).toEqual({ archiveImageId: image.id });
+    });
+
+    it('Create Similar follows an Editor copy to its source Qwen generation controls', async () => {
+        const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider() });
+        const copiedImage = {
+            id: 'edited-copy', url: 'data:image/png;base64,edited', prompt: 'edited cutout',
+            model: 'qwen-image-2.1', quality: '2K', aspectRatio: '3:4', background: 'transparent',
+            timestamp: '2026-09-23T10:00:00.000Z',
+        };
+        const generationStep: LineageStep = {
+            id: 'source-generation', archiveImageId: 'source-image', parentStepId: null,
+            stepType: 'generation', timestamp: '2026-09-22T10:00:00.000Z',
+            metadata: { imageModel: { slug: 'qwen-image-2.1', controls: {
+                aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3,
+            } } },
+        };
+        const copyStep: LineageStep = {
+            id: 'copy-step', archiveImageId: copiedImage.id, parentStepId: generationStep.id,
+            stepType: 'save-as-copy', timestamp: copiedImage.timestamp, metadata: {},
+        };
+        const lineage = {
+            getByArchiveImageId: async (archiveImageId: string) => archiveImageId === copiedImage.id ? [copyStep] : [],
+            getById: async (stepId: string) => stepId === generationStep.id ? generationStep : null,
+        };
+
+        await transferSimilarFromArchive(copiedImage, store, lineage);
+
+        expect(store.readDraft()).toMatchObject({
+            model: 'qwen-image-2.1', prompt: 'edited cutout',
+            qwenImage2_1: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3 },
+        });
+        expect(store.loadLineageSource()).toEqual({ archiveImageId: copiedImage.id });
     });
     it('keeps Qwen controls in the draft and restores them from an archive image', async () => {
         const draft = sanitizeGenerateDraft({

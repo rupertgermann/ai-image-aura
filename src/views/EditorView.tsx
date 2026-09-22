@@ -8,9 +8,9 @@ import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
 import { LOCAL_PROVIDER, OPENAI_IMAGE_MODEL, getProviderLabel, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
-import { getImageModelReferenceLimitMessage, getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
+import { getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
 import { getImageFilesFromClipboard } from '../references/clipboard';
-import { renderAiTransformEditInput } from '../editor/aiTransform';
+import { getAiTransformReferenceWarning, renderAiTransformEditInput } from '../editor/aiTransform';
 import { classifyTransformMaskCoverage } from '../editor/transformMask';
 import type { EditorReplay } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -112,7 +112,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
         adjustments,
         onSave,
     });
-    const aiReferenceWarning = getImageModelReferenceLimitMessage(aiEditModel, referenceImages.length, 'AI transforms');
+    const aiReferenceWarning = getAiTransformReferenceWarning(aiEditModel, referenceImages.length, draft);
 
     useEffect(() => {
         if (!replay) {

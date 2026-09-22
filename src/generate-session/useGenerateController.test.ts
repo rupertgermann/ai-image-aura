@@ -579,6 +579,90 @@ describe('Generate controller Reference image provenance', () => {
     });
 });
 
+describe('Generate controller Autopilot archive controls', () => {
+    it('saves a Qwen best result with the one-image controls used by Autopilot', async () => {
+        const draft = createDraft({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            prompt: 'paper crane',
+            qwenImage2_1: { aspectRatio: '16:9', imageSize: '2K', background: 'transparent', batchSize: 4 },
+        });
+        const saveCurrentBatch = vi.fn(async (batch: GenerateBatchSnapshot) => { void batch; });
+        const saveImage = vi.fn(async (image) => image);
+        let nextStep = 0;
+        const saveLineage = vi.fn(async (step: SaveLineageStepInput) => ({
+            ...step,
+            id: `step-${++nextStep}`,
+        }));
+        const controller: { current: ReturnType<typeof useGenerateController> | null } = { current: null };
+
+        renderToStaticMarkup(createElement(() => {
+            controller.current = useGenerateController({
+                imageCredential: 'http://127.0.0.1:1234',
+                reasoningApiKey: 'hosted-reasoning-key',
+                draft,
+                setDraft: vi.fn(),
+                referenceImages: [],
+                replaceReferences: vi.fn(),
+                serializeReferences: vi.fn(async () => []),
+                onSaveImage: saveImage,
+                session: {
+                    loadCurrentBatch: vi.fn(async () => null),
+                    saveCurrentBatch,
+                    clearCurrentResult: vi.fn(async () => undefined),
+                    consumeTransferredReferences: vi.fn(async () => []),
+                    loadLineageSource: vi.fn(() => null),
+                    saveLineageSource: vi.fn(),
+                    clearLineageSource: vi.fn(),
+                },
+                lineage: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage },
+                workflow: {
+                    generate: vi.fn(async () => [{
+                        slotIndex: 0,
+                        status: 'success' as const,
+                        imageUrl: 'data:image/png;base64,best',
+                    }]),
+                    serializeReferences: vi.fn(async () => []),
+                },
+                evaluate: vi.fn(async () => ({ score: 95, feedback: ['Good.'] })),
+            });
+            return null;
+        }));
+
+        await controller.current!.runAutopilot({ goal: 'A paper crane', maxIterations: 1 });
+        const finalSnapshot = saveCurrentBatch.mock.calls.at(-1)?.[0];
+        expect(finalSnapshot?.draft).toMatchObject({
+            prompt: 'paper crane',
+            qwenImage2_1: { aspectRatio: '16:9', imageSize: '2K', background: 'transparent', batchSize: 1 },
+        });
+
+        await saveGenerateResultSlots({
+            results: finalSnapshot!.results,
+            draft,
+            runDraft: finalSnapshot!.draft,
+            usedReferences: finalSnapshot!.references,
+            runLineageSource: finalSnapshot!.lineageSource,
+            serializeReferences: vi.fn(async () => []),
+            saveImage,
+            lineageStore: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage },
+            sessionStore: { loadLineageSource: vi.fn(() => null), clearLineageSource: vi.fn() },
+            createArchiveImageId: () => 'saved-best',
+        });
+
+        expect(saveImage.mock.calls[0]?.[0]).toMatchObject({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            quality: '2K',
+            aspectRatio: '16:9',
+            background: 'transparent',
+        });
+        expect(saveLineage.mock.calls.at(-1)?.[0].metadata).toMatchObject({
+            imageModel: {
+                slug: QWEN_IMAGE_2_1_IMAGE_MODEL,
+                controls: { aspectRatio: '16:9', imageSize: '2K', background: 'transparent', batchSize: 1 },
+            },
+        });
+    });
+});
+
 describe('Generate controller completion notifications', () => {
     it('notifies when enabled and the document is hidden', () => {
         const showCompletion = vi.fn();

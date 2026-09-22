@@ -599,13 +599,18 @@ export function getImageModelReferenceLimitMessage(
     model: ImageModelSlug,
     referenceCount: number,
     context: string,
+    reservedImageCount = 0,
 ): string | null {
     const limit = IMAGE_MODEL_CONTROL_FACTS[model].referenceLimit;
-    if (limit === null || referenceCount <= limit) {
+    if (limit === null) {
+        return null;
+    }
+    const userReferenceLimit = Math.max(0, limit - reservedImageCount);
+    if (referenceCount <= userReferenceLimit) {
         return null;
     }
 
-    return `${IMAGE_MODEL_REGISTRY[model].label} uses the first ${limit} reference images for ${context}.`;
+    return `${IMAGE_MODEL_REGISTRY[model].label} uses the first ${userReferenceLimit} reference images for ${context}.`;
 }
 
 export function getImageModelReferenceCapacityMessage(

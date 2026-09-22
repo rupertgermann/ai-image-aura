@@ -83,6 +83,30 @@ describe('Image model controls', () => {
             sourceImage: files[0], referenceImages: [],
         })).toEqual({ referenceImages: [files[0]] });
     });
+
+    it('warns when Qwen Editor context leaves room for only eight user references', () => {
+        const sourceImage = new File(['target'], 'target.png');
+        const compositionContextImage = new File(['context'], 'context.png');
+        const userReferences = Array.from({ length: 9 }, (_, index) => new File(['ref'], `ref-${index}.png`));
+
+        expect(getImageModelReferenceLimitMessage(QWEN_IMAGE_2_1_IMAGE_MODEL, 8, 'AI transforms', 2)).toBeNull();
+        expect(getImageModelReferenceLimitMessage(QWEN_IMAGE_2_1_IMAGE_MODEL, 9, 'AI transforms', 2)).toBe(
+            'Qwen Image 2.1 uses the first 8 reference images for AI transforms.',
+        );
+        expect(getImageModelReferenceLimitMessage(QWEN_IMAGE_2_1_IMAGE_MODEL, 9, 'AI transforms', 1)).toBeNull();
+        expect(getImageModelReferenceLimitMessage(QWEN_IMAGE_2_1_IMAGE_MODEL, 10, 'AI transforms', 1)).toBe(
+            'Qwen Image 2.1 uses the first 9 reference images for AI transforms.',
+        );
+        expect(mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            sourceImage,
+            compositionContextImage,
+            referenceImages: userReferences,
+        }).referenceImages).toEqual([sourceImage, compositionContextImage, ...userReferences.slice(0, 8)]);
+        expect(mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            sourceImage,
+            referenceImages: userReferences,
+        }).referenceImages).toEqual([sourceImage, ...userReferences]);
+    });
     it('covers every registered Image model with defaults and Generate UI facts', () => {
         const registrySlugs = Object.keys(IMAGE_MODEL_REGISTRY).sort();
 
