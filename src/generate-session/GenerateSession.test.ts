@@ -1,8 +1,54 @@
 import { describe, expect, it } from 'vitest';
 import type { StorageProvider } from '../services/StorageService';
-import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateBatchSnapshot } from './GenerateSession';
+import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, getActiveGenerateArchiveFields, getActiveGenerateControls, sanitizeGenerateDraft, type GenerateBatchSnapshot } from './GenerateSession';
 
 describe('GenerateSession draft migration', () => {
+    it('keeps Qwen controls in the draft and restores them from an archive image', async () => {
+        const draft = sanitizeGenerateDraft({
+            ...DEFAULT_GENERATE_DRAFT,
+            model: 'qwen-image-2.1',
+            qwenImage2_1: { aspectRatio: '9:16', imageSize: '2K', background: 'transparent', batchSize: 3 },
+        });
+        expect(draft.qwenImage2_1).toEqual({
+            aspectRatio: '9:16', imageSize: '2K', background: 'transparent', batchSize: 3,
+        });
+        expect(getActiveGenerateControls(draft)).toMatchObject({
+            aspectRatio: '9:16', imageSize: '2K', background: 'transparent', batchSize: 3,
+        });
+        expect(getActiveGenerateArchiveFields(draft)).toEqual({
+            quality: '2K', aspectRatio: '9:16', background: 'transparent', width: 1536, height: 2752,
+        });
+
+        const values = new Map<string, string>();
+        const localStorage = {
+            getItem: (key: string) => values.get(key) ?? null,
+            setItem: (key: string, value: string) => { values.set(key, value); },
+            removeItem: (key: string) => { values.delete(key); },
+        } as Storage;
+        const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider(), localStorage });
+        store.writeDraft(draft);
+        expect(createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider(), localStorage }).readDraft().qwenImage2_1).toEqual(draft.qwenImage2_1);
+        await store.transferFromArchive({
+            id: 'qwen-image', url: 'data:image/png;base64,AA', prompt: 'cut out', model: 'qwen-image-2.1',
+            quality: '2K', aspectRatio: '9:16', background: 'transparent', timestamp: '2026-09-22',
+        });
+        expect(store.readDraft().qwenImage2_1).toMatchObject({
+            aspectRatio: '9:16', imageSize: '2K', background: 'transparent',
+        });
+        expect(sanitizeGenerateDraft({ ...draft, qwenImage2_1: undefined }).qwenImage2_1).toEqual(
+            DEFAULT_GENERATE_DRAFT.qwenImage2_1,
+        );
+    });
+
+    it('adds default Qwen controls to legacy persisted batch drafts', async () => {
+        const blobStorage = new InMemoryStorageProvider();
+        await blobStorage.save('generate_current_batch', JSON.stringify({
+            results: [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,AA' }],
+            draft: { ...DEFAULT_GENERATE_DRAFT, qwenImage2_1: undefined },
+        }));
+        const batch = await createGenerateSessionStore({ blobStorage }).loadCurrentBatch();
+        expect(batch?.draft?.qwenImage2_1).toEqual(DEFAULT_GENERATE_DRAFT.qwenImage2_1);
+    });
     it('migrates legacy flat controls into the gpt-image-2 block', () => {
         expect(sanitizeGenerateDraft({
             prompt: 'legacy prompt',

@@ -1,6 +1,6 @@
 import type { ArchiveImage } from '../db/types';
 import { DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateDraft, type GenerateLineageSource } from '../generate-session/GenerateSession';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug } from '../utils/openaiModels';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, assertNever, isImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
 import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 import { readGenerateLineageImageModel } from './generateLineageMetadata';
@@ -17,7 +17,7 @@ type GenerateReplayImageModel = NonNullable<ReturnType<typeof readGenerateLineag
 
 export interface EditorReplay {
     prompt: string | null;
-    model: typeof OPENAI_IMAGE_MODEL | typeof NANO_BANANA_PRO_IMAGE_MODEL | null;
+    model: ImageModelSlug | null;
     maskImage?: File;
 }
 
@@ -76,12 +76,7 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
             style: replayMetadata.style ?? image?.style ?? 'none',
             lighting: replayMetadata.lighting ?? image?.lighting ?? 'none',
             palette: replayMetadata.palette ?? image?.palette ?? 'none',
-            gptImage2: model === OPENAI_IMAGE_MODEL
-                ? resolveGptImage2ReplayControls(typedImageModel, replayMetadata, image, replayAspectRatio)
-                : DEFAULT_GENERATE_DRAFT.gptImage2,
-            nanoBananaPro: model === NANO_BANANA_PRO_IMAGE_MODEL
-                ? resolveNanoBananaReplayControls(typedImageModel, replayMetadata, image, replayAspectRatio)
-                : DEFAULT_GENERATE_DRAFT.nanoBananaPro,
+            ...resolveReplayControls(model, typedImageModel, replayMetadata, image, replayAspectRatio),
             isSaved: false,
         }),
         lineageSource: {
@@ -89,6 +84,30 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
             stepId: step.id,
         },
     };
+}
+
+function resolveReplayControls(
+    model: ImageModelSlug,
+    typedImageModel: GenerateReplayImageModel | null,
+    metadata: GenerateReplayMetadata,
+    image: ArchiveImage | null,
+    replayAspectRatio: string | undefined,
+): Pick<GenerateDraft, 'gptImage2' | 'nanoBananaPro' | 'qwenImage2_1'> {
+    switch (model) {
+        case OPENAI_IMAGE_MODEL:
+            return { gptImage2: resolveGptImage2ReplayControls(typedImageModel, metadata, image, replayAspectRatio),
+                nanoBananaPro: DEFAULT_GENERATE_DRAFT.nanoBananaPro,
+                qwenImage2_1: DEFAULT_GENERATE_DRAFT.qwenImage2_1 };
+        case NANO_BANANA_PRO_IMAGE_MODEL:
+            return { gptImage2: DEFAULT_GENERATE_DRAFT.gptImage2,
+                nanoBananaPro: resolveNanoBananaReplayControls(typedImageModel, metadata, image, replayAspectRatio),
+                qwenImage2_1: DEFAULT_GENERATE_DRAFT.qwenImage2_1 };
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+            return { gptImage2: DEFAULT_GENERATE_DRAFT.gptImage2,
+                nanoBananaPro: DEFAULT_GENERATE_DRAFT.nanoBananaPro,
+                qwenImage2_1: resolveQwenReplayControls(typedImageModel, metadata, image, replayAspectRatio) };
+        default: return assertNever(model);
+    }
 }
 
 function readGenerateReplayMetadata(step: LineageStep): GenerateReplayMetadata {
@@ -152,6 +171,23 @@ function resolveNanoBananaReplayControls(
     return sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, {
         aspectRatio: replayAspectRatio,
         imageSize: metadata.imageSize ?? image?.quality,
+    });
+}
+
+function resolveQwenReplayControls(
+    typedImageModel: GenerateReplayImageModel | null,
+    metadata: GenerateReplayMetadata,
+    image: ArchiveImage | null,
+    replayAspectRatio: string | undefined,
+) {
+    if (typedImageModel?.slug === QWEN_IMAGE_2_1_IMAGE_MODEL) {
+        return typedImageModel.controls;
+    }
+
+    return sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+        aspectRatio: replayAspectRatio,
+        imageSize: metadata.imageSize ?? image?.quality,
+        background: metadata.background ?? image?.background,
     });
 }
 

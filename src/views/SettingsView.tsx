@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell, SlidersHorizontal } from 'lucide-react';
+import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell, SlidersHorizontal, Server } from 'lucide-react';
 import { getImageModelUiChoices } from '../image-models/ImageModelControls';
 import { useGenerateDraft } from '../generate-session/GenerateSession';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { normalizeLocalServerUrl } from '../app/providerKeys';
+import { testLocalServerConnection } from '../image-workflow/LocalImageProvider';
 import {
-    GOOGLE_PROVIDER,
+    LOCAL_PROVIDER,
     OPENAI_IMAGE_MODEL,
-    OPENAI_PROVIDER,
     OPENAI_RESPONSES_MODEL,
     REASONING_MODEL_REGISTRY,
+    getProviderLabel,
     resolveReasoningModelConfig,
     type Provider,
     type ReasoningModelSlug,
@@ -18,27 +20,33 @@ import type { CompletionNotificationReadiness } from '../app/CompletionNotificat
 interface SettingsViewProps {
     apiKey: string | null;
     googleApiKey: string | null;
+    localServerUrl: string | null;
+    getProviderKey: (provider: Provider) => string | null;
     completionNotificationsEnabled: boolean;
     completionNotificationReadiness: CompletionNotificationReadiness;
     onApiKeyChange: (key: string) => void;
     onGoogleApiKeyChange: (key: string) => void;
+    onLocalServerUrlChange: (url: string) => void;
     onCompletionNotificationsChange: (enabled: boolean) => void;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({
     apiKey,
     googleApiKey,
+    localServerUrl,
+    getProviderKey,
     completionNotificationsEnabled,
     completionNotificationReadiness,
     onApiKeyChange,
     onGoogleApiKeyChange,
+    onLocalServerUrlChange,
     onCompletionNotificationsChange,
 }) => {
     return (
         <div className="settings-container">
             <header className="view-header">
                 <h1>Configuration</h1>
-                <p>Manage your API keys and application preferences.</p>
+                <p>Manage your providers and application preferences.</p>
             </header>
 
             <ProviderKeySection
@@ -61,9 +69,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 onSaveKey={onGoogleApiKeyChange}
             />
 
+            <LocalServerSection
+                localServerUrl={localServerUrl}
+                onSave={onLocalServerUrlChange}
+            />
+
             <ModelPreferencesSection
-                apiKey={apiKey}
-                googleApiKey={googleApiKey}
+                getProviderKey={getProviderKey}
             />
 
             <section className="settings-section glass-panel">
@@ -88,13 +100,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 };
 
 interface ModelPreferencesSectionProps {
-    apiKey: string | null;
-    googleApiKey: string | null;
+    getProviderKey: (provider: Provider) => string | null;
 }
 
 const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
-    apiKey,
-    googleApiKey,
+    getProviderKey,
 }) => {
     const [draft, setDraft] = useGenerateDraft();
     const [reasoningModel, setReasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
@@ -107,7 +117,7 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
             </div>
 
             <p className="section-desc">
-                These selections control the Generate module. Provider keys still decide which models are available.
+                These selections control the Generate module. Provider credentials decide which models are available.
             </p>
 
             <div className="settings-model-grid">
@@ -115,7 +125,7 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                     <label>IMAGE MODEL</label>
                     <div className="toggle-group">
                         {getImageModelUiChoices().map((choice) => {
-                            const hasKey = hasProviderKey(choice.provider, apiKey, googleApiKey);
+                            const hasKey = !!getProviderKey(choice.provider);
                             return (
                                 <button
                                     key={choice.slug}
@@ -125,7 +135,7 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                                         model: choice.slug,
                                     }))}
                                     disabled={!hasKey}
-                                    title={hasKey ? choice.label : `Add a ${getProviderLabel(choice.provider)} API key above`}
+                                    title={hasKey ? choice.label : getProviderSetupHint(choice.provider)}
                                 >
                                     {choice.label}
                                 </button>
@@ -139,14 +149,14 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                     <div className="toggle-group">
                         {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((modelSlug) => {
                             const config = resolveReasoningModelConfig(modelSlug);
-                            const hasKey = hasProviderKey(config.provider, apiKey, googleApiKey);
+                            const hasKey = !!getProviderKey(config.provider);
                             return (
                                 <button
                                     key={modelSlug}
                                     className={reasoningModel === modelSlug ? 'active' : ''}
                                     onClick={() => setReasoningModel(modelSlug)}
                                     disabled={!hasKey}
-                                    title={hasKey ? config.label : `Add a ${getProviderLabel(config.provider)} API key above`}
+                                    title={hasKey ? config.label : getProviderSetupHint(config.provider)}
                                 >
                                     {config.label}
                                 </button>
@@ -155,6 +165,91 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
                     </div>
                 </div>
             </div>
+        </section>
+    );
+};
+
+interface LocalServerSectionProps {
+    localServerUrl: string | null;
+    onSave: (url: string) => void;
+}
+
+const LocalServerSection: React.FC<LocalServerSectionProps> = ({ localServerUrl, onSave }) => {
+    const [draftUrl, setDraftUrl] = useState(localServerUrl ?? '');
+    const [error, setError] = useState<string | null>(null);
+    const [saved, setSaved] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [connection, setConnection] = useState<Awaited<ReturnType<typeof testLocalServerConnection>> | null>(null);
+    const configuredUrl = normalizeLocalServerUrl(localServerUrl);
+
+    const handleSave = () => {
+        const url = normalizeLocalServerUrl(draftUrl);
+        if (!url) {
+            setError('Enter a valid server URL starting with http:// or https://.');
+            return;
+        }
+        onSave(url);
+        setDraftUrl(url);
+        setError(null);
+        setConnection(null);
+        setSaved(true);
+    };
+
+    const handleTest = async () => {
+        if (!configuredUrl) return;
+        setTesting(true);
+        setConnection(null);
+        try {
+            setConnection(await testLocalServerConnection(configuredUrl));
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    return (
+        <section className="settings-section glass-panel">
+            <div className="section-title">
+                <Server size={20} className={configuredUrl ? 'icon-green' : 'icon-purple'} />
+                <h2>Local Server (stable-diffusion.cpp)</h2>
+                <span className="status-badge">{configuredUrl ? 'Configured' : 'Not configured'}</span>
+            </div>
+            <p className="section-desc">Connect to an sd-server on your machine or behind llama-swap. The URL is stored in this browser.</p>
+            <label htmlFor="local-server-url">Server URL</label>
+            <div className="input-group">
+                <input
+                    id="local-server-url"
+                    type="url"
+                    placeholder="http://127.0.0.1:1234"
+                    value={draftUrl}
+                    onChange={(event) => {
+                        setDraftUrl(event.target.value);
+                        setError(null);
+                        setSaved(false);
+                        setConnection(null);
+                    }}
+                    className="aura-input"
+                    aria-invalid={!!error}
+                    aria-describedby={error ? 'local-server-url-error' : undefined}
+                />
+                <button className="btn-amber" onClick={handleSave} disabled={!draftUrl.trim()}>
+                    {saved ? <CheckCircle2 size={18} /> : <Save size={18} />}
+                    {saved ? 'Saved' : 'Save'}
+                </button>
+                <button className="btn-ghost" onClick={() => { void handleTest(); }} disabled={!configuredUrl || normalizeLocalServerUrl(draftUrl) !== configuredUrl || testing}>
+                    {testing ? 'Testing…' : 'Test connection'}
+                </button>
+            </div>
+            {error && <div id="local-server-url-error" className="warning-box" role="alert"><AlertCircle size={16} />{error}</div>}
+            {connection && (
+                <div className={connection.status === 'connected' ? 'success-box' : 'warning-box'} role="status">
+                    {connection.status === 'connected' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+                    <span>{connection.status === 'connected'
+                        ? `Connected. ${connection.modelIds.length ? `Model IDs: ${connection.modelIds.join(', ')}` : 'No model IDs reported.'}`
+                        : connection.status === 'http-error'
+                            ? `Local server returned HTTP ${connection.httpStatus}.`
+                            : `Could not reach the local server at ${connection.url}.`}</span>
+                </div>
+            )}
         </section>
     );
 };
@@ -235,13 +330,10 @@ const ProviderKeySection: React.FC<ProviderKeySectionProps> = ({
     );
 };
 
-function hasProviderKey(provider: Provider, apiKey: string | null, googleApiKey: string | null) {
-    const key = provider === GOOGLE_PROVIDER ? googleApiKey : apiKey;
-    return !!key && key.length > 5;
-}
-
-function getProviderLabel(provider: Provider) {
-    return provider === OPENAI_PROVIDER ? 'OpenAI' : 'Google';
+function getProviderSetupHint(provider: Provider) {
+    return provider === LOCAL_PROVIDER
+        ? `Add a ${getProviderLabel(provider)} URL above`
+        : `Add a ${getProviderLabel(provider)} API key above`;
 }
 
 function getReadinessLabel(readiness: CompletionNotificationReadiness) {

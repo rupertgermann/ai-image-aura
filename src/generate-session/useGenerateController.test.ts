@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
 import {
     addGeneratedResultAsReference,
@@ -16,6 +16,22 @@ import {
 } from './useGenerateController';
 
 describe('Generate controller Image model archive metadata', () => {
+    it('saves Qwen resolution, aspect, background, and dimensions from the run draft', () => {
+        const draft = createDraft({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            prompt: 'paper cutout',
+            qwenImage2_1: { aspectRatio: '3:2', imageSize: '2K', background: 'transparent', batchSize: 4 },
+        });
+        expect(buildGeneratedArchiveImage({
+            id: 'qwen-archive', url: 'data:image/png;base64,AA', timestamp: '2026-09-22', draft,
+            references: [], actualParameters: { elapsedMs: 900 },
+        })).toMatchObject({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            prompt: 'paper cutout',
+            quality: '2K', aspectRatio: '3:2', background: 'transparent', width: 2528, height: 1696,
+            actualParameters: { elapsedMs: 900 },
+        });
+    });
     it('builds gpt-image-2 archive metadata from shared Image model controls', () => {
         const draft = createDraft({
             model: OPENAI_IMAGE_MODEL,

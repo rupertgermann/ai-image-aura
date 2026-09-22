@@ -27,10 +27,13 @@ import {
     coerceImageModelControlValue,
     getImageModelGenerateControls,
     getImageModelReferenceCapacityMessage,
+    getImageModelUiChoices,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
 import {
     OPENAI_RESPONSES_MODEL,
+    LOCAL_PROVIDER,
+    getProviderLabel,
     resolveImageModelConfig,
     resolveReasoningModelConfig,
     type Provider,
@@ -498,6 +501,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     };
 
     const maxApiCalls = maxIterations * 3;
+    const maxReasoningApiCalls = maxIterations * 2 - 1;
+    const isLocalImageModel = activeModel.provider === LOCAL_PROVIDER;
     const isAutopilotMode = mode === 'autopilot';
     const imageModelReferenceWarning = referenceRunPlan.referenceLimitMessage;
     const resultReferenceCapacityMessage = getImageModelReferenceCapacityMessage(model, referenceImages.length, 'generation');
@@ -584,6 +589,29 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         </div>
                     </div>
 
+                    <div className="input-section">
+                        <label>IMAGE MODEL</label>
+                        <div className="toggle-group">
+                            {getImageModelUiChoices().map((choice) => {
+                                const available = !!getProviderKey(choice.provider);
+                                return (
+                                    <button
+                                        key={choice.slug}
+                                        className={model === choice.slug ? 'active' : ''}
+                                        onClick={() => updateDraft({ model: choice.slug })}
+                                        disabled={!available}
+                                        title={available ? choice.label : choice.provider === LOCAL_PROVIDER
+                                            ? 'Save a Local server URL in Settings'
+                                            : `Add a ${getProviderLabel(choice.provider)} API key in Settings`}
+                                    >{choice.label}</button>
+                                );
+                            })}
+                        </div>
+                        {!getProviderKey(LOCAL_PROVIDER) && !isLocalImageModel && (
+                            <p className="field-relationship-note">Save a Local server URL in Settings to use Qwen Image 2.1.</p>
+                        )}
+                    </div>
+
                     {isAutopilotMode && (
                         <div className="autopilot-panel glass-panel">
                             <div className="input-section">
@@ -638,7 +666,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                             <div className="autopilot-disclosure glass-panel">
                                 <strong>Cost disclosure</strong>
-                                <p>Up to {maxIterations} iterations and roughly {maxApiCalls} API calls using {activeModel.label} for images and {activeReasoningModel.label} for reasoning.</p>
+                                <p>{isLocalImageModel
+                                    ? `Up to ${maxIterations} local image calls with no API charge, and ${maxReasoningApiCalls} ${activeReasoningModel.label} reasoning API calls.`
+                                    : `Up to ${maxIterations} iterations and roughly ${maxApiCalls} API calls using ${activeModel.label} for images and ${activeReasoningModel.label} for reasoning.`}</p>
                             </div>
 
                         </div>
@@ -755,7 +785,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <>
                             {showCostDisclosure && (
                                 <div className="autopilot-confirmation glass-panel">
-                                    <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
+                                    <p>{isLocalImageModel
+                                        ? `Confirm Autopilot run with up to ${maxIterations} local image calls (no API charge) and ${maxReasoningApiCalls} reasoning API calls.`
+                                        : `Confirm Autopilot run with up to ${maxIterations} iterations and approximately ${maxApiCalls} API calls.`}</p>
                                     <div className="autopilot-confirmation-actions">
                                         <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
                                         <button
@@ -811,10 +843,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     )}
 
                     {!activeImageApiKey && (
-                        <div className="error-message">{activeModel.label} API key missing. Go to Settings to configure.</div>
+                        <div className="error-message">{activeModel.provider === LOCAL_PROVIDER
+                            ? 'Local server URL missing. Go to Settings to configure.'
+                            : `${getProviderLabel(activeModel.provider)} API key missing. Go to Settings to configure.`}</div>
                     )}
                     {isAutopilotMode && !reasoningApiKey && (
-                        <div className="error-message">{activeReasoningModel.label} API key missing. Go to Settings to configure.</div>
+                        <div className="error-message">{getProviderLabel(activeReasoningModel.provider)} API key missing for ${activeReasoningModel.label}. Go to Settings to configure.</div>
                     )}
                     {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
                     {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}

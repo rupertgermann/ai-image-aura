@@ -11,7 +11,7 @@ into an image. The image model is chosen **per generation** in the Generate view
 and per AI transform in the Editor view. It is recorded on every saved image and
 every lineage step.
 
-Current values: `gpt-image-2`, `nano-banana-pro`.
+Current values: `gpt-image-2`, `nano-banana-pro`, `qwen-image-2.1`.
 
 - Avoid calling it the "engine", "the AI", or "backend" — those are vaguer.
 - Distinct from **provider**: the model is the user-facing choice; the provider
@@ -19,13 +19,23 @@ Current values: `gpt-image-2`, `nano-banana-pro`.
 
 ## Provider
 
-The external service that hosts a model and authenticates requests with its own
-API key. Every model — image or reasoning — belongs to exactly one provider.
+The service or user-run server that hosts a model. Hosted providers authenticate
+with an API key; the **Local server** is reached at a user-configured server URL
+without a key. Every model — image or reasoning — belongs to exactly one provider.
 
-Current values: **OpenAI**, **Google**.
+Current values: **OpenAI**, **Google**, **Local server**.
 
-- One API key per provider, held locally in the browser.
-- A run that mixes models from two providers needs both providers' keys.
+- OpenAI and Google each use an API key held locally in the browser. The Local
+  server URL is also held locally in the browser.
+- A run that mixes models from two providers needs both providers configured.
+
+## Local server
+
+A user-run image server using stable-diffusion.cpp's `sd-server`, directly or
+behind llama-swap, with an OpenAI-compatible images API. It needs a configured
+server URL and no API key.
+
+- Avoid "llama.cpp server" as a synonym: llama.cpp does not host image models.
 
 ## Reasoning model
 

@@ -183,6 +183,10 @@ export async function runEditorAiTransform({
         model,
         prompt: trimmedPrompt,
         sourceImage: editInput.sourceImage,
+        sourceDimensions: {
+            width: editInput.targetPlan.targetBounds.width,
+            height: editInput.targetPlan.targetBounds.height,
+        },
         compositionContextImage: editInput.compositionContextImage,
         referenceImages: editInput.referenceImages,
         maskImage,

@@ -76,6 +76,18 @@ export interface BuildReasoningCostLedgerInput {
 }
 
 export function buildImageCostLedger(input: BuildImageCostLedgerInput): ApiCostLedger {
+    if (input.provider === 'local') {
+        return createLedger([createCalculatedLineItem({
+            kind: input.operation,
+            operation: input.operation,
+            provider: input.provider,
+            model: input.model,
+            label: input.label ?? titleizeOperation(input.operation),
+            amountUsd: 0,
+            note: 'Local inference — no API charge.',
+        })]);
+    }
+
     if (input.provider === 'openai') {
         return createLedger([buildOpenAiImageLineItem(input)]);
     }

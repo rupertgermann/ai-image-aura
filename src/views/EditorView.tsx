@@ -7,7 +7,7 @@ import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
-import { OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
+import { LOCAL_PROVIDER, OPENAI_IMAGE_MODEL, getProviderLabel, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
 import { getImageModelReferenceLimitMessage, getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { renderAiTransformEditInput } from '../editor/aiTransform';
@@ -485,20 +485,25 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                                 <label>MODEL</label>
                                 <div className="toggle-group">
                                     {getImageModelUiChoices().map((choice) => {
-                                        const hasKey = !!getProviderKey(choice.provider);
+                                        const available = !!getProviderKey(choice.provider);
                                         return (
                                             <button
                                                 key={choice.slug}
                                                 className={aiEditModel === choice.slug ? 'active' : ''}
                                                 onClick={() => setAiEditModel(choice.slug)}
-                                                disabled={!hasKey}
-                                                title={hasKey ? choice.label : `Add a ${choice.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
+                                                disabled={!available}
+                                                title={available ? choice.label : choice.provider === LOCAL_PROVIDER
+                                                    ? 'Save a Local server URL in Settings'
+                                                    : `Add a ${getProviderLabel(choice.provider)} API key in Settings`}
                                             >
                                                 {choice.label}
                                             </button>
                                         );
                                     })}
                                 </div>
+                                {!getProviderKey(LOCAL_PROVIDER) && activeModel.provider !== LOCAL_PROVIDER && (
+                                    <div className="info-message mini">Save a Local server URL in Settings to use Qwen Image 2.1.</div>
+                                )}
                             </div>
 
                             <textarea
@@ -580,7 +585,9 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
 
                             {aiError && <div className="error-message mini">{aiError}</div>}
                             {aiReferenceWarning && <div className="info-message mini">{aiReferenceWarning}</div>}
-                            {!activeApiKey && <div className="error-message mini">Set {activeModel.label} API key in Settings</div>}
+                            {!activeApiKey && <div className="error-message mini">{activeModel.provider === LOCAL_PROVIDER
+                                ? 'Set Local server URL in Settings'
+                                : `Set ${getProviderLabel(activeModel.provider)} API key in Settings`}</div>}
                         </div>
                     </div>
 

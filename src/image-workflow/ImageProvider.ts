@@ -6,6 +6,7 @@ import {
     type OpenAiImageResponse,
 } from '../utils/openai';
 import { GOOGLE_PROVIDER, OPENAI_PROVIDER, type ImageModelConfig, type NanoBananaAspectRatio, type NanoBananaImageSize, type Provider } from '../utils/openaiModels';
+import { createLocalImageProvider } from './LocalImageProvider';
 
 export interface ImageProviderRequest {
     apiKey: string;
@@ -115,6 +116,7 @@ export const googleImageProvider = createGoogleImageProvider();
 export const imageProviderRegistry: ImageProviderRegistry = {
     [OPENAI_PROVIDER]: openAiImageProvider,
     [GOOGLE_PROVIDER]: googleImageProvider,
+    local: createLocalImageProvider(),
 };
 
 async function buildGoogleImageRequest(request: ImageProviderRequest) {

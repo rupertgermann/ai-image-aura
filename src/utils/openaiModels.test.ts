@@ -4,6 +4,8 @@ import {
     GEMINI_FLASH_REASONING_MODEL,
     IMAGE_MODEL_REGISTRY,
     NANO_BANANA_PRO_IMAGE_MODEL,
+    QWEN_IMAGE_2_1_IMAGE_MODEL,
+    LOCAL_PROVIDER,
     OPENAI_IMAGE_MODEL,
     OPENAI_RESPONSES_MODEL,
     REASONING_MODEL_REGISTRY,
@@ -11,6 +13,7 @@ import {
     isImageModelSlug,
     resolveReasoningModelConfig,
     isReasoningModelSlug,
+    getProviderLabel,
 } from './openaiModels';
 
 describe('openaiModels image registry', () => {
@@ -56,6 +59,19 @@ describe('openaiModels image registry', () => {
                 transformMask: false,
             },
         });
+    });
+
+    it('registers Qwen Image 2.1 on the Local server', () => {
+        expect(IMAGE_MODEL_REGISTRY[QWEN_IMAGE_2_1_IMAGE_MODEL]).toMatchObject({
+            slug: 'qwen-image-2.1',
+            provider: LOCAL_PROVIDER,
+            apiModel: 'qwen-image-2.1',
+            label: 'Qwen Image 2.1',
+            endpoints: { generate: '/v1/images/generations', edit: '/v1/images/edits' },
+            capabilities: { transformMask: false, partialImageStreaming: false },
+        });
+        expect(isImageModelSlug('qwen-image-2.1')).toBe(true);
+        expect(getProviderLabel(LOCAL_PROVIDER)).toBe('Local server');
     });
 
     it('defaults image model config to OpenAI image model when no slug is provided', () => {

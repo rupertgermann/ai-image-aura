@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Image detail helpers share this module with the modal. */
 import React, { useState } from 'react';
 import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History, Star } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
@@ -7,7 +8,7 @@ import { buildLineageCostLedger } from '../lineage/lineageCostLedger';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, assertNever, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug } from '../utils/openaiModels';
 import ActualParametersPanel from './ActualParametersPanel';
 import CostSummaryPanel from './CostSummaryPanel';
 import {
@@ -43,7 +44,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     const dateStr = new Date(image.timestamp).toLocaleString();
     const imageModel = isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const modelLabel = resolveImageModelConfig(imageModel).label;
-    const isNanoImage = imageModel === NANO_BANANA_PRO_IMAGE_MODEL;
+    const requestedParameters = getImageDetailRequestedParameters(imageModel, image);
     const actualParameterDetails = buildActualParameterDetails({
         actualParameters: image.actualParameters,
         requestedParameters: getRequestedArchiveParameters(image),
@@ -182,22 +183,12 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 <label><Sparkles size={12} /> MODEL</label>
                                 <span>{modelLabel}</span>
                             </div>
-                            {!isNanoImage && (
-                                <div className="info-cell">
-                                    <label><Layers size={12} /> QUALITY</label>
-                                    <span className="status-badge">{image.quality}</span>
+                            {requestedParameters.map(({ label, value, badge, Icon }) => (
+                                <div className="info-cell" key={label}>
+                                    <label><Icon size={12} /> {label}</label>
+                                    <span className={badge ? 'status-badge' : undefined}>{value}</span>
                                 </div>
-                            )}
-                            <div className="info-cell">
-                                <label><Layout size={12} /> {isNanoImage ? 'ASPECT' : 'SIZE'}</label>
-                                <span>{image.aspectRatio}</span>
-                            </div>
-                            {isNanoImage && image.quality && (
-                                <div className="info-cell">
-                                    <label><Layers size={12} /> RESOLUTION</label>
-                                    <span className="status-badge">{image.quality}</span>
-                                </div>
-                            )}
+                            ))}
                             {image.style && image.style !== 'none' && (
                                 <div className="info-cell">
                                     <label><Wand2 size={12} /> STYLE</label>
@@ -333,6 +324,28 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         </div>
     );
 };
+
+export function getImageDetailRequestedParameters(model: ImageModelSlug, image: ArchiveImage) {
+    switch (model) {
+        case OPENAI_IMAGE_MODEL:
+            return [
+                { label: 'QUALITY', value: image.quality, badge: true, Icon: Layers },
+                { label: 'SIZE', value: image.aspectRatio, badge: false, Icon: Layout },
+            ];
+        case NANO_BANANA_PRO_IMAGE_MODEL:
+            return [
+                { label: 'ASPECT', value: image.aspectRatio, badge: false, Icon: Layout },
+                { label: 'RESOLUTION', value: image.quality, badge: true, Icon: Layers },
+            ];
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+            return [
+                { label: 'ASPECT', value: image.aspectRatio, badge: false, Icon: Layout },
+                { label: 'RESOLUTION', value: image.quality, badge: true, Icon: Layers },
+                { label: 'BACKGROUND', value: image.background, badge: false, Icon: Layout },
+            ];
+        default: return assertNever(model);
+    }
+}
 
 export function resolveImageDetailCostLedger(
     imageCostLedger: ArchiveImage['costLedger'],

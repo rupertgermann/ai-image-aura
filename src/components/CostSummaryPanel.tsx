@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Pure cost helpers are shared with other views. */
 import React from 'react';
 import type { ApiCostLedger, ApiCostLineItem } from '../db/types';
 import { calculateApiCostTotals, formatUsd } from '../costs/apiCost';

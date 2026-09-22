@@ -24,7 +24,7 @@ import {
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
 import { dataURLtoFile } from '../utils/file';
-import { resolveImageModelConfig } from '../utils/openaiModels';
+import { getProviderLabel, isReasoningModelSlug, LOCAL_PROVIDER, resolveImageModelConfig, resolveReasoningModelConfig } from '../utils/openaiModels';
 
 export type { GenerateResultSlot };
 
@@ -248,6 +248,7 @@ export async function saveGenerateResultSlots({
             lineageStore,
             sessionStore,
             lineageSource: runLineageSource,
+            runDraft: runDraft ?? draft,
         });
         nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, archiveImageId);
     }
@@ -411,7 +412,7 @@ export function useGenerateController({
 
     const generate = useCallback(async () => {
         if (!apiKey) {
-            setError('Please set the selected image model API key in Settings first.');
+            setError(missingImageCredentialMessage(draft.model));
             return;
         }
 
@@ -523,12 +524,13 @@ export function useGenerateController({
         initialCostLedger?: ApiCostLedger;
     }) => {
         if (!apiKey) {
-            setError('Please set the selected image model API key in Settings first.');
+            setError(missingImageCredentialMessage(draft.model));
             return null;
         }
 
         if (!reasoningApiKey) {
-            setError('Please set the selected reasoning model API key in Settings first.');
+            const provider = resolveReasoningModelConfig(isReasoningModelSlug(reasoningModel) ? reasoningModel : undefined).provider;
+            setError(`Please set the ${getProviderLabel(provider)} API key for the reasoning model in Settings first.`);
             return null;
         }
 
@@ -842,5 +844,13 @@ function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {
         ...draft,
         gptImage2: { ...draft.gptImage2 },
         nanoBananaPro: { ...draft.nanoBananaPro },
+        qwenImage2_1: { ...draft.qwenImage2_1 },
     };
+}
+
+function missingImageCredentialMessage(model: GenerateDraft['model']): string {
+    const provider = resolveImageModelConfig(model).provider;
+    return provider === LOCAL_PROVIDER
+        ? 'Please set the Local server URL in Settings first.'
+        : `Please set the ${getProviderLabel(provider)} API key in Settings first.`;
 }

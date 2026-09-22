@@ -18,11 +18,13 @@ export function useAppController() {
         currentView,
         apiKey,
         googleApiKey,
+        localServerUrl,
         completionNotificationsEnabled,
         changeView,
         getKey,
         updateApiKey,
         updateGoogleApiKey,
+        updateLocalServerUrl,
         updateCompletionNotificationsEnabled,
     } = useAppPreferences();
     const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
@@ -266,10 +268,13 @@ export function useAppController() {
         settingsViewProps: {
             apiKey,
             googleApiKey,
+            localServerUrl,
+            getProviderKey: getKey,
             completionNotificationsEnabled,
             completionNotificationReadiness,
             onApiKeyChange: updateApiKey,
             onGoogleApiKeyChange: updateGoogleApiKey,
+            onLocalServerUrlChange: updateLocalServerUrl,
             onCompletionNotificationsChange: changeCompletionNotificationsEnabled,
         },
     };

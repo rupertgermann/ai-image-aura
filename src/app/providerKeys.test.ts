@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+    LOCAL_SERVER_URL_STORAGE_KEY,
     PROVIDER_API_KEY_STORAGE_KEYS,
     createProviderKeyResolver,
+    normalizeLocalServerUrl,
     readProviderApiKey,
 } from './providerKeys';
 
@@ -46,10 +48,33 @@ describe('providerKeys', () => {
         const resolver = createProviderKeyResolver({
             openai: '   ',
             google: 'gemini-key',
+            local: '',
         });
 
         expect(resolver.getKey('openai')).toBeNull();
         expect(resolver.getKey('google')).toBe('gemini-key');
+        expect(resolver.getKey('local')).toBeNull();
+    });
+
+    it('has a dedicated Local server URL slot and resolves a cleaned saved URL', () => {
+        expect(LOCAL_SERVER_URL_STORAGE_KEY).toBe('aura_local_server_url');
+        expect(LOCAL_SERVER_URL_STORAGE_KEY).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.openai);
+        expect(LOCAL_SERVER_URL_STORAGE_KEY).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.google);
+        expect(createProviderKeyResolver({
+            openai: null,
+            google: null,
+            local: '  http://127.0.0.1:1234///  ',
+        }).getKey('local')).toBe('http://127.0.0.1:1234');
+    });
+
+    it('rejects invalid Local server URLs before they can resolve as credentials', () => {
+        expect(normalizeLocalServerUrl('ftp://127.0.0.1:1234')).toBeNull();
+        expect(normalizeLocalServerUrl('http://')).toBeNull();
+        expect(createProviderKeyResolver({
+            openai: null,
+            google: null,
+            local: 'file:///tmp/server',
+        }).getKey('local')).toBeNull();
     });
 });
 

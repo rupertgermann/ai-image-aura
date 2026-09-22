@@ -15,9 +15,57 @@ import {
     mapImageModelGenerateProviderRequest,
     sanitizeImageModelControls,
 } from './ImageModelControls';
-import { IMAGE_MODEL_REGISTRY, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { IMAGE_MODEL_REGISTRY, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('Image model controls', () => {
+    it('maps every Qwen aspect ratio and resolution to the fixed sd-server size', () => {
+        const sizes = {
+            '1:1': ['1024x1024', '2048x2048'],
+            '4:3': ['1152x864', '2400x1792'],
+            '3:4': ['864x1152', '1792x2400'],
+            '3:2': ['1248x832', '2528x1696'],
+            '2:3': ['832x1248', '1696x2528'],
+            '16:9': ['1376x768', '2752x1536'],
+            '9:16': ['768x1376', '1536x2752'],
+        } as const;
+
+        expect(getImageModelGenerateControls(QWEN_IMAGE_2_1_IMAGE_MODEL).map((control) => control.id)).toEqual([
+            'aspectRatio', 'imageSize', 'background', 'batchSize',
+        ]);
+        for (const [aspectRatio, [oneK, twoK]] of Object.entries(sizes)) {
+            for (const [imageSize, size] of [['1K', oneK], ['2K', twoK]] as const) {
+                expect(mapImageModelGenerateProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+                    quality: 'medium', aspectRatio, imageSize, background: 'transparent', batchSize: 4,
+                    referenceImages: [],
+                })).toEqual({ size, batchSize: 4, referenceImages: [] });
+                const fields = buildImageModelArchiveFields(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+                    aspectRatio, imageSize, background: 'transparent', batchSize: 4,
+                });
+                expect(`${fields.width}x${fields.height}`).toBe(size);
+                expect(fields).toMatchObject({ quality: imageSize, aspectRatio, background: 'transparent' });
+            }
+        }
+    });
+
+    it('sanitizes Qwen controls and caps references including the Editor target', () => {
+        expect(getDefaultImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL)).toEqual({
+            aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+        });
+        expect(sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            aspectRatio: '21:9', imageSize: '4K', background: 'opaque', batchSize: 20,
+        })).toEqual({ aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 4 });
+        const files = Array.from({ length: 12 }, (_, index) => new File(['x'], `${index}.png`));
+        expect(mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            sourceImage: files[0], compositionContextImage: files[1], referenceImages: files.slice(2),
+            sourceDimensions: { width: 2048, height: 1024 },
+        })).toEqual({
+            size: '1440x736',
+            referenceImages: files.slice(0, 10),
+        });
+        expect(mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
+            sourceImage: files[0], referenceImages: [],
+        })).toEqual({ referenceImages: [files[0]] });
+    });
     it('covers every registered Image model with defaults and Generate UI facts', () => {
         const registrySlugs = Object.keys(IMAGE_MODEL_REGISTRY).sort();
 
