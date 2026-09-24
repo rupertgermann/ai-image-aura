@@ -67,6 +67,8 @@ Open the app in your browser, go to **Settings**, and configure the providers fo
 
 ### Qwen Image 2.1 local server
 
+Quick path: `scripts/qwen-sd-server.sh setup`, then `start`, then `test` in a second terminal. The manual steps are below.
+
 Build [stable-diffusion.cpp's `sd-server`](https://github.com/leejet/stable-diffusion.cpp/tree/master/examples/server), then download these weights:
 
 1. A Qwen Image 2.1 diffusion GGUF, such as [`qwen_image_2.1-Q4_K.gguf`](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main).
@@ -140,7 +142,7 @@ npm run preview
 
 The Generate view supports:
 
-- Image model selection among `GPT Image 2`, `Nano Banana Pro`, and `Qwen Image 2.1`
+- Image model selection among `GPT Image 2`, `Nano Banana Pro`, and `Qwen Image 2.1` (chosen in **Settings → Model Preferences**)
 - Mode toggle between `Single Shot` and `Autopilot`
 - Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode

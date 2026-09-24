@@ -501,9 +501,6 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                         );
                                     })}
                                 </div>
-                                {!getProviderCredential(LOCAL_PROVIDER) && activeModel.provider !== LOCAL_PROVIDER && (
-                                    <div className="info-message mini">Save a Local server URL in Settings to use Qwen Image 2.1.</div>
-                                )}
                             </div>
 
                             <textarea

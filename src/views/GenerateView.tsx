@@ -27,7 +27,6 @@ import {
     coerceImageModelControlValue,
     getImageModelGenerateControls,
     getImageModelReferenceCapacityMessage,
-    getImageModelUiChoices,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
 import {
@@ -589,29 +588,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         </div>
                     </div>
 
-                    <div className="input-section">
-                        <label>IMAGE MODEL</label>
-                        <div className="toggle-group">
-                            {getImageModelUiChoices().map((choice) => {
-                                const available = !!getProviderCredential(choice.provider);
-                                return (
-                                    <button
-                                        key={choice.slug}
-                                        className={model === choice.slug ? 'active' : ''}
-                                        onClick={() => updateDraft({ model: choice.slug })}
-                                        disabled={!available}
-                                        title={available ? choice.label : choice.provider === LOCAL_PROVIDER
-                                            ? 'Save a Local server URL in Settings'
-                                            : `Add a ${getProviderLabel(choice.provider)} API key in Settings`}
-                                    >{choice.label}</button>
-                                );
-                            })}
-                        </div>
-                        {!getProviderCredential(LOCAL_PROVIDER) && !isLocalImageModel && (
-                            <p className="field-relationship-note">Save a Local server URL in Settings to use Qwen Image 2.1.</p>
-                        )}
-                    </div>
-
                     {isAutopilotMode && (
                         <div className="autopilot-panel glass-panel">
                             <div className="input-section">
@@ -848,7 +824,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             : `${getProviderLabel(activeModel.provider)} API key missing. Go to Settings to configure.`}</div>
                     )}
                     {isAutopilotMode && !reasoningApiKey && (
-                        <div className="error-message">{getProviderLabel(activeReasoningModel.provider)} API key missing for ${activeReasoningModel.label}. Go to Settings to configure.</div>
+                        <div className="error-message">{getProviderLabel(activeReasoningModel.provider)} API key missing for {activeReasoningModel.label}. Go to Settings to configure.</div>
                     )}
                     {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
                     {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}
