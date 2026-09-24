@@ -1,5 +1,5 @@
 import { createAutopilotSession, type AutopilotGeneratedImage, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
-import { getActiveGenerateControls, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
+import { getActiveGenerateControls, getImageModelDraftKey, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput, ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
@@ -10,8 +10,8 @@ import type { ApiCostLedger } from '../db/types';
 
 interface RunGenerateAutopilotInput {
     goal: string;
-    apiKey: string;
-    reasoningApiKey?: string;
+    imageCredential: string;
+    reasoningApiKey: string;
     reasoningModel?: string;
     draft: GenerateDraft;
     referenceImages: File[];
@@ -34,6 +34,7 @@ export interface RunGenerateAutopilotOutcome {
     result: AutopilotSessionResult;
     usedReferenceImages: File[];
     usedReferences: string[] | null;
+    runDraft: GenerateDraft | null;
 }
 
 export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Promise<RunGenerateAutopilotOutcome> {
@@ -57,7 +58,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
             palette: input.draft.palette,
             referenceImages: usedReferenceImages,
         },
-        apiKey: input.apiKey,
+        imageCredential: input.imageCredential,
         reasoningApiKey: input.reasoningApiKey,
         reasoningModel: input.reasoningModel,
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
@@ -76,8 +77,12 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     input.onSessionCreated?.(session);
     const result = await session.run();
     let usedReferences: string[] | null = null;
+    let runDraft: GenerateDraft | null = null;
 
     if (result.bestIteration) {
+        runDraft = structuredClone(input.draft);
+        runDraft.prompt = result.bestIteration.prompt;
+        runDraft[getImageModelDraftKey(runDraft.model)].batchSize = 1;
         usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
         const lineageSource = {
             archiveImageId: result.bestIteration.archiveImageId,
@@ -94,7 +99,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
                 archiveImageId: result.bestIteration.archiveImageId,
             }],
             references: usedReferences,
-            draft: null,
+            draft: runDraft,
             lineageSource,
         });
         input.sessionStore.saveLineageSource(lineageSource);
@@ -105,6 +110,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
         result,
         usedReferenceImages: usedReferenceImages.slice(),
         usedReferences,
+        runDraft,
     };
 }
 

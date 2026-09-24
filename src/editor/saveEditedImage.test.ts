@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ApiCostKind, ApiCostLedger, ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -228,10 +228,11 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        await saveEditedImage(createArchiveImage(), 'data:image/png;base64,ai-overwrite', {
+        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,ai-overwrite', {
             ...createSaveContext(),
             isCopy: false,
             aiEditPrompt: 'make the nebula denser',
+            aiEditModel: QWEN_IMAGE_2_1_IMAGE_MODEL,
         }, {
             saveImage: vi.fn(async (image) => image),
             lineageStore: lineage,
@@ -239,39 +240,51 @@ describe('saveEditedImage', () => {
         });
 
         const steps = await lineage.getByArchiveImageId('source-image');
+        expect(savedImage).toMatchObject({
+            model: OPENAI_IMAGE_MODEL,
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+        });
         expect(steps.at(-1)).toEqual(expect.objectContaining({
             parentStepId: 'step-2',
             stepType: 'ai-edit',
             metadata: expect.objectContaining({
                 editPrompt: 'make the nebula denser',
                 overwrite: true,
+                aiEdit: expect.objectContaining({ imageModel: { slug: QWEN_IMAGE_2_1_IMAGE_MODEL } }),
             }),
         }));
     });
 
-    it('records the model used for an AI edit on the saved image and lineage step', async () => {
+    it.each([NANO_BANANA_PRO_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL])('records %s in AI edit lineage while keeping source archive settings', async (editModel) => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,nano-edit', {
+        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,model-edit', {
             ...createSaveContext(),
             isCopy: true,
             aiEditPrompt: 'preserve the source composition but make it cinematic',
-            aiEditModel: NANO_BANANA_PRO_IMAGE_MODEL,
+            aiEditModel: editModel,
         }, {
             saveImage: vi.fn(async (image) => image),
             lineageStore: lineage,
             clock: () => '2026-04-04T15:00:00.000Z',
-            makeId: () => 'nano-edit-copy',
+            makeId: () => 'model-edit-copy',
         });
 
-        expect(savedImage.model).toBe(NANO_BANANA_PRO_IMAGE_MODEL);
-        const steps = await lineage.getByArchiveImageId('nano-edit-copy');
+        expect(savedImage).toMatchObject({
+            model: OPENAI_IMAGE_MODEL,
+            quality: 'high',
+            aspectRatio: '1024x1024',
+            background: 'transparent',
+        });
+        const steps = await lineage.getByArchiveImageId('model-edit-copy');
         expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            model: editModel,
             aiEdit: expect.objectContaining({
                 imageModel: {
-                    slug: NANO_BANANA_PRO_IMAGE_MODEL,
+                    slug: editModel,
                 },
             }),
         }));

@@ -1,6 +1,7 @@
 import type { ApiCostLedger, ArchiveLayerStack } from '../db/types';
+import { getImageModelReferenceLimitMessage } from '../image-models/ImageModelControls';
 import type { EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
-import type { ImageModelSlug } from '../utils/openaiModels';
+import { IMAGE_MODEL_REGISTRY, LOCAL_PROVIDER, type ImageModelSlug } from '../utils/openaiModels';
 import { fileToDataURL } from '../utils/file';
 import {
     insertAiResultLayer,
@@ -54,6 +55,13 @@ export interface AiTransformProvenanceInput {
     model: ImageModelSlug;
     costLedger?: ApiCostLedger;
     transformMask?: EditorLineageTransformMaskAsset | null;
+}
+
+export function getAiTransformReferenceWarning(model: ImageModelSlug, referenceCount: number, draft: EditorDraft | null): string | null {
+    const reservedImageCount = IMAGE_MODEL_REGISTRY[model].provider === LOCAL_PROVIDER && draft
+        ? 1 + Number(planAiTransformTarget(draft).requiresCompositionContext)
+        : 0;
+    return getImageModelReferenceLimitMessage(model, referenceCount, 'AI transforms', reservedImageCount);
 }
 
 export async function renderAiTransformEditInput({

@@ -1,16 +1,34 @@
 export const OPENAI_PROVIDER = 'openai';
 export const GOOGLE_PROVIDER = 'google';
+export const LOCAL_PROVIDER = 'local';
 
-export type Provider = typeof OPENAI_PROVIDER | typeof GOOGLE_PROVIDER;
+export type Provider = typeof OPENAI_PROVIDER | typeof GOOGLE_PROVIDER | typeof LOCAL_PROVIDER;
+
+export function getProviderLabel(provider: Provider): string {
+    switch (provider) {
+        case OPENAI_PROVIDER: return 'OpenAI';
+        case GOOGLE_PROVIDER: return 'Google';
+        case LOCAL_PROVIDER: return 'Local server';
+        default: return assertNever(provider);
+    }
+}
+
+export function assertNever(value: never): never {
+    throw new Error(`Unexpected value: ${value}`);
+}
 
 export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 export const NANO_BANANA_PRO_IMAGE_MODEL = 'nano-banana-pro';
+export const QWEN_IMAGE_2_1_IMAGE_MODEL = 'qwen-image-2.1';
+export const FLUX_2_KLEIN_4B_IMAGE_MODEL = 'flux-2-klein-4b';
 export const DEFAULT_IMAGE_MODEL = OPENAI_IMAGE_MODEL;
 export const OPENAI_RESPONSES_MODEL = 'gpt-5.4';
 export const GEMINI_FLASH_REASONING_MODEL = 'gemini-2.5-flash';
 
 export type NanoBananaAspectRatio = '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9';
 export type NanoBananaImageSize = '1K' | '2K' | '4K';
+export type LocalAspectRatio = '1:1' | '4:3' | '3:4' | '3:2' | '2:3' | '16:9' | '9:16';
+export type LocalImageSize = '1K' | '2K';
 
 export interface ImageModelConfig {
     slug: string;
@@ -68,6 +86,40 @@ export const IMAGE_MODEL_REGISTRY = {
         parameters: {
             aspectRatio: 'generationConfig.imageConfig.aspectRatio',
             imageSize: 'generationConfig.imageConfig.imageSize',
+        },
+        capabilities: {
+            transformMask: false,
+            partialImageStreaming: false,
+        },
+    },
+    [QWEN_IMAGE_2_1_IMAGE_MODEL]: {
+        slug: QWEN_IMAGE_2_1_IMAGE_MODEL,
+        provider: LOCAL_PROVIDER,
+        apiModel: QWEN_IMAGE_2_1_IMAGE_MODEL,
+        label: 'Qwen Image 2.1',
+        endpoints: {
+            generate: '/v1/images/generations',
+            edit: '/v1/images/edits',
+        },
+        parameters: {
+            size: 'size',
+        },
+        capabilities: {
+            transformMask: false,
+            partialImageStreaming: false,
+        },
+    },
+    [FLUX_2_KLEIN_4B_IMAGE_MODEL]: {
+        slug: FLUX_2_KLEIN_4B_IMAGE_MODEL,
+        provider: LOCAL_PROVIDER,
+        apiModel: FLUX_2_KLEIN_4B_IMAGE_MODEL,
+        label: 'FLUX.2 klein 4B',
+        endpoints: {
+            generate: '/v1/images/generations',
+            edit: '/v1/images/edits',
+        },
+        parameters: {
+            size: 'size',
         },
         capabilities: {
             transformMask: false,

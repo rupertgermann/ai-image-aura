@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ArchiveImage } from '../db/types';
 import type { LineageStep } from './LineageStore';
 import { buildEditorReplay, buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from './replayLineageStep';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('replayLineageStep', () => {
     it('hydrates a generate draft from lineage metadata and preserves an exact fork source', () => {
@@ -41,6 +41,10 @@ describe('replayLineageStep', () => {
                     imageSize: '1K',
                     batchSize: 1,
                 },
+                qwenImage2_1: {
+                    aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+                },
+                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
             },
             lineageSource: {
@@ -132,6 +136,10 @@ describe('replayLineageStep', () => {
                     imageSize: '1K',
                     batchSize: 1,
                 },
+                qwenImage2_1: {
+                    aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+                },
+                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
             },
             lineageSource: {
@@ -181,6 +189,10 @@ describe('replayLineageStep', () => {
                     imageSize: '1K',
                     batchSize: 1,
                 },
+                qwenImage2_1: {
+                    aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+                },
+                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
             },
             lineageSource: {
@@ -236,6 +248,32 @@ describe('replayLineageStep', () => {
                 imageSize: '4K',
             },
             style: 'isometric diorama',
+        });
+    });
+
+    it('restores Qwen controls from typed Autopilot lineage and defaults legacy background', () => {
+        const typedStep = createStep({
+            id: 'qwen-auto', archiveImageId: 'auto-qwen', stepType: 'autopilot-iteration',
+            timestamp: '2026-09-22T10:00:00.000Z',
+            metadata: {
+                prompt: 'transparent leaf',
+                imageModel: {
+                    slug: QWEN_IMAGE_2_1_IMAGE_MODEL,
+                    controls: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 1 },
+                },
+            },
+        });
+        expect(buildGenerateReplay(null, typedStep).draft).toMatchObject({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            qwenImage2_1: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 1 },
+        });
+
+        const legacyStep = createStep({
+            ...typedStep, id: 'qwen-legacy', stepType: 'generation',
+            metadata: { model: QWEN_IMAGE_2_1_IMAGE_MODEL, aspectRatio: '3:4', imageSize: '2K' },
+        });
+        expect(buildGenerateReplay(null, legacyStep).draft.qwenImage2_1).toEqual({
+            aspectRatio: '3:4', imageSize: '2K', background: 'auto', batchSize: 1,
         });
     });
 

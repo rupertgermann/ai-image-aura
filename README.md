@@ -1,8 +1,8 @@
 # AURA AI
 
-AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI and Google-hosted image models.
+AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI, Google, and a user-run Qwen Image 2.1 server.
 
-The app runs entirely in the browser. Provider API keys, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
+The app runs entirely in the browser. Provider API keys, the local server URL, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
 
 The interface follows the Telepathic Instruments-inspired visual system documented in `docs/DESIGN.md`: stark panels, monochrome surfaces, amber action emphasis, compact controls, and typography tuned for a focused creative tool rather than a marketing page.
 
@@ -18,17 +18,18 @@ The interface follows the Telepathic Instruments-inspired visual system document
 
 ## Highlights
 
-- Prompt-based image generation with `gpt-image-2` and `nano-banana-pro`
+- Prompt-based image generation with `gpt-image-2`, `nano-banana-pro`, and locally hosted `qwen-image-2.1`
 - `Single Shot` and `Autopilot` generation modes
 - Batch generation of up to four images per run with a per-slot result grid, save-all, and per-result reuse actions
 - Streaming partial-image previews during single-shot generation for models that support it
 - Reuse any generated result as a reference image with a single action
-- Actual generation parameter reporting for revised prompts, size, quality, and elapsed time
+- Actual generation parameter reporting for values returned by the provider or measured by AURA
 - Goal-to-prompt translation, iterative scoring, and prompt refinement with selectable reasoning models: `gpt-5.4` and `gemini-2.5-flash`
-- Provider-specific API key storage for OpenAI and Google
+- Provider API key storage for OpenAI and Google, plus a server URL and connection test for Local server
 - Prompt enhancement controls for style, lighting, palette, and model-specific output settings
 - Shared image-model facts for Generate and Editor controls, provider routing, capabilities, reference limits, and archive metadata
 - Reference-image workflows for guided generation and AI-assisted edits, including clipboard paste
+- Qwen Image 2.1 controls for aspect ratio, 1K/2K resolution, and auto/transparent background requests
 - Transform-mask painting for targeted AI edits, persisted in lineage and replayable into the editor
 - Creative lineage tracking across generation, create-similar, editor saves, AI edits, save-as-copy branches, and Autopilot iterations
 - Local archive with search, favorites filtering, multi-select actions, layer-aware ZIP export/import, manifest recovery, lineage-aware detail view, replay actions, fork actions, and keyboard navigation
@@ -36,6 +37,7 @@ The interface follows the Telepathic Instruments-inspired visual system document
 - Background completion notifications for finished generation runs
 - Persistent local UI state for prompts, model-specific generation settings, Autopilot settings, archive search and favorites filter, editor drafts, editor controls, and notification preferences
 - Local-first persistence powered by SQLocal and IndexedDB
+- $0.00 API cost reporting for local image inference
 
 ## Tech Stack
 
@@ -61,7 +63,33 @@ npm install
 npm run dev
 ```
 
-Open the app in your browser, go to **Settings**, and enter the provider keys for the models you want to use. OpenAI powers `gpt-image-2` and `gpt-5.4`; Google powers `nano-banana-pro` and `gemini-2.5-flash`.
+Open the app in your browser, go to **Settings**, and configure the providers for the models you want to use. OpenAI powers `gpt-image-2` and `gpt-5.4`; Google powers `nano-banana-pro` and `gemini-2.5-flash`. Qwen Image 2.1 uses a Local server URL instead of an API key.
+
+### Qwen Image 2.1 local server
+
+Quick path: `scripts/qwen-sd-server.sh setup`, then `start`, then `test` in a second terminal. The manual steps are below.
+
+Build [stable-diffusion.cpp's `sd-server`](https://github.com/leejet/stable-diffusion.cpp/tree/master/examples/server), then download these weights:
+
+1. A Qwen Image 2.1 diffusion GGUF, such as [`qwen_image_2.1-Q4_K.gguf`](https://huggingface.co/leejet/Qwen-Image-2.1-GGUF/tree/main).
+2. The matching [`qwen_image_2.1_vae_bf16.safetensors`](https://huggingface.co/Comfy-Org/Qwen-Image-2.1/tree/main/vae). Earlier Qwen Image and Wan VAEs are not interchangeable with it.
+3. A [Qwen3-VL-8B-Instruct text encoder GGUF](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main), such as `Qwen3VL-8B-Instruct-Q4_K_M.gguf`, and `mmproj-Qwen3VL-8B-Instruct-F16.gguf` from the same repository. The mmproj vision weights are required for every request containing images, including Generate references and Editor AI transforms.
+
+From the stable-diffusion.cpp repository root, adjust the paths and launch the server (the binary path may differ on Windows):
+
+```bash
+./build/bin/sd-server \
+  --diffusion-model /path/to/qwen_image_2.1-Q4_K.gguf \
+  --vae /path/to/qwen_image_2.1_vae_bf16.safetensors \
+  --llm /path/to/Qwen3VL-8B-Instruct-Q4_K_M.gguf \
+  --llm_vision /path/to/mmproj-Qwen3VL-8B-Instruct-F16.gguf \
+  --cfg-scale 6.0 --sampling-method euler \
+  --diffusion-fa --offload-to-cpu -v
+```
+
+The [Qwen Image 2.1 guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/qwen_image_2.1.md) recommends CFG scale 6, Euler sampling, verbose logging, and CPU offloading; the [server guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/examples/server/README.md) documents flash attention and the default address `http://127.0.0.1:1234`. Enter that address in **Settings → Local Server (stable-diffusion.cpp)**, save it, and use **Test connection**. AURA sends requests directly to its OpenAI-compatible images API without an API key.
+
+If `sd-server` runs behind [llama-swap](https://github.com/mostlygeek/llama-swap/blob/main/docs/configuration.md), enter the llama-swap URL instead and name the model `qwen-image-2.1` in its config, or add that exact alias. AURA sends `qwen-image-2.1` as the model ID for every local image request.
 
 ## Available Scripts
 
@@ -114,7 +142,7 @@ npm run preview
 
 The Generate view supports:
 
-- Image model selection between `GPT Image 2` and `Nano Banana Pro`
+- Image model selection among `GPT Image 2`, `Nano Banana Pro`, and `Qwen Image 2.1` (chosen in **Settings → Model Preferences**)
 - Mode toggle between `Single Shot` and `Autopilot`
 - Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode
@@ -124,8 +152,11 @@ The Generate view supports:
 - `GPT Image 2` background options: `auto`, `opaque`, `transparent`
 - `Nano Banana Pro` aspect ratio options: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
 - `Nano Banana Pro` resolution options: `1K`, `2K`, `4K`
+- `Qwen Image 2.1` aspect ratios: `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `16:9`, `9:16`
+- `Qwen Image 2.1` resolution options: `1K`, `2K`; background options: `Auto`, `Transparent`
 - `GPT Image 2` batch size options: `1`, `2`, `3`, `4`
 - `Nano Banana Pro` batch size options: `1`, `2`, `3`, `4`
+- `Qwen Image 2.1` batch size options: `1`, `2`, `3`, `4`
 - Style, lighting, and palette modifiers that are merged into the request prompt
 - Configurable Autopilot iteration count from `1` to `8`
 - Configurable Autopilot satisfaction threshold from `50` to `100`
@@ -133,21 +164,22 @@ The Generate view supports:
 - Live Autopilot progress, best-iteration highlighting, and pause/cancel support
 - Multiple reference image uploads through file picker, drag-and-drop, and clipboard paste
 - `Nano Banana Pro` reference inputs are capped to the first `14` images for provider compatibility
+- `Qwen Image 2.1` reference inputs are capped to the first `10` images
 - Reference preview modal with next and previous navigation
 - Streaming partial-image previews during single-shot generation for models that support partial streaming
 - A batch result grid for multi-image runs with per-slot save, download, use-as-reference, and isolated per-slot failure reporting
 - Save All and Clear Results actions for batch runs
 - Use as Reference to feed a generated result back into the reference set while preserving lineage
-- Actual parameter panels that surface the revised prompt, size, quality, and elapsed time returned with each result
+- Actual parameter panels that surface provider-reported values and measured elapsed time without inventing unavailable values
 - Save-to-archive, download, and clear-result actions
 
-Prompt-only `GPT Image 2` generations use the OpenAI generations endpoint. `GPT Image 2` requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts.
+Prompt-only `GPT Image 2` generations use the OpenAI generations endpoint. `GPT Image 2` requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts. `Qwen Image 2.1` uses the local server's OpenAI-compatible image generations and edits endpoints. For Transparent background, AURA adds Qwen's RGBA wording to the request prompt while keeping the saved prompt unchanged; PNG results preserve any alpha channel the model returns.
 
-Batch runs request multiple images per generation. `Nano Banana Pro` fans batch requests out into parallel `generateContent` calls so a failed slot stays isolated while the rest of the batch succeeds.
+Batch runs request multiple images per generation. `Nano Banana Pro` fans batch requests out into parallel `generateContent` calls so a failed slot stays isolated while the rest of the batch succeeds. `Qwen Image 2.1` requests the whole batch in one local call, so a failed call marks every slot failed.
 
 Saved Generate results use the provider-run reference image snapshot, so archive metadata and lineage reflect the exact images sent to the model even if the visible reference collection changes later.
 
-Autopilot reuses the current image model settings and provider-used reference snapshot for every iteration, evaluates results against the goal with the selected reasoning model, refines the prompt between iterations, and keeps the best-scoring result as the primary output. Autopilot result slots carry lineage and actual parameter metadata like regular generated results.
+Autopilot reuses the current image model settings and provider-used reference snapshot for every iteration, evaluates results against the goal with the selected reasoning model, refines the prompt between iterations, and keeps the best-scoring result as the primary output. Autopilot result slots carry lineage and actual parameter metadata like regular generated results. With `Qwen Image 2.1`, image inference has no API charge; the selected OpenAI or Google reasoning model may still incur a charge.
 
 ### Archive
 
@@ -191,6 +223,7 @@ The Editor view supports:
 - AI transforms targeted to selected visible non-base layers, or to the whole visible composition when no editable layer is selected
 - AI transform requests separate the editable source image, composition context, and optional user reference images before provider mapping
 - Transform-mask painting with brush and eraser tools and an adjustable brush size for models that support masked edits
+- `Qwen Image 2.1` AI transforms send the target, composition context, then references (up to ten images total); its mask controls are hidden
 - AI result layers inserted non-destructively above the targeted layer selection
 - Optional visual context reference images for edit guidance through file picker, drag-and-drop, or clipboard paste
 - Unsaved editor drafts persisted per archive image
@@ -209,8 +242,9 @@ The Settings view supports:
 
 - Local OpenAI API key storage in the browser
 - Local Google Gemini API key storage in the browser
+- Local server URL storage and a connection test that lists reported model IDs or explains HTTP and reachability errors
 - Saved-key status feedback and masked key entry
-- Immediate model availability once the matching provider key is stored
+- Immediate model availability once the matching provider key or Local server URL is stored
 - A completion notifications toggle that surfaces a desktop notification when a run finishes while the app is in the background
 - Notification readiness status that reflects unsupported browsers and insecure contexts
 
@@ -220,10 +254,11 @@ The sidebar includes a collapsible navigation rail.
 
 The application is designed as a local-first web app.
 
-- Provider API keys are stored in browser `localStorage`
+- Provider API keys and the Local server URL are stored in browser `localStorage`
 - View state, generation drafts, model-specific generation settings, Autopilot settings, archive search, archive favorites filter, completion notification preference, and editor drafts are stored in browser `localStorage`
 - Current generated batch results and transferred reference payloads are stored in IndexedDB via `idb-keyval`
 - Archive image metadata is stored in a browser-local SQLite database via SQLocal
+- Qwen archive metadata includes its model, aspect ratio, resolution, background, and requested dimensions
 - Layer stack metadata is stored with archive image metadata in SQLocal
 - Flattened images, reference images, and per-layer image assets are stored in IndexedDB via `idb-keyval`
 - Lineage metadata, including typed Generate, Editor, Autopilot, transform-mask, and actual-parameter metadata, is stored in a browser-local SQLite database via SQLocal
@@ -242,14 +277,17 @@ The app calls provider APIs directly from the browser.
 - OpenAI Autopilot reasoning uses `POST /v1/responses`
 - Google image generation and editing use Gemini `generateContent`
 - Google Autopilot reasoning uses Gemini `generateContent`
-- Image models: `gpt-image-2`, `nano-banana-pro`
+- Local server generation uses `POST /v1/images/generations`; reference-based generation and Editor AI transforms use `POST /v1/images/edits`; the Settings connection test uses `GET /v1/models`
+- Local image requests send the model ID `qwen-image-2.1` with no Authorization header or hosted-provider key
+- Image models: `gpt-image-2`, `nano-banana-pro`, `qwen-image-2.1`
 - Reasoning models: `gpt-5.4`, `gemini-2.5-flash`
 - Shared image-model control facts drive UI choices, default values, validation, provider request mapping, reference limits, mask capability, streaming capability, and archive metadata
 - The app requests between one and four images per generation, fanning `Nano Banana Pro` batches out into isolated parallel requests
+- Local server image inference has a calculated $0.00 API cost; Autopilot totals still include hosted reasoning calls
 - Single-image OpenAI generations can stream partial-image previews when the model supports it
 - Editor AI transforms can include a painted mask for models that support masked edits
 - Image responses are consumed as base64 payloads and converted into browser-safe data URLs for preview and persistence
-- Provider responses report actual generation parameters such as the revised prompt, size, quality, and elapsed time
+- Actual generation parameters contain only values reported by the provider or measured by AURA; Qwen runs record elapsed time only
 
 Additional implementation details live in:
 

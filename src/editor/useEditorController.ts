@@ -17,7 +17,7 @@ import {
 import type { EditorSaveContext } from './saveEditedImage';
 
 interface UseEditorControllerOptions {
-    apiKey: string | null;
+    imageCredential: string | null;
     model: ImageModelSlug;
     isCanvasReady: boolean;
     draft: EditorDraft | null;
@@ -32,7 +32,7 @@ interface UseEditorControllerOptions {
 }
 
 export function useEditorController({
-    apiKey,
+    imageCredential,
     model,
     isCanvasReady,
     draft,
@@ -80,7 +80,7 @@ export function useEditorController({
     ]);
 
     const applyAiEdit = useCallback(async () => {
-        if (!apiKey || !aiPrompt.trim() || !draft || !isCanvasReady) {
+        if (!imageCredential || !aiPrompt.trim() || !draft || !isCanvasReady) {
             return;
         }
 
@@ -89,7 +89,7 @@ export function useEditorController({
 
         try {
             const result = await runEditorAiTransform({
-                apiKey,
+                imageCredential,
                 model,
                 prompt: aiPrompt,
                 draft,
@@ -107,7 +107,7 @@ export function useEditorController({
         } finally {
             setAiLoading(false);
         }
-    }, [adjustments, aiPrompt, apiKey, commitDraft, draft, isCanvasReady, maskImage, model, referenceImages]);
+    }, [adjustments, aiPrompt, imageCredential, commitDraft, draft, isCanvasReady, maskImage, model, referenceImages]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -147,7 +147,7 @@ export function useEditorController({
 type EditImage = (input: EditImageInput) => Promise<string | EditImageResult>;
 
 export interface RunEditorAiTransformOptions {
-    apiKey: string;
+    imageCredential: string;
     model: ImageModelSlug;
     prompt: string;
     draft: EditorDraft;
@@ -160,7 +160,7 @@ export interface RunEditorAiTransformOptions {
 }
 
 export async function runEditorAiTransform({
-    apiKey,
+    imageCredential,
     model,
     prompt,
     draft,
@@ -179,10 +179,14 @@ export async function runEditorAiTransform({
         render,
     });
     const editResult = normalizeEditImageResult(await editImage({
-        apiKey,
+        credential: imageCredential,
         model,
         prompt: trimmedPrompt,
         sourceImage: editInput.sourceImage,
+        sourceDimensions: {
+            width: editInput.targetPlan.targetBounds.width,
+            height: editInput.targetPlan.targetBounds.height,
+        },
         compositionContextImage: editInput.compositionContextImage,
         referenceImages: editInput.referenceImages,
         maskImage,

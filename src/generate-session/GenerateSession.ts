@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
+import type { LineageStore } from '../lineage/LineageStore';
+import { readGenerateLineageImageModel } from '../lineage/generateLineageMetadata';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
 import {
     buildActiveImageModelControls,
@@ -11,12 +13,17 @@ import {
     type GptImage2Controls,
     type ImageModelArchiveFields,
     type NanoBananaProControls,
+    type QwenImage2_1Controls,
+    type Flux2Klein4bControls,
 } from '../image-models/ImageModelControls';
 import { storage, type StorageProvider } from '../services/StorageService';
 import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    QWEN_IMAGE_2_1_IMAGE_MODEL,
+    FLUX_2_KLEIN_4B_IMAGE_MODEL,
+    assertNever,
     isImageModelSlug,
     type ImageModelSlug,
 } from '../utils/openaiModels';
@@ -47,12 +54,16 @@ export interface GenerateDraft {
     palette: string;
     gptImage2: GptImage2DraftControls;
     nanoBananaPro: NanoBananaProDraftControls;
+    qwenImage2_1: QwenImage2_1DraftControls;
+    flux2Klein4b: Flux2Klein4bDraftControls;
     isSaved: boolean;
 }
 
 export type GptImage2DraftControls = GptImage2Controls;
 
 export type NanoBananaProDraftControls = NanoBananaProControls;
+export type QwenImage2_1DraftControls = QwenImage2_1Controls;
+export type Flux2Klein4bDraftControls = Flux2Klein4bControls;
 
 export interface GenerateLineageSource {
     archiveImageId: string;
@@ -111,6 +122,8 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
     palette: 'none',
     gptImage2: getDefaultImageModelControls(OPENAI_IMAGE_MODEL),
     nanoBananaPro: getDefaultImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL),
+    qwenImage2_1: getDefaultImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL),
+    flux2Klein4b: getDefaultImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL),
     isSaved: false,
 };
 
@@ -159,6 +172,8 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             palette: image.palette || 'none',
             gptImage2: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
             nanoBananaPro: sanitizeArchiveImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, image),
+            qwenImage2_1: sanitizeArchiveImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, image),
+            flux2Klein4b: sanitizeArchiveImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, image),
             isSaved: false,
             ...draftOverrides,
         }));
@@ -351,6 +366,34 @@ export function createGenerateSessionStore(deps: CreateGenerateSessionStoreDeps 
 
 export const generateSessionStore = createGenerateSessionStore();
 
+export async function transferSimilarFromArchive(
+    image: ArchiveImage,
+    sessionStore: Pick<GenerateSessionStore, 'transferFromArchive'>,
+    lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'getById'>,
+): Promise<void> {
+    if (image.model !== QWEN_IMAGE_2_1_IMAGE_MODEL) {
+        await sessionStore.transferFromArchive(image);
+        return;
+    }
+
+    const steps = await lineageStore.getByArchiveImageId(image.id);
+    const visited = new Set<string>();
+    let step = steps.at(-1) ?? null;
+    while (step && !visited.has(step.id)) {
+        visited.add(step.id);
+        if (step.stepType === 'generation' || step.stepType === 'reference-generation') {
+            const imageModel = readGenerateLineageImageModel(step.metadata);
+            if (imageModel?.slug === QWEN_IMAGE_2_1_IMAGE_MODEL) {
+                await sessionStore.transferFromArchive(image, undefined, { qwenImage2_1: imageModel.controls });
+                return;
+            }
+        }
+        step = step.parentStepId ? await lineageStore.getById(step.parentStepId) : null;
+    }
+
+    await sessionStore.transferFromArchive(image);
+}
+
 function getDefaultLocalStorage(): Storage {
     if (typeof window !== 'undefined') {
         return window.localStorage;
@@ -414,24 +457,38 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
         palette: typeof draft.palette === 'string' ? draft.palette : DEFAULT_GENERATE_DRAFT.palette,
         gptImage2: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, draft.gptImage2, legacyGptImage2Controls),
         nanoBananaPro: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, draft.nanoBananaPro, legacyNanoBananaProControls),
+        qwenImage2_1: sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, draft.qwenImage2_1),
+        flux2Klein4b: sanitizeImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, draft.flux2Klein4b),
         isSaved: typeof draft.isSaved === 'boolean' ? draft.isSaved : DEFAULT_GENERATE_DRAFT.isSaved,
     };
 };
 
 export function getActiveGenerateControls(draft: GenerateDraft) {
-    if (draft.model === NANO_BANANA_PRO_IMAGE_MODEL) {
-        return buildActiveImageModelControls(draft.model, draft.nanoBananaPro);
+    switch (draft.model) {
+        case OPENAI_IMAGE_MODEL:
+            return buildActiveImageModelControls(draft.model, draft.gptImage2);
+        case NANO_BANANA_PRO_IMAGE_MODEL:
+            return buildActiveImageModelControls(draft.model, draft.nanoBananaPro);
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+            return buildActiveImageModelControls(draft.model, draft.qwenImage2_1);
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return buildActiveImageModelControls(draft.model, draft.flux2Klein4b);
+        default: return assertNever(draft.model);
     }
-
-    return buildActiveImageModelControls(draft.model, draft.gptImage2);
 }
 
 export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModelArchiveFields {
-    if (draft.model === NANO_BANANA_PRO_IMAGE_MODEL) {
-        return buildImageModelArchiveFields(draft.model, draft.nanoBananaPro);
+    switch (draft.model) {
+        case OPENAI_IMAGE_MODEL:
+            return buildImageModelArchiveFields(draft.model, draft.gptImage2);
+        case NANO_BANANA_PRO_IMAGE_MODEL:
+            return buildImageModelArchiveFields(draft.model, draft.nanoBananaPro);
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+            return buildImageModelArchiveFields(draft.model, draft.qwenImage2_1);
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return buildImageModelArchiveFields(draft.model, draft.flux2Klein4b);
+        default: return assertNever(draft.model);
     }
-
-    return buildImageModelArchiveFields(draft.model, draft.gptImage2);
 }
 
 export const getImageModelDraftKey = resolveImageModelDraftKey;

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiCostLedger, ArchiveLayerStack } from '../db/types';
 import type { EditImageInput } from '../image-workflow/ImageWorkflow';
-import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import type { AiTransformRenderer } from './aiTransform';
 import type { EditorAdjustments, EditorDraft } from './layers';
 import { pushHistory, redoHistory, undoHistory, updateLayer } from './layers';
@@ -32,7 +32,7 @@ describe('Editor controller AI transform flow', () => {
         const maskImage = new File(['mask'], 'mask.png', { type: 'image/png' });
 
         const result = await runEditorAiTransform({
-            apiKey: 'sk-test',
+            imageCredential: 'sk-test',
             model: OPENAI_IMAGE_MODEL,
             prompt: '  replace the jacket  ',
             draft,
@@ -46,10 +46,11 @@ describe('Editor controller AI transform flow', () => {
 
         expect(render).toHaveBeenCalledTimes(2);
         expect(editImage).toHaveBeenCalledWith(expect.objectContaining({
-            apiKey: 'sk-test',
+            credential: 'sk-test',
             model: OPENAI_IMAGE_MODEL,
             prompt: 'replace the jacket',
             sourceImage: expect.any(Blob),
+            sourceDimensions: { width: 200, height: 220 },
             compositionContextImage: expect.any(File),
             referenceImages,
             maskImage,
@@ -92,6 +93,60 @@ describe('Editor controller AI transform flow', () => {
             ['ai-layer', true],
             ['layer-2', true],
         ]);
+    });
+
+    it('inserts a Qwen transform as an AI result layer with Qwen provenance', async () => {
+        const localCostLedger: ApiCostLedger = {
+            version: 1,
+            currency: 'USD',
+            items: [{
+                id: 'qwen-edit',
+                kind: 'image-edit',
+                operation: 'image-edit',
+                provider: 'local',
+                model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+                label: 'AI edit',
+                status: 'calculated',
+                currency: 'USD',
+                amountUsd: 0,
+                note: 'Local inference — no API charge.',
+            }],
+        };
+        const editImage = vi.fn(async () => ({
+            imageUrl: 'data:image/png;base64,qwen-result',
+            costLedger: localCostLedger,
+        }));
+        const result = await runEditorAiTransform({
+            imageCredential: 'http://127.0.0.1:1234',
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            prompt: 'replace the jacket',
+            draft: createDraft(createLayerStack(), ['layer-1']),
+            adjustments,
+            referenceImages: [],
+            makeId: () => 'qwen-layer',
+            editImage,
+            render: createRecordingRenderer(),
+        });
+
+        expect(editImage).toHaveBeenCalledWith(expect.objectContaining({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            sourceDimensions: { width: 200, height: 220 },
+        }));
+        expect(result.draft.layerStack.layers.find((layer) => layer.id === 'qwen-layer')).toMatchObject({
+            kind: 'ai-result',
+            visible: true,
+            width: 200,
+            height: 220,
+        });
+        expect(result.draft.layerStack.layers.find((layer) => layer.id === 'layer-1')?.visible).toBe(false);
+        expect(result.provenance?.aiEditModel).toBe(QWEN_IMAGE_2_1_IMAGE_MODEL);
+        expect(buildEditorSaveContext({
+            isCopy: true,
+            references: [],
+            adjustments,
+            draft: result.draft,
+            aiTransformProvenance: result.provenance,
+        }).costLedger).toEqual(localCostLedger);
     });
 
     it('drops stale save provenance after undoing the AI result layer', async () => {
@@ -163,7 +218,7 @@ describe('Editor controller AI transform flow', () => {
 
 async function runTransform(draft: EditorDraft) {
     return runEditorAiTransform({
-        apiKey: 'sk-test',
+        imageCredential: 'sk-test',
         model: OPENAI_IMAGE_MODEL,
         prompt: 'replace the jacket',
         draft,

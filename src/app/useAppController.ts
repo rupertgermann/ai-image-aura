@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useArchiveController } from '../archive/useArchiveController';
 import { recoverArchiveMetadataFromManifests } from '../archive/recoverArchiveMetadata';
 import type { ArchiveImage } from '../db/types';
-import { generateSessionStore } from '../generate-session/GenerateSession';
+import { generateSessionStore, transferSimilarFromArchive } from '../generate-session/GenerateSession';
 import { useAppNotifications } from './useAppNotifications';
 import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
@@ -18,11 +18,13 @@ export function useAppController() {
         currentView,
         apiKey,
         googleApiKey,
+        localServerUrl,
         completionNotificationsEnabled,
         changeView,
-        getKey,
+        getCredential,
         updateApiKey,
         updateGoogleApiKey,
+        updateLocalServerUrl,
         updateCompletionNotificationsEnabled,
     } = useAppPreferences();
     const { toasts, addToast, removeToast, notifyError } = useAppNotifications();
@@ -160,7 +162,7 @@ export function useAppController() {
 
     const createSimilar = useCallback(async (image: ArchiveImage) => {
         try {
-            await generateSessionStore.transferFromArchive(image);
+            await transferSimilarFromArchive(image, generateSessionStore, lineageStore);
             changeView('generate');
             addToast('Settings & references transferred', 'info');
         } catch (error) {
@@ -238,7 +240,7 @@ export function useAppController() {
         forkFromLineageStep,
         generateViewProps: {
             apiKey,
-            getProviderKey: getKey,
+            getProviderCredential: getCredential,
             onSaveImage: saveImage,
             completionNotificationsEnabled,
             completionNotificationPort: browserCompletionNotificationPort,
@@ -260,16 +262,19 @@ export function useAppController() {
         editorViewProps: {
             image: editingImage,
             replay: editorReplay,
-            getProviderKey: getKey,
+            getProviderCredential: getCredential,
             onSave: handleSaveEditedImage,
         },
         settingsViewProps: {
             apiKey,
             googleApiKey,
+            localServerUrl,
+            getProviderCredential: getCredential,
             completionNotificationsEnabled,
             completionNotificationReadiness,
             onApiKeyChange: updateApiKey,
             onGoogleApiKeyChange: updateGoogleApiKey,
+            onLocalServerUrlChange: updateLocalServerUrl,
             onCompletionNotificationsChange: changeCompletionNotificationsEnabled,
         },
     };

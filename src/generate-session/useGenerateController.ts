@@ -15,6 +15,7 @@ import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResu
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
+import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import { promptRefiner } from '../autopilot/PromptRefiner';
 import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
@@ -24,7 +25,7 @@ import {
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
 import { dataURLtoFile } from '../utils/file';
-import { resolveImageModelConfig } from '../utils/openaiModels';
+import { getProviderLabel, isReasoningModelSlug, LOCAL_PROVIDER, resolveImageModelConfig, resolveReasoningModelConfig } from '../utils/openaiModels';
 
 export type { GenerateResultSlot };
 
@@ -45,7 +46,7 @@ interface AutopilotProgressState {
 }
 
 interface UseGenerateControllerOptions {
-    apiKey: string | null;
+    imageCredential: string | null;
     reasoningApiKey?: string | null;
     reasoningModel?: string;
     draft: GenerateDraft;
@@ -248,6 +249,7 @@ export async function saveGenerateResultSlots({
             lineageStore,
             sessionStore,
             lineageSource: runLineageSource,
+            runDraft: runDraft ?? draft,
         });
         nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, archiveImageId);
     }
@@ -348,7 +350,7 @@ function createAutopilotCompletionNotification(result: AutopilotSessionResult): 
 }
 
 export function useGenerateController({
-    apiKey,
+    imageCredential,
     reasoningApiKey,
     reasoningModel,
     draft,
@@ -410,8 +412,8 @@ export function useGenerateController({
     }, [replaceReferences, session]);
 
     const generate = useCallback(async () => {
-        if (!apiKey) {
-            setError('Please set the selected image model API key in Settings first.');
+        if (!imageCredential) {
+            setError(missingImageCredentialMessage(draft.model));
             return;
         }
 
@@ -437,7 +439,7 @@ export function useGenerateController({
 
         try {
             const controls = getActiveGenerateControls(draft);
-            const usedReferenceImages = referenceImages.slice();
+            const usedReferenceImages = buildImageModelGenerateReferenceRunPlan(draft.model, referenceImages).providerReferenceImages.slice();
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
             const onPartialImage = shouldStreamGeneratePartials(draft)
@@ -448,7 +450,7 @@ export function useGenerateController({
                 serializeReferenceFiles: workflow.serializeReferences,
             });
             const results = await workflow.generate({
-                apiKey,
+                credential: imageCredential,
                 model: draft.model,
                 prompt: draft.prompt,
                 quality: controls.quality,
@@ -514,7 +516,7 @@ export function useGenerateController({
             }
             setLoading(false);
         }
-    }, [apiKey, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
+    }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
     const runAutopilot = useCallback(async (input: {
         goal: string;
@@ -522,13 +524,14 @@ export function useGenerateController({
         satisfactionThreshold?: number;
         initialCostLedger?: ApiCostLedger;
     }) => {
-        if (!apiKey) {
-            setError('Please set the selected image model API key in Settings first.');
+        if (!imageCredential) {
+            setError(missingImageCredentialMessage(draft.model));
             return null;
         }
 
         if (!reasoningApiKey) {
-            setError('Please set the selected reasoning model API key in Settings first.');
+            const provider = resolveReasoningModelConfig(isReasoningModelSlug(reasoningModel) ? reasoningModel : undefined).provider;
+            setError(`Please set the ${getProviderLabel(provider)} API key for the reasoning model in Settings first.`);
             return null;
         }
 
@@ -557,7 +560,7 @@ export function useGenerateController({
             const runReferenceImages = referenceImages.slice();
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
-                apiKey,
+                imageCredential,
                 reasoningApiKey,
                 reasoningModel,
                 draft,
@@ -605,7 +608,7 @@ export function useGenerateController({
                 setCurrentResult(outcome.result.bestIteration.imageDataUrl);
                 setCurrentBatchResults([bestSlot]);
                 setCurrentResultReferences(usedReferences);
-                setCurrentRunDraft(null);
+                setCurrentRunDraft(outcome.runDraft);
                 setCurrentRunLineageSource(lineageSource);
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
@@ -614,7 +617,7 @@ export function useGenerateController({
                 await session.saveCurrentBatch({
                     results: [bestSlot],
                     references: usedReferences,
-                    draft: null,
+                    draft: outcome.runDraft,
                     lineageSource,
                 });
             }
@@ -658,7 +661,7 @@ export function useGenerateController({
             autopilotSessionRef.current = null;
             setLoading(false);
         }
-    }, [apiKey, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
+    }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();
@@ -842,5 +845,14 @@ function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {
         ...draft,
         gptImage2: { ...draft.gptImage2 },
         nanoBananaPro: { ...draft.nanoBananaPro },
+        qwenImage2_1: { ...draft.qwenImage2_1 },
+        flux2Klein4b: { ...draft.flux2Klein4b },
     };
+}
+
+function missingImageCredentialMessage(model: GenerateDraft['model']): string {
+    const provider = resolveImageModelConfig(model).provider;
+    return provider === LOCAL_PROVIDER
+        ? 'Please set the Local server URL in Settings first.'
+        : `Please set the ${getProviderLabel(provider)} API key in Settings first.`;
 }

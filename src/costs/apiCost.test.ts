@@ -9,6 +9,26 @@ import {
 } from './apiCost';
 
 describe('apiCost', () => {
+    it('records local image inference as a calculated zero-cost call', () => {
+        const ledger = buildImageCostLedger({
+            provider: 'local',
+            model: 'qwen-image-2.1',
+            operation: 'image-generation',
+        });
+
+        expect(ledger.items[0]).toMatchObject({
+            status: 'calculated',
+            amountUsd: 0,
+            note: 'Local inference — no API charge.',
+        });
+        expect(ledger.items[0]).not.toHaveProperty('pricing');
+        expect(calculateApiCostTotals(ledger)).toMatchObject({
+            status: 'calculated',
+            totalUsd: 0,
+            imageGenerationTotalUsd: 0,
+        });
+    });
+
     it('calculates GPT Image cost from image usage tokens', () => {
         const ledger = buildImageCostLedger({
             provider: 'openai',

@@ -7,9 +7,28 @@ import {
     parseLineageManifest,
 } from './ArchiveManifest';
 import type { ArchiveLayerStack } from '../db/types';
-import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('ArchiveManifest', () => {
+    it('restores Qwen archive images and typed generation lineage from ZIP manifests', () => {
+        const image = createManifestImage({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL, quality: '2K', aspectRatio: '3:4', background: 'transparent',
+            width: 1792, height: 2400,
+        });
+        const step = createLineageStep({
+            id: 'qwen-step', stepType: 'generation',
+            metadata: {
+                ...createTypedGenerateMetadata(), model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+                imageModel: { slug: QWEN_IMAGE_2_1_IMAGE_MODEL, controls: {
+                    aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3,
+                } },
+            },
+        });
+        expect(parseArchiveManifest({ version: 1, images: [image] }).images[0]).toMatchObject(image);
+        expect(parseLineageManifest({ version: 1, steps: [step] }).steps[0].metadata.imageModel).toEqual(
+            step.metadata.imageModel,
+        );
+    });
     it('accepts the existing archive manifest version and preserves stable layer ids', () => {
         const manifest = parseArchiveManifest({
             version: ARCHIVE_MANIFEST_VERSION,

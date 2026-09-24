@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+    LOCAL_SERVER_URL_STORAGE_KEY,
     PROVIDER_API_KEY_STORAGE_KEYS,
-    createProviderKeyResolver,
+    createProviderCredentialResolver,
+    normalizeLocalServerUrl,
     readProviderApiKey,
 } from './providerKeys';
 
-describe('providerKeys', () => {
+describe('provider credentials', () => {
     it('keeps OpenAI and Google keys in distinct local storage slots', () => {
         expect(PROVIDER_API_KEY_STORAGE_KEYS.openai).toBe('aura_openapi_key');
         expect(PROVIDER_API_KEY_STORAGE_KEYS.google).toBe('aura_google_api_key');
@@ -43,13 +45,36 @@ describe('providerKeys', () => {
     });
 
     it('resolves empty strings as null', () => {
-        const resolver = createProviderKeyResolver({
+        const resolver = createProviderCredentialResolver({
             openai: '   ',
             google: 'gemini-key',
+            local: '',
         });
 
-        expect(resolver.getKey('openai')).toBeNull();
-        expect(resolver.getKey('google')).toBe('gemini-key');
+        expect(resolver.getCredential('openai')).toBeNull();
+        expect(resolver.getCredential('google')).toBe('gemini-key');
+        expect(resolver.getCredential('local')).toBeNull();
+    });
+
+    it('has a dedicated Local server URL slot and resolves a cleaned saved URL', () => {
+        expect(LOCAL_SERVER_URL_STORAGE_KEY).toBe('aura_local_server_url');
+        expect(LOCAL_SERVER_URL_STORAGE_KEY).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.openai);
+        expect(LOCAL_SERVER_URL_STORAGE_KEY).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.google);
+        expect(createProviderCredentialResolver({
+            openai: null,
+            google: null,
+            local: '  http://127.0.0.1:1234///  ',
+        }).getCredential('local')).toBe('http://127.0.0.1:1234');
+    });
+
+    it('rejects invalid Local server URLs before they can resolve as credentials', () => {
+        expect(normalizeLocalServerUrl('ftp://127.0.0.1:1234')).toBeNull();
+        expect(normalizeLocalServerUrl('http://')).toBeNull();
+        expect(createProviderCredentialResolver({
+            openai: null,
+            google: null,
+            local: 'file:///tmp/server',
+        }).getCredential('local')).toBeNull();
     });
 });
 

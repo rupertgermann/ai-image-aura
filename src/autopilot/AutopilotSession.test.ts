@@ -54,7 +54,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             reasoningModel: GEMINI_FLASH_REASONING_MODEL,
             maxIterations: 3,
             satisfactionThreshold: 90,
@@ -69,7 +70,10 @@ describe('AutopilotSession', () => {
         expect(result.status).toBe('max-iterations');
         expect(result.bestIteration).toEqual(expect.objectContaining({ iterationNumber: 2, score: 88, prompt: 'prompt 2' }));
         expect(generate).toHaveBeenCalledTimes(3);
+        expect(generate).toHaveBeenCalledWith(expect.objectContaining({ credential: 'key' }));
+        expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'reasoning-key' }));
         expect(refine).toHaveBeenCalledTimes(2);
+        expect(refine).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'reasoning-key' }));
         expect(callbacks.onIterationComplete).toHaveBeenCalledTimes(3);
         expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 2, 2]);
         await expect(lineage.getChildren('step-1')).resolves.toEqual([
@@ -111,7 +115,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 2,
             satisfactionThreshold: 90,
             generate: vi.fn()
@@ -137,7 +142,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 1,
             satisfactionThreshold: 90,
             generate: vi.fn().mockResolvedValueOnce({
@@ -183,7 +189,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 1,
             satisfactionThreshold: 90,
             initialCostLedger,
@@ -232,7 +239,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings,
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 2,
             satisfactionThreshold: 90,
             generate,
@@ -260,7 +268,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 4,
             satisfactionThreshold: 90,
             generate,
@@ -281,7 +290,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 4,
             satisfactionThreshold: 90,
             generate: vi.fn().mockResolvedValueOnce('data:image/png;base64,one'),
@@ -310,7 +320,8 @@ describe('AutopilotSession', () => {
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
-            apiKey: 'key',
+            imageCredential: 'key',
+            reasoningApiKey: 'reasoning-key',
             maxIterations: 3,
             satisfactionThreshold: 90,
             generate: vi.fn()
@@ -343,8 +354,8 @@ function createStore(): LineageStore {
 }
 
 function createSettings(
-    overrides: Partial<Omit<GenerateImageInput, 'apiKey' | 'prompt'>> = {},
-): Omit<GenerateImageInput, 'apiKey' | 'prompt'> {
+    overrides: Partial<Omit<GenerateImageInput, 'credential' | 'prompt'>> = {},
+): Omit<GenerateImageInput, 'credential' | 'prompt'> {
     return {
         model: OPENAI_IMAGE_MODEL,
         quality: 'high' as const,

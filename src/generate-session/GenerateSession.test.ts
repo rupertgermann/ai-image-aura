@@ -1,8 +1,118 @@
 import { describe, expect, it } from 'vitest';
 import type { StorageProvider } from '../services/StorageService';
-import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateBatchSnapshot } from './GenerateSession';
+import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, getActiveGenerateArchiveFields, getActiveGenerateControls, sanitizeGenerateDraft, transferSimilarFromArchive, type GenerateBatchSnapshot } from './GenerateSession';
+import type { LineageStep } from '../lineage/LineageStore';
 
 describe('GenerateSession draft migration', () => {
+    it('Create Similar restores the saved Qwen batch size from generation lineage', async () => {
+        const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider() });
+        const image = {
+            id: 'saved-qwen-batch-result', url: 'data:image/png;base64,AA', prompt: 'cutout',
+            model: 'qwen-image-2.1', quality: '2K', aspectRatio: '3:4', background: 'transparent',
+            timestamp: '2026-09-22T10:00:00.000Z',
+        };
+        const generationStep: LineageStep = {
+            id: 'generation-step', archiveImageId: image.id, parentStepId: null,
+            stepType: 'generation', timestamp: image.timestamp,
+            metadata: { imageModel: { slug: 'qwen-image-2.1', controls: {
+                aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3,
+            } } },
+        };
+        const laterEdit: LineageStep = {
+            ...generationStep, id: 'later-edit', parentStepId: generationStep.id,
+            stepType: 'manual-edit', timestamp: '2026-09-22T11:00:00.000Z',
+            metadata: {},
+        };
+
+        await transferSimilarFromArchive(image, store, {
+            getByArchiveImageId: async () => [generationStep, laterEdit],
+            getById: async (stepId) => stepId === generationStep.id ? generationStep : null,
+        });
+
+        expect(store.readDraft()).toMatchObject({
+            model: 'qwen-image-2.1', prompt: 'cutout',
+            qwenImage2_1: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3 },
+        });
+        expect(store.loadLineageSource()).toEqual({ archiveImageId: image.id });
+    });
+
+    it('Create Similar follows an Editor copy to its source Qwen generation controls', async () => {
+        const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider() });
+        const copiedImage = {
+            id: 'edited-copy', url: 'data:image/png;base64,edited', prompt: 'edited cutout',
+            model: 'qwen-image-2.1', quality: '2K', aspectRatio: '3:4', background: 'transparent',
+            timestamp: '2026-09-23T10:00:00.000Z',
+        };
+        const generationStep: LineageStep = {
+            id: 'source-generation', archiveImageId: 'source-image', parentStepId: null,
+            stepType: 'generation', timestamp: '2026-09-22T10:00:00.000Z',
+            metadata: { imageModel: { slug: 'qwen-image-2.1', controls: {
+                aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3,
+            } } },
+        };
+        const copyStep: LineageStep = {
+            id: 'copy-step', archiveImageId: copiedImage.id, parentStepId: generationStep.id,
+            stepType: 'save-as-copy', timestamp: copiedImage.timestamp, metadata: {},
+        };
+        const lineage = {
+            getByArchiveImageId: async (archiveImageId: string) => archiveImageId === copiedImage.id ? [copyStep] : [],
+            getById: async (stepId: string) => stepId === generationStep.id ? generationStep : null,
+        };
+
+        await transferSimilarFromArchive(copiedImage, store, lineage);
+
+        expect(store.readDraft()).toMatchObject({
+            model: 'qwen-image-2.1', prompt: 'edited cutout',
+            qwenImage2_1: { aspectRatio: '3:4', imageSize: '2K', background: 'transparent', batchSize: 3 },
+        });
+        expect(store.loadLineageSource()).toEqual({ archiveImageId: copiedImage.id });
+    });
+    it('keeps Qwen controls in the draft and restores them from an archive image', async () => {
+        const draft = sanitizeGenerateDraft({
+            ...DEFAULT_GENERATE_DRAFT,
+            model: 'qwen-image-2.1',
+            qwenImage2_1: { aspectRatio: '9:16', imageSize: '2K', background: 'transparent', batchSize: 3 },
+        });
+        expect(draft.qwenImage2_1).toEqual({
+            aspectRatio: '9:16', imageSize: '2K', background: 'transparent', batchSize: 3,
+        });
+        expect(getActiveGenerateControls(draft)).toMatchObject({
+            aspectRatio: '9:16', imageSize: '2K', background: 'transparent', batchSize: 3,
+        });
+        expect(getActiveGenerateArchiveFields(draft)).toEqual({
+            quality: '2K', aspectRatio: '9:16', background: 'transparent', width: 1536, height: 2752,
+        });
+
+        const values = new Map<string, string>();
+        const localStorage = {
+            getItem: (key: string) => values.get(key) ?? null,
+            setItem: (key: string, value: string) => { values.set(key, value); },
+            removeItem: (key: string) => { values.delete(key); },
+        } as Storage;
+        const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider(), localStorage });
+        store.writeDraft(draft);
+        expect(createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider(), localStorage }).readDraft().qwenImage2_1).toEqual(draft.qwenImage2_1);
+        await store.transferFromArchive({
+            id: 'qwen-image', url: 'data:image/png;base64,AA', prompt: 'cut out', model: 'qwen-image-2.1',
+            quality: '2K', aspectRatio: '9:16', background: 'transparent', timestamp: '2026-09-22',
+        });
+        expect(store.readDraft().qwenImage2_1).toMatchObject({
+            aspectRatio: '9:16', imageSize: '2K', background: 'transparent',
+        });
+        expect(sanitizeGenerateDraft({ ...draft, qwenImage2_1: undefined }).qwenImage2_1).toEqual(
+            DEFAULT_GENERATE_DRAFT.qwenImage2_1,
+        );
+    });
+
+    it('adds default Qwen controls to legacy persisted batch drafts', async () => {
+        const blobStorage = new InMemoryStorageProvider();
+        await blobStorage.save('generate_current_batch', JSON.stringify({
+            results: [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,AA' }],
+            draft: { ...DEFAULT_GENERATE_DRAFT, qwenImage2_1: undefined },
+        }));
+        const batch = await createGenerateSessionStore({ blobStorage }).loadCurrentBatch();
+        expect(batch?.draft?.qwenImage2_1).toEqual(DEFAULT_GENERATE_DRAFT.qwenImage2_1);
+    });
     it('migrates legacy flat controls into the gpt-image-2 block', () => {
         expect(sanitizeGenerateDraft({
             prompt: 'legacy prompt',

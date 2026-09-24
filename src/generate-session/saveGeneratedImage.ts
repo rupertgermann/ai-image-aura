@@ -1,13 +1,14 @@
 import type { ArchiveImage } from '../db/types';
 import { buildGenerateLineageMetadata } from '../lineage/generateLineageMetadata';
 import type { LineageStore } from '../lineage/LineageStore';
-import type { GenerateLineageSource, GenerateSessionStore } from './GenerateSession';
+import type { GenerateDraft, GenerateLineageSource, GenerateSessionStore } from './GenerateSession';
 
 export interface SaveGeneratedImageDeps {
     saveImage: (image: ArchiveImage) => Promise<ArchiveImage>;
     lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
     lineageSource?: GenerateLineageSource | null;
+    runDraft?: GenerateDraft | null;
 }
 
 export async function saveGeneratedImage(image: ArchiveImage, deps: SaveGeneratedImageDeps): Promise<ArchiveImage> {
@@ -24,6 +25,7 @@ export async function saveGeneratedImage(image: ArchiveImage, deps: SaveGenerate
         metadata: buildGenerateLineageMetadata({
             image: savedImage,
             sourceArchiveImageId: lineageSource?.archiveImageId ?? null,
+            runDraft: deps.runDraft,
         }),
     });
 

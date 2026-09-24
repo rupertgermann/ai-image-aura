@@ -1,15 +1,22 @@
 import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
+import type { GenerateDraft } from '../generate-session/GenerateSession';
 import {
     buildImageModelArchiveFields,
     sanitizeArchiveImageModelControls,
     sanitizeImageModelControls,
     type GptImage2Controls,
     type NanoBananaProControls,
+    type QwenImage2_1Controls,
+    type Flux2Klein4bControls,
+    type ImageModelControls,
 } from '../image-models/ImageModelControls';
 import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    QWEN_IMAGE_2_1_IMAGE_MODEL,
+    FLUX_2_KLEIN_4B_IMAGE_MODEL,
+    assertNever,
     isImageModelSlug,
     type ImageModelSlug,
 } from '../utils/openaiModels';
@@ -32,6 +39,14 @@ export type GenerateLineageImageModel =
     | {
         slug: typeof NANO_BANANA_PRO_IMAGE_MODEL;
         controls: NanoBananaProControls;
+    }
+    | {
+        slug: typeof QWEN_IMAGE_2_1_IMAGE_MODEL;
+        controls: QwenImage2_1Controls;
+    }
+    | {
+        slug: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL;
+        controls: Flux2Klein4bControls;
     };
 
 export interface GenerateLineageMetadata extends Record<string, unknown> {
@@ -59,9 +74,10 @@ export interface GenerateLineageMetadata extends Record<string, unknown> {
 export function buildGenerateLineageMetadata(input: {
     image: ArchiveImage;
     sourceArchiveImageId: string | null;
+    runDraft?: GenerateDraft | null;
 }): GenerateLineageMetadata {
     const model = isImageModelSlug(input.image.model) ? input.image.model : DEFAULT_IMAGE_MODEL;
-    const controls = sanitizeArchiveImageModelControls(model, input.image);
+    const controls = getGenerateLineageControls(model, input.image, input.runDraft);
     const archiveFields = buildImageModelArchiveFields(model, controls);
     const width = input.image.width ?? archiveFields.width;
     const height = input.image.height ?? archiveFields.height;
@@ -80,7 +96,7 @@ export function buildGenerateLineageMetadata(input: {
         background: archiveFields.background,
         width,
         height,
-        imageSize: model === NANO_BANANA_PRO_IMAGE_MODEL ? archiveFields.quality : null,
+        imageSize: getLineageImageSize(model, archiveFields.quality),
         style: input.image.style ?? 'none',
         lighting: input.image.lighting ?? 'none',
         palette: input.image.palette ?? 'none',
@@ -94,6 +110,23 @@ export function buildGenerateLineageMetadata(input: {
         referenceCount: referenceIds.length,
         referenceIds,
     };
+}
+
+function getGenerateLineageControls(
+    model: ImageModelSlug,
+    image: ArchiveImage,
+    runDraft: GenerateDraft | null | undefined,
+): ImageModelControls {
+    switch (model) {
+        case OPENAI_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
+        case NANO_BANANA_PRO_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+            return runDraft?.model === model
+                ? sanitizeImageModelControls(model, runDraft.qwenImage2_1)
+                : sanitizeArchiveImageModelControls(model, image);
+        default: return assertNever(model);
+    }
 }
 
 export function readGenerateLineageImageModel(metadata: Record<string, unknown>): GenerateLineageImageModel | null {
@@ -119,32 +152,26 @@ export function readGenerateLineageReferenceCount(metadata: Record<string, unkno
 }
 
 function buildGenerateLineageImageModel(
-    model: typeof OPENAI_IMAGE_MODEL,
-    controls: GptImage2Controls,
-): GenerateLineageImageModel;
-function buildGenerateLineageImageModel(
-    model: typeof NANO_BANANA_PRO_IMAGE_MODEL,
-    controls: NanoBananaProControls,
-): GenerateLineageImageModel;
-function buildGenerateLineageImageModel(
     model: ImageModelSlug,
-    controls: GptImage2Controls | NanoBananaProControls,
-): GenerateLineageImageModel;
-function buildGenerateLineageImageModel(
-    model: ImageModelSlug,
-    controls: GptImage2Controls | NanoBananaProControls,
+    controls: ImageModelControls,
 ): GenerateLineageImageModel {
-    if (model === NANO_BANANA_PRO_IMAGE_MODEL) {
-        return {
-            slug: model,
-            controls: sanitizeImageModelControls(model, controls),
-        };
+    switch (model) {
+        case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
+        case NANO_BANANA_PRO_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
+        case QWEN_IMAGE_2_1_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
+        default: return assertNever(model);
     }
+}
 
-    return {
-        slug: model,
-        controls: sanitizeImageModelControls(model, controls),
-    };
+export function getLineageImageSize(model: ImageModelSlug, quality: string): string | null {
+    switch (model) {
+        case OPENAI_IMAGE_MODEL: return null;
+        case NANO_BANANA_PRO_IMAGE_MODEL:
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return quality;
+        default: return assertNever(model);
+    }
 }
 
 function createReferenceId(archiveImageId: string, index: number) {

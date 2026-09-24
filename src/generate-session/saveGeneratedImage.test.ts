@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveGeneratedImage } from './saveGeneratedImage';
 import type { ArchiveImage } from '../db/types';
-import type { GenerateLineageSource } from './GenerateSession';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { DEFAULT_GENERATE_DRAFT, type GenerateDraft, type GenerateLineageSource } from './GenerateSession';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { buildGenerateReplay } from '../lineage/replayLineageStep';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -38,6 +39,34 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
 }
 
 describe('saveGeneratedImage', () => {
+    it('saves Qwen controls for exact lineage replay', async () => {
+        const lineage = createStore();
+        const image = createArchiveImage({
+            id: 'qwen-output', model: QWEN_IMAGE_2_1_IMAGE_MODEL, quality: '2K',
+            aspectRatio: '9:16', background: 'transparent', width: 1536, height: 2752,
+        });
+        const runDraft: GenerateDraft = {
+            ...DEFAULT_GENERATE_DRAFT,
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            prompt: image.prompt,
+            qwenImage2_1: { aspectRatio: '9:16' as const, imageSize: '2K' as const, background: 'transparent' as const, batchSize: 3 },
+        };
+
+        await saveGeneratedImage(image, {
+            saveImage: async (nextImage) => nextImage,
+            lineageStore: lineage,
+            sessionStore: createSessionStore(),
+            runDraft,
+        });
+        const [step] = await lineage.getByArchiveImageId(image.id);
+        expect(step.metadata).toMatchObject({
+            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
+            imageModel: { slug: QWEN_IMAGE_2_1_IMAGE_MODEL, controls: runDraft.qwenImage2_1 },
+            imageSize: '2K', background: 'transparent',
+            dimensions: { width: 1536, height: 2752 },
+        });
+        expect(buildGenerateReplay(image, step).draft.qwenImage2_1).toEqual(runDraft.qwenImage2_1);
+    });
     it('writes a generation step after a successful archive save', async () => {
         const lineage = createStore();
         const sessionStore = createSessionStore();

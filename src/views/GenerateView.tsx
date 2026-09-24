@@ -31,6 +31,8 @@ import {
 } from '../image-models/ImageModelControls';
 import {
     OPENAI_RESPONSES_MODEL,
+    LOCAL_PROVIDER,
+    getProviderLabel,
     resolveImageModelConfig,
     resolveReasoningModelConfig,
     type Provider,
@@ -38,7 +40,7 @@ import {
 } from '../utils/openaiModels';
 
 interface GenerateViewProps {
-    getProviderKey: (provider: Provider) => string | null;
+    getProviderCredential: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     completionNotificationsEnabled?: boolean;
     completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
@@ -322,7 +324,7 @@ function formatResultSummaryLineItem(item: ApiCostLineItem) {
 }
 
 const GenerateView: React.FC<GenerateViewProps> = ({
-    getProviderKey,
+    getProviderCredential,
     onSaveImage,
     completionNotificationsEnabled,
     completionNotificationPort,
@@ -346,9 +348,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     } | null>(null);
     const { prompt, model, style, lighting, palette, isSaved } = draft;
     const activeModel = resolveImageModelConfig(model);
-    const activeImageApiKey = getProviderKey(activeModel.provider);
+    const imageCredential = getProviderCredential(activeModel.provider);
     const activeReasoningModel = resolveReasoningModelConfig(reasoningModel);
-    const reasoningApiKey = getProviderKey(activeReasoningModel.provider);
+    const reasoningApiKey = getProviderCredential(activeReasoningModel.provider);
     const reasoningClient = useMemo(() => resolveReasoningClient(reasoningModel), [reasoningModel]);
     const goalPromptTranslator = useMemo(() => createGoalPromptTranslator(reasoningClient), [reasoningClient]);
     const satisfactionEvaluator = useMemo(() => createSatisfactionEvaluator(reasoningClient), [reasoningClient]);
@@ -381,7 +383,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         downloadResult,
         clear,
     } = useGenerateController({
-        apiKey: activeImageApiKey,
+        imageCredential,
         reasoningApiKey,
         reasoningModel,
         draft,
@@ -498,6 +500,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     };
 
     const maxApiCalls = maxIterations * 3;
+    const maxReasoningApiCalls = maxIterations * 2 - 1;
+    const isLocalImageModel = activeModel.provider === LOCAL_PROVIDER;
     const isAutopilotMode = mode === 'autopilot';
     const imageModelReferenceWarning = referenceRunPlan.referenceLimitMessage;
     const resultReferenceCapacityMessage = getImageModelReferenceCapacityMessage(model, referenceImages.length, 'generation');
@@ -638,7 +642,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                             <div className="autopilot-disclosure glass-panel">
                                 <strong>Cost disclosure</strong>
-                                <p>Up to {maxIterations} iterations and roughly {maxApiCalls} API calls using {activeModel.label} for images and {activeReasoningModel.label} for reasoning.</p>
+                                <p>{isLocalImageModel
+                                    ? `Up to ${maxIterations} local image calls with no API charge, and ${maxReasoningApiCalls} ${activeReasoningModel.label} reasoning API calls.`
+                                    : `Up to ${maxIterations} iterations and roughly ${maxApiCalls} API calls using ${activeModel.label} for images and ${activeReasoningModel.label} for reasoning.`}</p>
                             </div>
 
                         </div>
@@ -755,7 +761,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <>
                             {showCostDisclosure && (
                                 <div className="autopilot-confirmation glass-panel">
-                                    <p>Confirm Autopilot run with up to {maxIterations} iterations and approximately {maxApiCalls} API calls.</p>
+                                    <p>{isLocalImageModel
+                                        ? `Confirm Autopilot run with up to ${maxIterations} local image calls (no API charge) and ${maxReasoningApiCalls} reasoning API calls.`
+                                        : `Confirm Autopilot run with up to ${maxIterations} iterations and approximately ${maxApiCalls} API calls.`}</p>
                                     <div className="autopilot-confirmation-actions">
                                         <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
                                         <button
@@ -771,7 +779,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             <button
                                 className="btn-amber"
                                 onClick={() => setShowCostDisclosure(true)}
-                                disabled={loading || !prompt.trim() || !goal.trim() || !activeImageApiKey || !reasoningApiKey}
+                                disabled={loading || !prompt.trim() || !goal.trim() || !imageCredential || !reasoningApiKey}
                                 style={{ width: '100%' }}
                             >
                                 {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -782,7 +790,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <button
                             className="btn-amber"
                             onClick={() => { void generate(); }}
-                            disabled={loading || !prompt.trim() || !activeImageApiKey}
+                            disabled={loading || !prompt.trim() || !imageCredential}
                             style={{ width: '100%' }}
                         >
                             {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -810,11 +818,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         </div>
                     )}
 
-                    {!activeImageApiKey && (
-                        <div className="error-message">{activeModel.label} API key missing. Go to Settings to configure.</div>
+                    {!imageCredential && (
+                        <div className="error-message">{activeModel.provider === LOCAL_PROVIDER
+                            ? 'Local server URL missing. Go to Settings to configure.'
+                            : `${getProviderLabel(activeModel.provider)} API key missing. Go to Settings to configure.`}</div>
                     )}
                     {isAutopilotMode && !reasoningApiKey && (
-                        <div className="error-message">{activeReasoningModel.label} API key missing. Go to Settings to configure.</div>
+                        <div className="error-message">{getProviderLabel(activeReasoningModel.provider)} API key missing for {activeReasoningModel.label}. Go to Settings to configure.</div>
                     )}
                     {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
                     {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}

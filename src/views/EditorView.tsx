@@ -7,10 +7,10 @@ import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../editor/saveEditedImage';
-import { OPENAI_IMAGE_MODEL, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
-import { getImageModelReferenceLimitMessage, getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
+import { LOCAL_PROVIDER, OPENAI_IMAGE_MODEL, getProviderLabel, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
+import { getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
 import { getImageFilesFromClipboard } from '../references/clipboard';
-import { renderAiTransformEditInput } from '../editor/aiTransform';
+import { getAiTransformReferenceWarning, renderAiTransformEditInput } from '../editor/aiTransform';
 import { classifyTransformMaskCoverage } from '../editor/transformMask';
 import type { EditorReplay } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -18,11 +18,11 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 interface EditorViewProps {
     image: ArchiveImage | null;
     replay?: EditorReplay | null;
-    getProviderKey: (provider: Provider) => string | null;
+    getProviderCredential: (provider: Provider) => string | null;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, onSave }) => {
+const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCredential, onSave }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
     const [adjustmentsOpen, setAdjustmentsOpen] = useLocalStorage('editor_adjustments_open', true);
@@ -38,7 +38,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const paintingMaskRef = useRef(false);
     const activeModel = resolveImageModelConfig(aiEditModel);
-    const activeApiKey = getProviderKey(activeModel.provider);
+    const imageCredential = getProviderCredential(activeModel.provider);
     const supportsTransformMask = imageModelSupportsTransformMask(aiEditModel);
     const {
         brightness,
@@ -96,7 +96,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
         handleDragLeave,
         handleDrop,
     } = useEditorController({
-        apiKey: activeApiKey,
+        imageCredential,
         model: aiEditModel,
         isCanvasReady: isReady,
         draft,
@@ -112,7 +112,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
         adjustments,
         onSave,
     });
-    const aiReferenceWarning = getImageModelReferenceLimitMessage(aiEditModel, referenceImages.length, 'AI transforms');
+    const aiReferenceWarning = getAiTransformReferenceWarning(aiEditModel, referenceImages.length, draft);
 
     useEffect(() => {
         if (!replay) {
@@ -485,14 +485,16 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                                 <label>MODEL</label>
                                 <div className="toggle-group">
                                     {getImageModelUiChoices().map((choice) => {
-                                        const hasKey = !!getProviderKey(choice.provider);
+                                        const available = !!getProviderCredential(choice.provider);
                                         return (
                                             <button
                                                 key={choice.slug}
                                                 className={aiEditModel === choice.slug ? 'active' : ''}
                                                 onClick={() => setAiEditModel(choice.slug)}
-                                                disabled={!hasKey}
-                                                title={hasKey ? choice.label : `Add a ${choice.provider === 'google' ? 'Google' : 'OpenAI'} API key in Settings`}
+                                                disabled={!available}
+                                                title={available ? choice.label : choice.provider === LOCAL_PROVIDER
+                                                    ? 'Save a Local server URL in Settings'
+                                                    : `Add a ${getProviderLabel(choice.provider)} API key in Settings`}
                                             >
                                                 {choice.label}
                                             </button>
@@ -507,7 +509,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                                 onChange={(e) => setAiPrompt(e.target.value)}
                                 className="aura-input"
                                 style={{ minHeight: '100px', resize: 'vertical' }}
-                                disabled={aiLoading || !activeApiKey || !isCanvasReady}
+                                disabled={aiLoading || !imageCredential || !isCanvasReady}
                             />
                             {supportsTransformMask && (
                                 <div className="transform-mask-controls">
@@ -534,7 +536,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
                             <button
                                 className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
-                                disabled={aiLoading || !aiPrompt.trim() || !activeApiKey || !isCanvasReady}
+                                disabled={aiLoading || !aiPrompt.trim() || !imageCredential || !isCanvasReady}
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
@@ -580,7 +582,9 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderKey, 
 
                             {aiError && <div className="error-message mini">{aiError}</div>}
                             {aiReferenceWarning && <div className="info-message mini">{aiReferenceWarning}</div>}
-                            {!activeApiKey && <div className="error-message mini">Set {activeModel.label} API key in Settings</div>}
+                            {!imageCredential && <div className="error-message mini">{activeModel.provider === LOCAL_PROVIDER
+                                ? 'Set Local server URL in Settings'
+                                : `Set ${getProviderLabel(activeModel.provider)} API key in Settings`}</div>}
                         </div>
                     </div>
 
