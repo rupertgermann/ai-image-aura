@@ -8,7 +8,7 @@ import { buildLineageCostLedger } from '../lineage/lineageCostLedger';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, assertNever, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug } from '../utils/openaiModels';
 import ActualParametersPanel from './ActualParametersPanel';
 import CostSummaryPanel from './CostSummaryPanel';
 import {
@@ -333,6 +333,7 @@ export function getImageDetailRequestedParameters(model: ImageModelSlug, image: 
                 { label: 'SIZE', value: image.aspectRatio, badge: false, Icon: Layout },
             ];
         case NANO_BANANA_PRO_IMAGE_MODEL:
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
             return [
                 { label: 'ASPECT', value: image.aspectRatio, badge: false, Icon: Layout },
                 { label: 'RESOLUTION', value: image.quality, badge: true, Icon: Layers },

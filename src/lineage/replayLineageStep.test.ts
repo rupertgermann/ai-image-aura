@@ -44,6 +44,7 @@ describe('replayLineageStep', () => {
                 qwenImage2_1: {
                     aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
                 },
+                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
             },
             lineageSource: {
@@ -138,6 +139,7 @@ describe('replayLineageStep', () => {
                 qwenImage2_1: {
                     aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
                 },
+                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
             },
             lineageSource: {
@@ -190,6 +192,7 @@ describe('replayLineageStep', () => {
                 qwenImage2_1: {
                     aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
                 },
+                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
             },
             lineageSource: {

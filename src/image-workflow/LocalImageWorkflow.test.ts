@@ -187,6 +187,54 @@ describe('local image workflow', () => {
         expect(JSON.parse(String(request.body)).size).toBe(size);
     });
 
+    it('routes FLUX.2 klein 4B to the local server by model id, without Qwen transparency wording', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => imageResponse(['one', 'two']));
+        const workflow = createImageWorkflow({ local: createLocalImageProvider(fetchImpl) });
+
+        const results = await workflow.generate(generateInput({
+            model: 'flux-2-klein-4b',
+            aspectRatio: '16:9',
+            imageSize: '2K',
+            background: 'transparent',
+            batchSize: 2,
+        }));
+
+        expect(fetchImpl.mock.calls[0]?.[0]).toBe(`${SERVER_URL}/v1/images/generations`);
+        expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+            model: 'flux-2-klein-4b',
+            prompt: 'a fox',
+            n: 2,
+            size: '2752x1536',
+            output_format: 'png',
+        });
+        expect(results.map((result) => result.status === 'success' && result.costLedger?.items[0]?.amountUsd)).toEqual([0, 0]);
+    });
+
+    it('caps FLUX.2 klein 4B edits at four images including target and composition context', async () => {
+        const fetchImpl = vi.fn<typeof fetch>(async () => imageResponse(['edited']));
+        const workflow = createImageWorkflow({ local: createLocalImageProvider(fetchImpl) });
+        const references = Array.from({ length: 5 }, (_, index) =>
+            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }));
+
+        await workflow.edit({
+            credential: SERVER_URL,
+            model: 'flux-2-klein-4b',
+            prompt: 'make it night',
+            sourceImage: new Blob(['source'], { type: 'image/png' }),
+            sourceDimensions: { width: 800, height: 600 },
+            compositionContextImage: new File(['context'], 'context.png', { type: 'image/png' }),
+            referenceImages: references,
+        });
+
+        const form = (fetchImpl.mock.calls[0]?.[1] as RequestInit).body as FormData;
+        expect(form.get('model')).toBe('flux-2-klein-4b');
+        expect(form.get('size')).toBe('800x576');
+        expect(form.getAll('image[]').map((image) => (image as File).name)).toEqual([
+            'edit-input.png', 'context.png', 'ref-0.png', 'ref-1.png',
+        ]);
+        expect(String(form.get('prompt'))).toBe('make it night <sd_cpp_extra_args>{"init_image":null}</sd_cpp_extra_args>');
+    });
+
     it('reports the connection, HTTP status, or unreachable URL', async () => {
         const connected = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
             data: [{ id: 'qwen-image-2.1' }, { id: 'another-local-model' }],

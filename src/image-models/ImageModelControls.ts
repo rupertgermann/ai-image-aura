@@ -5,16 +5,18 @@ import {
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
+    FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
     type ImageModelSlug,
     type NanoBananaAspectRatio,
     type NanoBananaImageSize,
     type Provider,
-    type QwenAspectRatio,
-    type QwenImageSize,
+    type LocalAspectRatio,
+    type LocalImageSize,
 } from '../utils/openaiModels';
 
 export const NANO_REFERENCE_LIMIT = 14;
+export const FLUX_2_KLEIN_REFERENCE_LIMIT = 4;
 
 export type GptImage2Controls = {
     quality: ImageQuality;
@@ -30,13 +32,19 @@ export type NanoBananaProControls = {
 };
 
 export type QwenImage2_1Controls = {
-    aspectRatio: QwenAspectRatio;
-    imageSize: QwenImageSize;
+    aspectRatio: LocalAspectRatio;
+    imageSize: LocalImageSize;
     background: 'auto' | 'transparent';
     batchSize: number;
 };
 
-export type ImageModelControls = GptImage2Controls | NanoBananaProControls | QwenImage2_1Controls;
+export type Flux2Klein4bControls = {
+    aspectRatio: LocalAspectRatio;
+    imageSize: LocalImageSize;
+    batchSize: number;
+};
+
+export type ImageModelControls = GptImage2Controls | NanoBananaProControls | QwenImage2_1Controls | Flux2Klein4bControls;
 
 export type ImageModelControlId = 'quality' | 'size' | 'background' | 'batchSize' | 'aspectRatio' | 'imageSize';
 
@@ -86,11 +94,11 @@ const IMAGE_QUALITIES = ['low', 'medium', 'high'] as const;
 const IMAGE_BACKGROUNDS = ['auto', 'opaque', 'transparent'] as const;
 const NANO_ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const;
 const NANO_IMAGE_SIZES = ['1K', '2K', '4K'] as const;
-const QWEN_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const;
-const QWEN_IMAGE_SIZES = ['1K', '2K'] as const;
+const LOCAL_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const;
+const LOCAL_IMAGE_SIZES = ['1K', '2K'] as const;
 const QWEN_BACKGROUNDS = ['auto', 'transparent'] as const;
 
-const QWEN_SIZE_TABLE: Record<QwenAspectRatio, Record<QwenImageSize, string>> = {
+const LOCAL_SIZE_TABLE: Record<LocalAspectRatio, Record<LocalImageSize, string>> = {
     '1:1': { '1K': '1024x1024', '2K': '2048x2048' },
     '4:3': { '1K': '1152x864', '2K': '2400x1792' },
     '3:4': { '1K': '864x1152', '2K': '1792x2400' },
@@ -244,21 +252,58 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
         ],
         referenceLimit: 10,
     },
+    [FLUX_2_KLEIN_4B_IMAGE_MODEL]: {
+        defaults: {
+            aspectRatio: '1:1',
+            imageSize: '1K',
+            batchSize: 1,
+        },
+        generateControls: [
+            {
+                id: 'aspectRatio', label: 'ASPECT RATIO', kind: 'select', options: [
+                    { value: '1:1', label: 'Square (1:1)' },
+                    { value: '4:3', label: 'Landscape (4:3)' },
+                    { value: '3:4', label: 'Portrait (3:4)' },
+                    { value: '3:2', label: 'Landscape (3:2)' },
+                    { value: '2:3', label: 'Portrait (2:3)' },
+                    { value: '16:9', label: 'Widescreen (16:9)' },
+                    { value: '9:16', label: 'Story (9:16)' },
+                ],
+            },
+            {
+                id: 'imageSize', label: 'RESOLUTION', kind: 'toggle', options: [
+                    { value: '1K', label: '1K' },
+                    { value: '2K', label: '2K' },
+                ],
+            },
+            {
+                id: 'batchSize', label: 'BATCH SIZE', kind: 'select', options: [
+                    { value: '1', label: '1' },
+                    { value: '2', label: '2' },
+                    { value: '3', label: '3' },
+                    { value: '4', label: '4' },
+                ],
+            },
+        ],
+        referenceLimit: FLUX_2_KLEIN_REFERENCE_LIMIT,
+    },
 } as const satisfies Record<ImageModelSlug, ImageModelControlFacts>;
 
 export function getDefaultImageModelControls(model: typeof OPENAI_IMAGE_MODEL): GptImage2Controls;
 export function getDefaultImageModelControls(model: typeof NANO_BANANA_PRO_IMAGE_MODEL): NanoBananaProControls;
 export function getDefaultImageModelControls(model: typeof QWEN_IMAGE_2_1_IMAGE_MODEL): QwenImage2_1Controls;
+export function getDefaultImageModelControls(model: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL): Flux2Klein4bControls;
 export function getDefaultImageModelControls(model: ImageModelSlug): ImageModelControls;
 export function getDefaultImageModelControls(model: ImageModelSlug): ImageModelControls {
     return { ...IMAGE_MODEL_CONTROL_FACTS[model].defaults };
 }
 
-export function getImageModelDraftKey(model: ImageModelSlug): 'gptImage2' | 'nanoBananaPro' | 'qwenImage2_1' {
+export function getImageModelDraftKey(model: ImageModelSlug): 'gptImage2' | 'nanoBananaPro' | 'qwenImage2_1' | 'flux2Klein4b' {
     switch (model) {
         case OPENAI_IMAGE_MODEL: return 'gptImage2';
         case NANO_BANANA_PRO_IMAGE_MODEL: return 'nanoBananaPro';
         case QWEN_IMAGE_2_1_IMAGE_MODEL: return 'qwenImage2_1';
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return 'flux2Klein4b';
         default: return assertNever(model);
     }
 }
@@ -305,6 +350,11 @@ export function sanitizeImageModelControls(
     fallback?: QwenImage2_1Controls,
 ): QwenImage2_1Controls;
 export function sanitizeImageModelControls(
+    model: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL,
+    value: unknown,
+    fallback?: Flux2Klein4bControls,
+): Flux2Klein4bControls;
+export function sanitizeImageModelControls(
     model: ImageModelSlug,
     value: unknown,
     fallback?: ImageModelControls,
@@ -336,9 +386,17 @@ export function sanitizeImageModelControls(
         case QWEN_IMAGE_2_1_IMAGE_MODEL: {
             const controls = asQwenControls(fallback);
             return {
-                aspectRatio: coerceQwenAspectRatio(record?.aspectRatio, controls.aspectRatio),
-                imageSize: coerceQwenImageSize(record?.imageSize, controls.imageSize),
+                aspectRatio: coerceLocalAspectRatio(record?.aspectRatio, controls.aspectRatio),
+                imageSize: coerceLocalImageSize(record?.imageSize, controls.imageSize),
                 background: coerceQwenBackground(record?.background, controls.background),
+                batchSize: coerceGptBatchSize(record?.batchSize, controls.batchSize),
+            };
+        }
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
+            const controls = asKleinControls(fallback);
+            return {
+                aspectRatio: coerceLocalAspectRatio(record?.aspectRatio, controls.aspectRatio),
+                imageSize: coerceLocalImageSize(record?.imageSize, controls.imageSize),
                 batchSize: coerceGptBatchSize(record?.batchSize, controls.batchSize),
             };
         }
@@ -349,6 +407,7 @@ export function sanitizeImageModelControls(
 export function sanitizeArchiveImageModelControls(model: typeof OPENAI_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): GptImage2Controls;
 export function sanitizeArchiveImageModelControls(model: typeof NANO_BANANA_PRO_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): NanoBananaProControls;
 export function sanitizeArchiveImageModelControls(model: typeof QWEN_IMAGE_2_1_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): QwenImage2_1Controls;
+export function sanitizeArchiveImageModelControls(model: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): Flux2Klein4bControls;
 export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): ImageModelControls;
 export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): ImageModelControls {
     switch (model) {
@@ -368,6 +427,11 @@ export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: 
                 aspectRatio: image.aspectRatio,
                 imageSize: image.quality,
                 background: image.background,
+            });
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return sanitizeImageModelControls(model, {
+                aspectRatio: image.aspectRatio,
+                imageSize: image.quality,
             });
         default: return assertNever(model);
     }
@@ -392,9 +456,16 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
         }
         case QWEN_IMAGE_2_1_IMAGE_MODEL: {
             const defaults = getDefaultImageModelControls(model);
-            if (controlId === 'aspectRatio') return coerceQwenAspectRatio(value, defaults.aspectRatio);
-            if (controlId === 'imageSize') return coerceQwenImageSize(value, defaults.imageSize);
+            if (controlId === 'aspectRatio') return coerceLocalAspectRatio(value, defaults.aspectRatio);
+            if (controlId === 'imageSize') return coerceLocalImageSize(value, defaults.imageSize);
             if (controlId === 'background') return coerceQwenBackground(value, defaults.background);
+            if (controlId === 'batchSize') return String(coerceGptBatchSize(value, defaults.batchSize));
+            return '';
+        }
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
+            const defaults = getDefaultImageModelControls(model);
+            if (controlId === 'aspectRatio') return coerceLocalAspectRatio(value, defaults.aspectRatio);
+            if (controlId === 'imageSize') return coerceLocalImageSize(value, defaults.imageSize);
             if (controlId === 'batchSize') return String(coerceGptBatchSize(value, defaults.batchSize));
             return '';
         }
@@ -435,6 +506,17 @@ export function getActiveImageModelGenerateControls(model: ImageModelSlug, contr
                 batchSize: sanitized.batchSize,
             };
         }
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
+            const sanitized = sanitizeImageModelControls(model, controls);
+            const gptDefaults = getDefaultImageModelControls(OPENAI_IMAGE_MODEL);
+            return {
+                aspectRatio: sanitized.aspectRatio,
+                imageSize: sanitized.imageSize,
+                quality: gptDefaults.quality,
+                background: gptDefaults.background,
+                batchSize: sanitized.batchSize,
+            };
+        }
         default: return assertNever(model);
     }
 }
@@ -467,11 +549,22 @@ export function buildImageModelArchiveFields(model: ImageModelSlug, controls: un
         }
         case QWEN_IMAGE_2_1_IMAGE_MODEL: {
             const sanitized = sanitizeImageModelControls(model, controls);
-            const { width, height } = getExactDimensions(QWEN_SIZE_TABLE[sanitized.aspectRatio][sanitized.imageSize]);
+            const { width, height } = getExactDimensions(LOCAL_SIZE_TABLE[sanitized.aspectRatio][sanitized.imageSize]);
             return {
                 quality: sanitized.imageSize,
                 aspectRatio: sanitized.aspectRatio,
                 background: sanitized.background,
+                width,
+                height,
+            };
+        }
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
+            const sanitized = sanitizeImageModelControls(model, controls);
+            const { width, height } = getExactDimensions(LOCAL_SIZE_TABLE[sanitized.aspectRatio][sanitized.imageSize]);
+            return {
+                quality: sanitized.imageSize,
+                aspectRatio: sanitized.aspectRatio,
+                background: 'auto',
                 width,
                 height,
             };
@@ -523,7 +616,19 @@ export function mapImageModelGenerateProviderRequest(
                 batchSize: input.batchSize,
             });
             return {
-                size: QWEN_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
+                size: LOCAL_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
+                batchSize: controls.batchSize,
+                referenceImages: referenceRunPlan.providerReferenceImages,
+            };
+        }
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
+            const controls = sanitizeImageModelControls(model, {
+                aspectRatio: input.aspectRatio,
+                imageSize: input.imageSize,
+                batchSize: input.batchSize,
+            });
+            return {
+                size: LOCAL_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
                 batchSize: controls.batchSize,
                 referenceImages: referenceRunPlan.providerReferenceImages,
             };
@@ -569,11 +674,12 @@ export function mapImageModelEditProviderRequest(
                 referenceImages: [input.sourceImage, ...referenceImages],
             };
         }
-        case QWEN_IMAGE_2_1_IMAGE_MODEL: {
-            const size = getQwenEditSize(input.sourceDimensions);
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
+            const size = getLocalEditSize(input.sourceDimensions);
             return {
                 ...(size ? { size } : {}),
-                referenceImages: [input.sourceImage, ...referenceImages].slice(0, 10),
+                referenceImages: [input.sourceImage, ...referenceImages].slice(0, IMAGE_MODEL_CONTROL_FACTS[model].referenceLimit),
             };
         }
         default: return assertNever(model);
@@ -640,6 +746,12 @@ function asNanoControls(value: ImageModelControls): NanoBananaProControls {
     return 'aspectRatio' in value && !('background' in value)
         ? value
         : IMAGE_MODEL_CONTROL_FACTS[NANO_BANANA_PRO_IMAGE_MODEL].defaults;
+}
+
+function asKleinControls(value: ImageModelControls): Flux2Klein4bControls {
+    return 'aspectRatio' in value && !('background' in value)
+        ? { aspectRatio: coerceLocalAspectRatio(value.aspectRatio, '1:1'), imageSize: coerceLocalImageSize(value.imageSize, '1K'), batchSize: value.batchSize }
+        : IMAGE_MODEL_CONTROL_FACTS[FLUX_2_KLEIN_4B_IMAGE_MODEL].defaults;
 }
 
 function asQwenControls(value: ImageModelControls): QwenImage2_1Controls {
@@ -711,15 +823,15 @@ function coerceNanoImageSize(value: unknown, fallback: NanoBananaImageSize): Nan
         : fallback;
 }
 
-function coerceQwenAspectRatio(value: unknown, fallback: QwenAspectRatio): QwenAspectRatio {
-    return typeof value === 'string' && (QWEN_ASPECT_RATIOS as readonly string[]).includes(value)
-        ? value as QwenAspectRatio
+function coerceLocalAspectRatio(value: unknown, fallback: LocalAspectRatio): LocalAspectRatio {
+    return typeof value === 'string' && (LOCAL_ASPECT_RATIOS as readonly string[]).includes(value)
+        ? value as LocalAspectRatio
         : fallback;
 }
 
-function coerceQwenImageSize(value: unknown, fallback: QwenImageSize): QwenImageSize {
-    return typeof value === 'string' && (QWEN_IMAGE_SIZES as readonly string[]).includes(value)
-        ? value as QwenImageSize
+function coerceLocalImageSize(value: unknown, fallback: LocalImageSize): LocalImageSize {
+    return typeof value === 'string' && (LOCAL_IMAGE_SIZES as readonly string[]).includes(value)
+        ? value as LocalImageSize
         : fallback;
 }
 
@@ -729,7 +841,7 @@ function coerceQwenBackground(value: unknown, fallback: QwenImage2_1Controls['ba
         : fallback;
 }
 
-function getQwenEditSize(dimensions: { width: number; height: number } | undefined): string | undefined {
+function getLocalEditSize(dimensions: { width: number; height: number } | undefined): string | undefined {
     if (!dimensions || !Number.isFinite(dimensions.width) || !Number.isFinite(dimensions.height)
         || dimensions.width <= 0 || dimensions.height <= 0) {
         return undefined;

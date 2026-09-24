@@ -1,6 +1,6 @@
 import type { ArchiveImage } from '../db/types';
 import { DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateDraft, type GenerateLineageSource } from '../generate-session/GenerateSession';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, assertNever, isImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
 import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 import { readGenerateLineageImageModel } from './generateLineageMetadata';
@@ -92,20 +92,22 @@ function resolveReplayControls(
     metadata: GenerateReplayMetadata,
     image: ArchiveImage | null,
     replayAspectRatio: string | undefined,
-): Pick<GenerateDraft, 'gptImage2' | 'nanoBananaPro' | 'qwenImage2_1'> {
+): Pick<GenerateDraft, 'gptImage2' | 'nanoBananaPro' | 'qwenImage2_1' | 'flux2Klein4b'> {
+    const defaults = {
+        gptImage2: DEFAULT_GENERATE_DRAFT.gptImage2,
+        nanoBananaPro: DEFAULT_GENERATE_DRAFT.nanoBananaPro,
+        qwenImage2_1: DEFAULT_GENERATE_DRAFT.qwenImage2_1,
+        flux2Klein4b: DEFAULT_GENERATE_DRAFT.flux2Klein4b,
+    };
     switch (model) {
         case OPENAI_IMAGE_MODEL:
-            return { gptImage2: resolveGptImage2ReplayControls(typedImageModel, metadata, image, replayAspectRatio),
-                nanoBananaPro: DEFAULT_GENERATE_DRAFT.nanoBananaPro,
-                qwenImage2_1: DEFAULT_GENERATE_DRAFT.qwenImage2_1 };
+            return { ...defaults, gptImage2: resolveGptImage2ReplayControls(typedImageModel, metadata, image, replayAspectRatio) };
         case NANO_BANANA_PRO_IMAGE_MODEL:
-            return { gptImage2: DEFAULT_GENERATE_DRAFT.gptImage2,
-                nanoBananaPro: resolveNanoBananaReplayControls(typedImageModel, metadata, image, replayAspectRatio),
-                qwenImage2_1: DEFAULT_GENERATE_DRAFT.qwenImage2_1 };
+            return { ...defaults, nanoBananaPro: resolveNanoBananaReplayControls(typedImageModel, metadata, image, replayAspectRatio) };
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
-            return { gptImage2: DEFAULT_GENERATE_DRAFT.gptImage2,
-                nanoBananaPro: DEFAULT_GENERATE_DRAFT.nanoBananaPro,
-                qwenImage2_1: resolveQwenReplayControls(typedImageModel, metadata, image, replayAspectRatio) };
+            return { ...defaults, qwenImage2_1: resolveQwenReplayControls(typedImageModel, metadata, image, replayAspectRatio) };
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return { ...defaults, flux2Klein4b: resolveKleinReplayControls(typedImageModel, metadata, image, replayAspectRatio) };
         default: return assertNever(model);
     }
 }
@@ -188,6 +190,22 @@ function resolveQwenReplayControls(
         aspectRatio: replayAspectRatio,
         imageSize: metadata.imageSize ?? image?.quality,
         background: metadata.background ?? image?.background,
+    });
+}
+
+function resolveKleinReplayControls(
+    typedImageModel: GenerateReplayImageModel | null,
+    metadata: GenerateReplayMetadata,
+    image: ArchiveImage | null,
+    replayAspectRatio: string | undefined,
+) {
+    if (typedImageModel?.slug === FLUX_2_KLEIN_4B_IMAGE_MODEL) {
+        return typedImageModel.controls;
+    }
+
+    return sanitizeImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, {
+        aspectRatio: replayAspectRatio,
+        imageSize: metadata.imageSize ?? image?.quality,
     });
 }
 

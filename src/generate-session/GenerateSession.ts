@@ -14,6 +14,7 @@ import {
     type ImageModelArchiveFields,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
+    type Flux2Klein4bControls,
 } from '../image-models/ImageModelControls';
 import { storage, type StorageProvider } from '../services/StorageService';
 import {
@@ -21,6 +22,7 @@ import {
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
+    FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
     isImageModelSlug,
     type ImageModelSlug,
@@ -53,6 +55,7 @@ export interface GenerateDraft {
     gptImage2: GptImage2DraftControls;
     nanoBananaPro: NanoBananaProDraftControls;
     qwenImage2_1: QwenImage2_1DraftControls;
+    flux2Klein4b: Flux2Klein4bDraftControls;
     isSaved: boolean;
 }
 
@@ -60,6 +63,7 @@ export type GptImage2DraftControls = GptImage2Controls;
 
 export type NanoBananaProDraftControls = NanoBananaProControls;
 export type QwenImage2_1DraftControls = QwenImage2_1Controls;
+export type Flux2Klein4bDraftControls = Flux2Klein4bControls;
 
 export interface GenerateLineageSource {
     archiveImageId: string;
@@ -119,6 +123,7 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
     gptImage2: getDefaultImageModelControls(OPENAI_IMAGE_MODEL),
     nanoBananaPro: getDefaultImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL),
     qwenImage2_1: getDefaultImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL),
+    flux2Klein4b: getDefaultImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL),
     isSaved: false,
 };
 
@@ -168,6 +173,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             gptImage2: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
             nanoBananaPro: sanitizeArchiveImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, image),
             qwenImage2_1: sanitizeArchiveImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, image),
+            flux2Klein4b: sanitizeArchiveImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, image),
             isSaved: false,
             ...draftOverrides,
         }));
@@ -452,6 +458,7 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
         gptImage2: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, draft.gptImage2, legacyGptImage2Controls),
         nanoBananaPro: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, draft.nanoBananaPro, legacyNanoBananaProControls),
         qwenImage2_1: sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, draft.qwenImage2_1),
+        flux2Klein4b: sanitizeImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, draft.flux2Klein4b),
         isSaved: typeof draft.isSaved === 'boolean' ? draft.isSaved : DEFAULT_GENERATE_DRAFT.isSaved,
     };
 };
@@ -464,6 +471,8 @@ export function getActiveGenerateControls(draft: GenerateDraft) {
             return buildActiveImageModelControls(draft.model, draft.nanoBananaPro);
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
             return buildActiveImageModelControls(draft.model, draft.qwenImage2_1);
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return buildActiveImageModelControls(draft.model, draft.flux2Klein4b);
         default: return assertNever(draft.model);
     }
 }
@@ -476,6 +485,8 @@ export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModel
             return buildImageModelArchiveFields(draft.model, draft.nanoBananaPro);
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
             return buildImageModelArchiveFields(draft.model, draft.qwenImage2_1);
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return buildImageModelArchiveFields(draft.model, draft.flux2Klein4b);
         default: return assertNever(draft.model);
     }
 }

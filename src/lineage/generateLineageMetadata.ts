@@ -7,6 +7,7 @@ import {
     type GptImage2Controls,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
+    type Flux2Klein4bControls,
     type ImageModelControls,
 } from '../image-models/ImageModelControls';
 import {
@@ -14,6 +15,7 @@ import {
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
+    FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
     isImageModelSlug,
     type ImageModelSlug,
@@ -41,6 +43,10 @@ export type GenerateLineageImageModel =
     | {
         slug: typeof QWEN_IMAGE_2_1_IMAGE_MODEL;
         controls: QwenImage2_1Controls;
+    }
+    | {
+        slug: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL;
+        controls: Flux2Klein4bControls;
     };
 
 export interface GenerateLineageMetadata extends Record<string, unknown> {
@@ -114,6 +120,7 @@ function getGenerateLineageControls(
     switch (model) {
         case OPENAI_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
         case NANO_BANANA_PRO_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
             return runDraft?.model === model
                 ? sanitizeImageModelControls(model, runDraft.qwenImage2_1)
@@ -152,6 +159,7 @@ function buildGenerateLineageImageModel(
         case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case NANO_BANANA_PRO_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case QWEN_IMAGE_2_1_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         default: return assertNever(model);
     }
 }
@@ -160,7 +168,8 @@ export function getLineageImageSize(model: ImageModelSlug, quality: string): str
     switch (model) {
         case OPENAI_IMAGE_MODEL: return null;
         case NANO_BANANA_PRO_IMAGE_MODEL:
-        case QWEN_IMAGE_2_1_IMAGE_MODEL: return quality;
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return quality;
         default: return assertNever(model);
     }
 }

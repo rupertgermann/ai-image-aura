@@ -4,6 +4,7 @@ import {
     type GptImage2Controls,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
+    type Flux2Klein4bControls,
     type ImageModelControls,
 } from '../image-models/ImageModelControls';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
@@ -14,6 +15,7 @@ import {
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
+    FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
     isImageModelSlug,
     isReasoningModelSlug,
@@ -63,6 +65,10 @@ export type AutopilotLineageImageModel =
     | {
         slug: typeof QWEN_IMAGE_2_1_IMAGE_MODEL;
         controls: QwenImage2_1Controls;
+    }
+    | {
+        slug: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL;
+        controls: Flux2Klein4bControls;
     };
 
 export interface AutopilotLineageMetadata extends Record<string, unknown> {
@@ -269,6 +275,12 @@ function buildAutopilotImageModelControls(
                 background: settings.background,
                 batchSize: settings.batchSize,
             });
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
+            return sanitizeImageModelControls(model, {
+                aspectRatio: settings.aspectRatio,
+                imageSize: settings.imageSize,
+                batchSize: settings.batchSize,
+            });
         default: return assertNever(model);
     }
 }
@@ -281,6 +293,7 @@ function buildAutopilotLineageImageModel(
         case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case NANO_BANANA_PRO_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case QWEN_IMAGE_2_1_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         default: return assertNever(model);
     }
 }

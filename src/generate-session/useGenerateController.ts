@@ -846,6 +846,7 @@ function cloneGenerateDraft(draft: GenerateDraft): GenerateDraft {
         gptImage2: { ...draft.gptImage2 },
         nanoBananaPro: { ...draft.nanoBananaPro },
         qwenImage2_1: { ...draft.qwenImage2_1 },
+        flux2Klein4b: { ...draft.flux2Klein4b },
     };
 }
 
