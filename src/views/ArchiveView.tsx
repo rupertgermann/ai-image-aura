@@ -66,7 +66,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 <div className="header-flex">
                     <div>
                         <h1>Archive</h1>
-                        <p>{images.length === 0 ? 'Your saved images, all in one place.' : `${filteredImages.length} of ${images.length} image${images.length === 1 ? '' : 's'}`}</p>
+                        <p>{images.length === 0 ? '0 images' : `${filteredImages.length} of ${images.length} image${images.length === 1 ? '' : 's'}`}</p>
                     </div>
                     <div className="header-actions archive-toolbar">
                         <button

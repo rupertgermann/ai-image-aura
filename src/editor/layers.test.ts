@@ -127,7 +127,7 @@ describe('layer editor helpers', () => {
         }));
     });
 
-    it('adds uploaded layers centered, selected-ready, visible, and opaque', () => {
+    it('adds a centered, visible, opaque, unlocked layer and returns its ID', () => {
         const result = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1', 'cloud.png');
 
         expect(result.layerId).toBe('layer-1');
@@ -175,7 +175,7 @@ describe('layer editor helpers', () => {
         }));
     });
 
-    it('applies stack operations while preserving base-layer guardrails', () => {
+    it('updates, duplicates, moves, and deletes uploaded layers without duplicating or deleting the base layer', () => {
         const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
         const renamed = updateLayer(stack, 'layer-1', { name: 'Glow', opacity: 0.4, visible: false });
         const duplicated = duplicateLayers(renamed, ['base', 'layer-1'], () => 'layer-2');
@@ -196,7 +196,7 @@ describe('layer editor helpers', () => {
         expect(getEditableLayerIds(lockedStack, ['base', 'layer-1'])).toEqual([]);
     });
 
-    it('keeps locked layers transform-frozen but still allows rename, visibility, and unlock', () => {
+    it('blocks position, opacity, and blend-mode changes on locked layers but allows renaming, visibility changes, and unlocking', () => {
         const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
         const locked = updateLayer(stack, 'layer-1', { locked: true });
         const patched = updateLayer(locked, 'layer-1', {

@@ -345,7 +345,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         <div className="generate-container" onPaste={handlePaste}>
             <header className="view-header">
                 <h1>Generate</h1>
-                <p>Start with an idea. Make it your own.</p>
             </header>
 
             <div className="generate-grid">
@@ -752,7 +751,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         {autopilot.bestIterationNumber ? `Best Autopilot Result: iteration ${autopilot.bestIterationNumber}` : 'Autopilot result'}
                                     </strong>
                                     <span>
-                                        {autopilot.status === 'max-iterations' && 'Reached iteration limit without converging.'}
+                                        {autopilot.status === 'max-iterations' && 'Iteration limit reached. The satisfaction threshold was not met.'}
                                         {autopilot.status === 'cancelled' && 'Run cancelled. Showing the best result to date.'}
                                         {autopilot.status === 'failed' && autopilot.lastErrorIteration && `Run stopped at iteration ${autopilot.lastErrorIteration}.`}
                                         {autopilot.status === 'satisfied' && 'Satisfaction threshold reached early.'}
@@ -781,7 +780,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     ) : (
                         <div className="empty-preview" role="status">
                             {loading ? <Loader2 size={36} className="spin" /> : <ImagePlus size={36} className="dim-icon" />}
-                            <h2>{loading ? 'Creating your image' : 'A little space for your next idea'}</h2>
+                            <h2>{loading ? 'Creating your image' : 'No image generated yet'}</h2>
                             <p>{loading ? 'You can browse the archive while this runs.' : 'Write a prompt or choose an example to get started.'}</p>
                         </div>
                     )}

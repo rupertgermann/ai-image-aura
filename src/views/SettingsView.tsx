@@ -33,7 +33,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="settings-container">
             <header className="view-header">
                 <h1>Settings</h1>
-                <p>Connect the providers you use. Your images and settings stay in this browser.</p>
+                <p>Connect the providers you use. Your archive and settings are stored in this browser.</p>
                 <button className="btn-text-link" onClick={onOpenGenerate}>Back to Generate →</button>
             </header>
 

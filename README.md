@@ -4,7 +4,7 @@ AURA AI is a local-first browser studio for generating, organizing, editing, and
 
 The app runs entirely in the browser. Provider API keys, the local server URL, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
 
-The interface follows the Telepathic Instruments-inspired visual system documented in `docs/DESIGN.md`: stark panels, monochrome surfaces, amber action emphasis, compact controls, and typography tuned for a focused creative tool rather than a marketing page.
+The interface uses monochrome panels, orange accents, and compact controls. See `docs/DESIGN.md` for the Telepathic Instruments reference.
 
 ## Screens
 
@@ -18,26 +18,11 @@ The interface follows the Telepathic Instruments-inspired visual system document
 
 ## Highlights
 
-- Prompt-based image generation with `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `nano-banana-pro`, and locally hosted `qwen-image-2.1`
-- `Single Shot` and `Autopilot` generation modes
-- Batch generation of up to four images per run with a per-slot result grid, save-all, and per-result reuse actions
-- Streaming partial-image previews during single-shot generation for models that support it
-- Reuse any generated result as a reference image with a single action
-- Actual generation parameter reporting for values returned by the provider or measured by AURA
-- Goal-to-prompt translation, iterative scoring, and prompt refinement with selectable reasoning models: `gpt-6-sol` and `gemini-2.5-flash`
-- Provider API key storage for OpenAI and Google, plus a server URL and connection test for Local server
-- Prompt enhancement controls for style, lighting, palette, and model-specific output settings
-- Shared image-model facts for Generate and Editor controls, provider routing, capabilities, reference limits, and archive metadata
-- Reference-image workflows for guided generation and AI-assisted edits, including clipboard paste
-- Qwen Image 2.1 controls for aspect ratio, 1K/2K resolution, and auto/transparent background requests
-- Transform-mask painting for targeted AI edits, persisted in lineage and replayable into the editor
-- Creative lineage tracking across generation, create-similar, editor saves, AI edits, save-as-copy branches, and Autopilot iterations
-- Local archive with search, favorites filtering, multi-select actions, layer-aware ZIP export/import, manifest recovery, lineage-aware detail view, replay actions, fork actions, and keyboard navigation
-- Layered in-browser editor with image layers, blend modes, layer locking, drag reordering, keyboard nudging, live composition adjustments, AI result layers, non-destructive drafts, undo/redo, overwrite, save-as-copy, reset, and revert controls
-- Background completion notifications for finished generation runs
-- Persistent local UI state for prompts, model-specific generation settings, Autopilot settings, archive search and favorites filter, editor drafts, editor controls, and notification preferences
-- Local-first persistence powered by SQLocal and IndexedDB
-- $0.00 API cost reporting for local image inference
+- Generate up to four images per run, with optional reference images.
+- Use Autopilot to evaluate results and refine prompts against a goal.
+- Edit image layers, apply adjustments, and target AI edits with masks.
+- Search saved images, mark favorites, and transfer archives as ZIP files.
+- Reopen editor drafts and replay or branch from saved lineage steps.
 
 ## Tech Stack
 
@@ -91,20 +76,7 @@ The [Qwen Image 2.1 guide](https://github.com/leejet/stable-diffusion.cpp/blob/m
 
 If `sd-server` runs behind [llama-swap](https://github.com/mostlygeek/llama-swap/blob/main/docs/configuration.md), enter the llama-swap URL instead and name the model `qwen-image-2.1` in its config, or add that exact alias. AURA sends `qwen-image-2.1` as the model ID for every local image request.
 
-## Available Scripts
-
-```bash
-npm run dev
-npm run test
-npm run typecheck
-npm run build
-npm run lint
-npm run audit
-npm run audit:fix
-npm run preview
-```
-
-### Script Reference
+## Available scripts
 
 - `npm run dev`
   Starts the Vite development server.

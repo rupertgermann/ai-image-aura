@@ -16,9 +16,3 @@ synonyms to avoid.
 
 For an undefined concept, reconsider whether the project needs the term.
 Record genuine gaps for `/domain-modeling`.
-
-## ADR conflicts
-
-Explicitly identify any proposal that contradicts an existing ADR:
-
-> Contradicts ADR-0007 — worth reopening because…

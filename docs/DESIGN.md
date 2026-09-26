@@ -3,7 +3,7 @@
 
 **Theme:** light
 
-Telepathic Instruments blends scientific product UI with artistic ambiguity. The interface centers on a minimal, high-contrast monochrome palette, punctuated by a single vibrant orange accent. Typography is compact and precise, using a bespoke geometric sans-serif that lends a technical yet refined feel. Visuals often feature abstract, blurry backgrounds with sparse, distinct elements foregrounded, creating a sense of unfolding discovery.
+The Telepathic Instruments reference uses black, white, one orange accent, and compact geometric sans-serif typography. Abstract blurred backgrounds sit behind sparse foreground elements.
 
 ## Tokens — Colors
 
@@ -21,21 +21,25 @@ Telepathic Instruments blends scientific product UI with artistic ambiguity. The
 
 ## Tokens — Typography
 
-### Suisse Intl — Primary text, headings, general UI labels. The tighter letter-spacing at larger sizes (-0.0300em for 100px) enhances its controlled, technical feel. · `--font-suisse-intl`
+### Suisse Intl
+
+- **Token:** `--font-suisse-intl`
 - **Substitute:** Inter
 - **Weights:** 400
 - **Sizes:** 12px, 16px, 18px, 20px, 24px, 100px
 - **Line height:** 0.85, 1.20, 1.25, 1.40, 1.50
 - **Letter spacing:** -0.0300em, -0.0200em
-- **Role:** Primary text, headings, general UI labels. The tighter letter-spacing at larger sizes (-0.0300em for 100px) enhances its controlled, technical feel.
+- **Role:** Primary text, headings, and general UI labels. Use -0.0300em letter spacing for 100px text.
 
-### Suisse Intl Mono — Code snippets, data displays, subtle navigation items, input values. Its fixed-width nature reinforces the technical aesthetic. · `--font-suisse-intl-mono`
+### Suisse Intl Mono
+
+- **Token:** `--font-suisse-intl-mono`
 - **Substitute:** JetBrains Mono
 - **Weights:** 400
 - **Sizes:** 12px, 14px, 16px
 - **Line height:** 1.00, 1.20, 1.25, 1.33, 1.43, 1.50
 - **Letter spacing:** normal
-- **Role:** Code snippets, data displays, subtle navigation items, input values. Its fixed-width nature reinforces the technical aesthetic.
+- **Role:** Code snippets, data displays, navigation items, and input values.
 
 ### Type Scale
 
@@ -144,7 +148,7 @@ Transparent background, Steel text (#a3a3a3), and a 'Steel' bottom border. 0px b
 
 ## Imagery
 
-Imagery is a mix of abstract, blurry digital graphics and product-focused photography/screenshots. Abstract graphics often feature teal/green hues on dark backgrounds, using blur effects to create depth and mystery. Product photography is clean and focused, showing items like beanies and t-shirts in simple, outdoor settings or clear product shots with minimal distraction. Product screenshots (e.g., the synth plugin) are UI-focused, showcasing the interface clearly. Icons are primarily outlined or filled monochrome, often in Steel or Snow. The overall role of imagery leans towards atmospheric (abstract graphics) and explanatory/showcasing (product shots). Imagery density is moderate; hero sections are image-heavy, while other sections are text-dominant with smaller supporting visuals.
+The reference site combines blurred teal and green graphics on dark backgrounds with product photos and screenshots. Photos show beanies and t-shirts outdoors or against simple backgrounds. Screenshots show the synth plugin interface. Icons are outlined or filled monochrome, often in Steel or Snow. Hero sections use large images. Other sections pair text with smaller visuals.
 
 ## Layout
 

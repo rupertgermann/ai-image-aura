@@ -567,7 +567,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
-                                {aiLoading ? 'AI is thinking...' : 'Transform with AI'}
+                                {aiLoading ? 'Transforming image...' : 'Transform with AI'}
                             </button>
 
                             <div

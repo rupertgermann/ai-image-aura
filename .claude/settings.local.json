@@ -21,7 +21,6 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('scripts:'\\); [print\\(' ',k,'=',v\\) for k,v in d.get\\('scripts',{}\\).items\\(\\)]; print\\('deps:', list\\(d.get\\('dependencies',{}\\).keys\\(\\)\\)\\); print\\('devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")",
       "Bash(gh pr *)",
       "Bash(cd *)",
-      "Bash(ls /Users/rupertgermann/AI/ai-image-aura)",
       "Read(//tmp/**)",
       "Bash(/bin/ls -1 src)",
       "Bash(/bin/ls -1 docs/adr)",
@@ -29,8 +28,7 @@
       "WebFetch(domain:ai.google.dev)",
       "Bash(sort -t'#' -k2 -n)",
       "Bash(npx tsc *)",
-      "Bash(git restore *)",
-      "Read(//Users/rupertgermann/AI/gpt_image_playground/**)"
+      "Bash(git restore *)"
     ]
   }
 }

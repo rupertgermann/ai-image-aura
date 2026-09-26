@@ -15,9 +15,9 @@ repository; infer the repository from its Git remote.
 
 Write multiline bodies to a file and pass it with `--body-file`.
 
-## Pull requests as a triage surface
+## Request tracking
 
-**PRs as a request surface: no.**
+Track requests in GitHub issues. Use pull requests for implementation changes.
 
 ## Skill terminology
 
