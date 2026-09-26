@@ -28,7 +28,7 @@ export const GEMINI_FLASH_REASONING_MODEL = 'gemini-2.5-flash';
 export type NanoBananaAspectRatio = '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9';
 export type NanoBananaImageSize = '1K' | '2K' | '4K';
 export type LocalAspectRatio = '1:1' | '4:3' | '3:4' | '3:2' | '2:3' | '16:9' | '9:16';
-export type LocalImageSize = '1K' | '2K';
+export type LocalImageSize = '768' | '1K' | '2K';
 
 export interface ImageModelConfig {
     slug: string;

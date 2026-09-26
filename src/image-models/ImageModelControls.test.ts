@@ -37,20 +37,20 @@ describe('Image model controls', () => {
     });
     it('maps every Qwen aspect ratio and resolution to the fixed sd-server size', () => {
         const sizes = {
-            '1:1': ['1024x1024', '2048x2048'],
-            '4:3': ['1152x864', '2400x1792'],
-            '3:4': ['864x1152', '1792x2400'],
-            '3:2': ['1248x832', '2528x1696'],
-            '2:3': ['832x1248', '1696x2528'],
-            '16:9': ['1376x768', '2752x1536'],
-            '9:16': ['768x1376', '1536x2752'],
+            '1:1': ['768x768', '1024x1024', '2048x2048'],
+            '4:3': ['896x672', '1152x864', '2400x1792'],
+            '3:4': ['672x896', '864x1152', '1792x2400'],
+            '3:2': ['960x640', '1248x832', '2528x1696'],
+            '2:3': ['640x960', '832x1248', '1696x2528'],
+            '16:9': ['1024x576', '1376x768', '2752x1536'],
+            '9:16': ['576x1024', '768x1376', '1536x2752'],
         } as const;
 
         expect(getImageModelGenerateControls(QWEN_IMAGE_2_1_IMAGE_MODEL).map((control) => control.id)).toEqual([
             'aspectRatio', 'imageSize', 'background', 'batchSize',
         ]);
-        for (const [aspectRatio, [oneK, twoK]] of Object.entries(sizes)) {
-            for (const [imageSize, size] of [['1K', oneK], ['2K', twoK]] as const) {
+        for (const [aspectRatio, [small, oneK, twoK]] of Object.entries(sizes)) {
+            for (const [imageSize, size] of [['768', small], ['1K', oneK], ['2K', twoK]] as const) {
                 expect(mapImageModelGenerateProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
                     quality: 'medium', aspectRatio, imageSize, background: 'transparent', batchSize: 4,
                     referenceImages: [],
@@ -66,11 +66,11 @@ describe('Image model controls', () => {
 
     it('sanitizes Qwen controls and caps references including the Editor target', () => {
         expect(getDefaultImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL)).toEqual({
-            aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+            aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 1,
         });
         expect(sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, {
             aspectRatio: '21:9', imageSize: '4K', background: 'opaque', batchSize: 20,
-        })).toEqual({ aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 4 });
+        })).toEqual({ aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 4 });
         const files = Array.from({ length: 12 }, (_, index) => new File(['x'], `${index}.png`));
         expect(mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
             sourceImage: files[0], compositionContextImage: files[1], referenceImages: files.slice(2),

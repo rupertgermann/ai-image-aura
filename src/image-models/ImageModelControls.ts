@@ -53,7 +53,7 @@ export interface ActiveImageModelControls {
     aspectRatio: string;
     background: ImageBackground;
     batchSize: number;
-    imageSize?: NanoBananaImageSize;
+    imageSize?: NanoBananaImageSize | LocalImageSize;
 }
 
 export interface ImageModelArchiveFields {
@@ -95,17 +95,17 @@ const IMAGE_BACKGROUNDS = ['auto', 'opaque', 'transparent'] as const;
 const NANO_ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const;
 const NANO_IMAGE_SIZES = ['1K', '2K', '4K'] as const;
 const LOCAL_ASPECT_RATIOS = ['1:1', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const;
-const LOCAL_IMAGE_SIZES = ['1K', '2K'] as const;
+const LOCAL_IMAGE_SIZES = ['768', '1K', '2K'] as const;
 const QWEN_BACKGROUNDS = ['auto', 'transparent'] as const;
 
 const LOCAL_SIZE_TABLE: Record<LocalAspectRatio, Record<LocalImageSize, string>> = {
-    '1:1': { '1K': '1024x1024', '2K': '2048x2048' },
-    '4:3': { '1K': '1152x864', '2K': '2400x1792' },
-    '3:4': { '1K': '864x1152', '2K': '1792x2400' },
-    '3:2': { '1K': '1248x832', '2K': '2528x1696' },
-    '2:3': { '1K': '832x1248', '2K': '1696x2528' },
-    '16:9': { '1K': '1376x768', '2K': '2752x1536' },
-    '9:16': { '1K': '768x1376', '2K': '1536x2752' },
+    '1:1': { '768': '768x768', '1K': '1024x1024', '2K': '2048x2048' },
+    '4:3': { '768': '896x672', '1K': '1152x864', '2K': '2400x1792' },
+    '3:4': { '768': '672x896', '1K': '864x1152', '2K': '1792x2400' },
+    '3:2': { '768': '960x640', '1K': '1248x832', '2K': '2528x1696' },
+    '2:3': { '768': '640x960', '1K': '832x1248', '2K': '1696x2528' },
+    '16:9': { '768': '1024x576', '1K': '1376x768', '2K': '2752x1536' },
+    '9:16': { '768': '576x1024', '1K': '768x1376', '2K': '1536x2752' },
 };
 
 export const IMAGE_MODEL_CONTROL_FACTS = {
@@ -213,7 +213,7 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
     [QWEN_IMAGE_2_1_IMAGE_MODEL]: {
         defaults: {
             aspectRatio: '1:1',
-            imageSize: '1K',
+            imageSize: '768', // ~2x faster than 1K on local hardware
             background: 'auto',
             batchSize: 1,
         },
@@ -231,6 +231,7 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
             },
             {
                 id: 'imageSize', label: 'RESOLUTION', kind: 'toggle', options: [
+                    { value: '768', label: '768' },
                     { value: '1K', label: '1K' },
                     { value: '2K', label: '2K' },
                 ],
@@ -580,7 +581,7 @@ export function mapImageModelGenerateProviderRequest(
         aspectRatio: string;
         background: ImageBackground;
         batchSize?: number;
-        imageSize?: NanoBananaImageSize;
+        imageSize?: NanoBananaImageSize | LocalImageSize;
         referenceImages: File[];
     },
 ) {
@@ -744,7 +745,7 @@ function asGptControls(value: ImageModelControls): GptImage2Controls {
 
 function asNanoControls(value: ImageModelControls): NanoBananaProControls {
     return 'aspectRatio' in value && !('background' in value)
-        ? value
+        ? { ...value, imageSize: coerceNanoImageSize(value.imageSize, '1K') }
         : IMAGE_MODEL_CONTROL_FACTS[NANO_BANANA_PRO_IMAGE_MODEL].defaults;
 }
 

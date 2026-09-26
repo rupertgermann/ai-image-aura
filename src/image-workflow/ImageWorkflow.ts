@@ -8,7 +8,7 @@ import {
     mapImageModelEditProviderRequest,
     mapImageModelGenerateProviderRequest,
 } from '../image-models/ImageModelControls';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, resolveImageModelConfig, type ImageModelSlug, type LocalImageSize, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
 import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, type ImageProviderResponse } from './ImageProvider';
 import { buildImageCostLedger } from '../costs/apiCost';
 import type { ApiCostLedger } from '../db/types';
@@ -24,7 +24,7 @@ export interface GenerateImageInput {
     aspectRatio: string;
     background: ImageBackground;
     batchSize?: number;
-    imageSize?: NanoBananaImageSize;
+    imageSize?: NanoBananaImageSize | LocalImageSize;
     style: string;
     lighting: string;
     palette: string;
