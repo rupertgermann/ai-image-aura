@@ -13,6 +13,7 @@
 #
 # Environment overrides:
 #   SD_HOME        install dir                            (default: ~/sd-cpp)
+#   SD_CPP_REF     stable-diffusion.cpp commit to build   (default: pinned, see below)
 #   QWEN_VARIANT   variant serving qwen-image-2.1 in serve (default: turbo)
 #   STEPS          override the variant's sampling steps
 #   OFFLOAD=1      pass --offload-to-cpu                  (default: off on macOS unified memory, on elsewhere)
@@ -29,6 +30,9 @@ TE_QUANT="${TE_QUANT:-Q4_K_M}"
 QWEN_VARIANT="${QWEN_VARIANT:-turbo}"
 HOST="${SD_HOST:-127.0.0.1}"
 PORT="${SD_PORT:-1234}"
+# Pinned: upstream b167b94 (#2048) changes the Qwen 2.1 flow schedule (8192-token mu anchor, forced
+# shift_terminal=0.02), which breaks the turbo max_shift override below and cannot be disabled per server.
+SD_CPP_REF="${SD_CPP_REF:-88411ef1e0688ff2df1010aeeb5d92b2d8cea2be}"
 SRC="$SD_HOME/stable-diffusion.cpp"
 MODELS="$SD_HOME/models"
 BIN="$SRC/build/bin/sd-server"
@@ -120,12 +124,13 @@ download() { # url dest
 build_sd_server() {
     if [[ -d "$SRC/.git" ]]; then
         log "updating stable-diffusion.cpp"
-        git -C "$SRC" pull --ff-only
-        git -C "$SRC" submodule update --init --recursive
+        git -C "$SRC" fetch
     else
         log "cloning stable-diffusion.cpp"
-        git clone --recursive https://github.com/leejet/stable-diffusion.cpp "$SRC"
+        git clone https://github.com/leejet/stable-diffusion.cpp "$SRC"
     fi
+    git -C "$SRC" checkout --detach "$SD_CPP_REF"
+    git -C "$SRC" submodule update --init --recursive
 
     local backend flags=()
     backend="$(detect_backend)"
