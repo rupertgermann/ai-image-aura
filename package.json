@@ -1,7 +1,7 @@
 {
   "name": "ai-image-manager",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Local-first AI image generation and editing studio built with React, Vite, SQLocal, and the OpenAI Images API.",
   "license": "MIT",
   "type": "module",
