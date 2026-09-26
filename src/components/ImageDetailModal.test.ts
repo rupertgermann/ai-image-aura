@@ -18,7 +18,7 @@ describe('ImageDetailModal cost ledger', () => {
         vi.stubGlobal('window', { localStorage: { getItem: () => null } });
         try {
             const html = renderToStaticMarkup(createElement(ImageDetailModal, {
-                image, images: [image], onClose: noop, onEdit: noop, onDelete: noop,
+                image, images: [image], hasNext: false, hasPrevious: false, onClose: noop, onEdit: noop, onDelete: noop,
                 onCreateSimilar: noop, onToggleFavorite: noop, onReplayGenerate: noop,
                 onReplayEditor: noop, onForkFromStep: noop, onNext: noop, onPrevious: noop,
             }));

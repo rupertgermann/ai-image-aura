@@ -107,6 +107,28 @@ describe('Generate controller Image model archive metadata', () => {
 });
 
 describe('Generate controller batch result slots', () => {
+    it('retains successful saves when a later slot fails, so retry does not duplicate them', async () => {
+        let results = buildGenerateResultSlots([
+            { slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,one' },
+            { slotIndex: 1, status: 'success', imageUrl: 'data:image/png;base64,two' },
+        ]);
+        const saveImage = vi.fn(async (image) => image);
+        saveImage.mockImplementationOnce(async (image) => image).mockRejectedValueOnce(new Error('Disk full'));
+        const input = {
+            draft: createDraft({}), runDraft: null, usedReferences: [], runLineageSource: null,
+            serializeReferences: vi.fn(async () => []), saveImage,
+            lineageStore: { getByArchiveImageId: vi.fn(async () => []), save: vi.fn(async (step) => ({ ...step, id: 'step' })) },
+            sessionStore: { loadLineageSource: vi.fn(() => null), clearLineageSource: vi.fn() },
+            onSaved: (nextResults: typeof results) => { results = nextResults; },
+        };
+        await expect(saveGenerateResultSlots({ ...input, results })).rejects.toThrow('Disk full');
+        expect(results[0]).toMatchObject({ isSaved: true });
+        await saveGenerateResultSlots({ ...input, results });
+        expect(saveImage.mock.calls.map(([image]) => image.url)).toEqual([
+            'data:image/png;base64,one', 'data:image/png;base64,two', 'data:image/png;base64,two',
+        ]);
+    });
+
     it('keeps successful and failed batch slots independent', () => {
         expect(buildGenerateResultSlots([
             {

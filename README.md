@@ -142,7 +142,7 @@ npm run preview
 
 The Generate view supports:
 
-- Image model selection among `GPT Image 2.5 Flare`, `GPT Image 2.5 Sunburst`, `Nano Banana Pro`, and `Qwen Image 2.1` (chosen in **Settings → Model Preferences**)
+- Image model selection among `GPT Image 2.5 Flare`, `GPT Image 2.5 Sunburst`, `Nano Banana Pro`, `Qwen Image 2.1`, and `FLUX.2 klein 4B` directly in Generate
 - Mode toggle between `Single Shot` and `Autopilot`
 - Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode
@@ -161,14 +161,14 @@ The Generate view supports:
 - Configurable Autopilot iteration count from `1` to `8`
 - Configurable Autopilot satisfaction threshold from `50` to `100`
 - Cost disclosure and confirmation before each Autopilot run, including the selected image and reasoning models
-- Live Autopilot progress, best-iteration highlighting, and pause/cancel support
+- Live Autopilot progress, best-iteration highlighting, and stopping after the current iteration
 - Multiple reference image uploads through file picker, drag-and-drop, and clipboard paste
 - `Nano Banana Pro` reference inputs are capped to the first `14` images for provider compatibility
 - `Qwen Image 2.1` reference inputs are capped to the first `10` images
 - Reference preview modal with next and previous navigation
 - Streaming partial-image previews during single-shot generation for models that support partial streaming
 - A batch result grid for multi-image runs with per-slot save, download, use-as-reference, and isolated per-slot failure reporting
-- Save All and Clear Results actions for batch runs
+- Save all and Clear results actions for batch runs, with confirmation before discarding unsaved images
 - Use as Reference to feed a generated result back into the reference set while preserving lineage
 - Actual parameter panels that surface provider-reported values and measured elapsed time without inventing unavailable values
 - Save-to-archive, download, and clear-result actions
@@ -232,9 +232,9 @@ The Editor view supports:
 - Undo and redo for layer, adjustment, reference, and AI result changes
 - Save changes in place
 - Save as copy
-- Reset Adjustments and Revert Draft controls
+- Reset adjustments and undoable Revert to saved image controls
 
-Editor saves are recorded in lineage as overwrite, save-as-copy, manual-edit, or AI-edit steps depending on the action taken. Transform masks used for AI edits are stored with the lineage step and replayed back into the editor when an edit branch is reopened. Layered images keep durable layer stack metadata and per-layer image assets alongside the flattened archive preview.
+Editor saves are recorded in lineage as overwrite, save-as-copy, manual-edit, or AI-edit steps depending on the action taken. Transform masks used for AI edits are stored with the lineage step and replayed back into the editor when an edit branch is reopened. Layered images keep durable layer stack metadata, composition adjustments, and per-layer image assets alongside the flattened archive preview. Single-layer saves bake adjustments into the image. The editor restores the last opened image after a reload.
 
 Editor lineage metadata records the target plan, source image, composition context, reference images, output layer, transform mask, layer stack summary, and save mode needed to summarize or replay an edit branch.
 
@@ -245,7 +245,7 @@ The Settings view supports:
 - Local OpenAI API key storage in the browser
 - Local Google Gemini API key storage in the browser
 - Local server URL storage and a connection test that lists reported model IDs or explains HTTP and reachability errors
-- Saved-key status feedback and masked key entry
+- Saved-key status feedback, masked key entry, and removal by clearing and saving the field
 - Immediate model availability once the matching provider key or Local server URL is stored
 - A completion notifications toggle that surfaces a desktop notification when a run finishes while the app is in the background
 - Notification readiness status that reflects unsupported browsers and insecure contexts
@@ -257,8 +257,8 @@ The sidebar includes a collapsible navigation rail.
 The application is designed as a local-first web app.
 
 - Provider API keys and the Local server URL are stored in browser `localStorage`
-- View state, generation drafts, model-specific generation settings, Autopilot settings, archive search, archive favorites filter, completion notification preference, and editor drafts are stored in browser `localStorage`
-- Current generated batch results and transferred reference payloads are stored in IndexedDB via `idb-keyval`
+- View state, generation drafts, model-specific generation settings, Autopilot settings, archive search, archive favorites filter, completion notification preference, and the last editor image ID are stored in browser `localStorage`
+- Current generated batch results, transferred reference payloads, and editor drafts are stored in IndexedDB via `idb-keyval`; older editor drafts migrate from `localStorage` when opened
 - Archive image metadata is stored in a browser-local SQLite database via SQLocal
 - Qwen archive metadata includes its model, aspect ratio, resolution, background, and requested dimensions
 - Layer stack metadata is stored with archive image metadata in SQLocal

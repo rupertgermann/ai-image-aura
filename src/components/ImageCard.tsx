@@ -26,10 +26,13 @@ const ImageCard: React.FC<ImageCardProps> = ({
     };
 
     return (
-        <div className={`image-card ${selected ? 'selected' : ''}`} onClick={onClick}>
+        <article className={`image-card ${selected ? 'selected' : ''}`}>
             <div className="card-image-wrapper">
                 {onSelect && (
-                    <div
+                    <button
+                        type="button"
+                        aria-label={`${selected ? 'Deselect' : 'Select'} image: ${image.prompt}`}
+                        aria-pressed={selected}
                         className={`card-selector ${selected ? 'active' : ''}`}
                         onClick={(e) => {
                             e.stopPropagation();
@@ -39,7 +42,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
                         <div className="selector-inner">
                             {selected && <div className="selector-check" />}
                         </div>
-                    </div>
+                    </button>
                 )}
                 <button
                     className={`card-favorite-toggle ${image.favorite ? 'active' : ''}`}
@@ -52,7 +55,9 @@ const ImageCard: React.FC<ImageCardProps> = ({
                 >
                     <Star size={16} />
                 </button>
-                <img src={image.url} alt={image.prompt} className="card-image" loading="lazy" />
+                <button className="card-open" onClick={onClick} aria-label={`Open image: ${image.prompt}`}>
+                    <img src={image.url} alt={image.prompt} className="card-image" loading="lazy" decoding="async" />
+                </button>
                 <div className="card-overlay">
                     <div className="card-actions" onClick={(e) => e.stopPropagation()}>
                         <button className="btn-ghost btn-icon" onClick={() => onEdit(image)} title="Edit">
@@ -69,7 +74,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
             </div>
 
             <div className="card-info">
-                <p className="card-prompt" title={image.prompt}>{image.prompt}</p>
+                <button className="card-prompt" onClick={onClick} tabIndex={-1} title={image.prompt}>{image.prompt}</button>
                 <div className="card-meta">
                     <span className="card-tag">{image.quality.toUpperCase()}</span>
                     {costLabel && <span className="card-cost">{costLabel}</span>}
@@ -79,7 +84,7 @@ const ImageCard: React.FC<ImageCardProps> = ({
                     </div>
                 </div>
             </div>
-        </div>
+        </article>
     );
 };
 

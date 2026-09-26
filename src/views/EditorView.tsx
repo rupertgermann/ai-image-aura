@@ -1,3 +1,4 @@
+import Modal from '../components/Modal';
 import React, { useEffect, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight, Paintbrush, Eraser } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
@@ -16,13 +17,17 @@ import type { EditorReplay } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface EditorViewProps {
+    isActive: boolean;
+    onBusyChange: (busy: boolean) => void;
+    onOpenArchive: () => void;
+    onOpenSettings: () => void;
     image: ArchiveImage | null;
     replay?: EditorReplay | null;
     getProviderCredential: (provider: Provider) => string | null;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void;
 }
 
-const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCredential, onSave }) => {
+const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, replay, getProviderCredential, onSave, onOpenArchive, onOpenSettings }) => {
     const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
     const [adjustmentsOpen, setAdjustmentsOpen] = useLocalStorage('editor_adjustments_open', true);
@@ -41,6 +46,10 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
     const imageCredential = getProviderCredential(activeModel.provider);
     const supportsTransformMask = imageModelSupportsTransformMask(aiEditModel);
     const {
+        draftLoading,
+        draftError,
+        beginAdjustment,
+        endAdjustment,
         brightness,
         setBrightness,
         contrast,
@@ -82,11 +91,12 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
         resetAdjustments,
         serializeReferences,
     } = useEditorSession(image);
-    const isReady = !!layerStack;
+    const isReady = !!layerStack && !draftLoading;
     const {
         aiPrompt,
         setAiPrompt,
         aiLoading,
+        saving,
         aiError,
         isDragging,
         isCanvasReady,
@@ -113,6 +123,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
         onSave,
     });
     const aiReferenceWarning = getAiTransformReferenceWarning(aiEditModel, referenceImages.length, draft);
+    useEffect(() => { onBusyChange(aiLoading || saving); }, [aiLoading, saving, onBusyChange]);
 
     useEffect(() => {
         if (!replay) {
@@ -275,6 +286,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
             return !!element?.closest('input, textarea, select, [contenteditable="true"]');
         };
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (!isActive || draftLoading || aiLoading || saving || document.querySelector('dialog[open]')) return;
             const shortcut = resolveEditorShortcut({
                 key: event.key,
                 metaKey: event.metaKey,
@@ -314,15 +326,16 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [clearSelection, deleteSelectedLayers, duplicateSelectedLayers, nudgeSelectedLayers, redo, save, undo]);
+    }, [isActive, draftLoading, aiLoading, saving, clearSelection, deleteSelectedLayers, duplicateSelectedLayers, nudgeSelectedLayers, redo, save, undo]);
 
     if (!image) {
         return (
             <div className="empty-archive">
                 <div className="empty-state glass-panel">
                     <Palette size={48} className="dim-icon" />
-                    <h3>No Image Selected</h3>
-                    <p>Go to the Archive and click Edit on an image to start.</p>
+                    <h1>Editor</h1>
+                    <p>Choose an image from your archive to start editing.</p>
+                    <button className="btn-primary" onClick={onOpenArchive}>Open Archive</button>
                 </div>
             </div>
         );
@@ -331,12 +344,21 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
     return (
         <div className="editor-container">
             <header className="view-header">
-                <h1>Image Lab</h1>
-                <p>Refine your masterpiece with professional controls.</p>
+                <div className="header-flex">
+                    <div><h1>Editor</h1><p>{draftLoading ? 'Restoring your draft…' : saving ? 'Saving your image…' : isDirty ? 'Changes not yet saved to archive' : 'Your image is up to date'}</p></div>
+                    <div className="editor-toolbar">
+                        <button className="btn-ghost btn-icon" onClick={undo} disabled={!canUndo || aiLoading || saving} aria-label="Undo" title="Undo (⌘/Ctrl Z)"><Undo2 size={18} /></button>
+                        <button className="btn-ghost btn-icon" onClick={redo} disabled={!canRedo || aiLoading || saving} aria-label="Redo" title="Redo (⌘/Ctrl Shift Z)"><Redo2 size={18} /></button>
+                        <button className="btn-ghost" onClick={() => { void save(true); }} disabled={!isCanvasReady || aiLoading || saving}><Copy size={18} /> Save as copy</button>
+                        <button className="btn-amber" onClick={() => { void save(false); }} disabled={!isCanvasReady || !isDirty || aiLoading || saving}><Save size={18} /> {saving ? 'Saving…' : 'Save changes'}</button>
+                    </div>
+                </div>
+                {draftError && <div className="error-message" role="alert">{draftError}</div>}
+                {aiError && <div className="error-message" role="alert">{aiError}</div>}
             </header>
 
             <div className="editor-grid">
-                <div className="canvas-area glass-panel">
+                <div className="canvas-area glass-panel" inert={draftLoading || aiLoading || saving}>
                     {layerStack && (
                         <EditorCanvas
                             ref={canvasRef}
@@ -350,7 +372,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                     )}
                 </div>
 
-                <aside className="editor-sidebar glass-panel">
+                <fieldset className="editor-sidebar glass-panel" disabled={draftLoading || aiLoading || saving}>
                     {layerStack && (
                         <div className="sidebar-group">
                             <div className="section-title">
@@ -366,7 +388,8 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                         void addLayerFiles(Array.from(e.target.files || []));
                                         e.currentTarget.value = '';
                                     }}
-                                    style={{ display: 'none' }}
+                                    className="file-input-overlay"
+                                    aria-label="Add image layers"
                                 />
                                 <Upload size={16} />
                                 Add image layer
@@ -409,9 +432,14 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                     <span>{brightness}%</span>
                                 </div>
                                 <input
+                                    aria-label="Brightness" aria-valuetext={`${brightness}%`}
                                     type="range" min="0" max="200" value={brightness}
                                     onChange={(e) => setBrightness(Number(e.target.value))}
                                     className="editor-slider"
+                                    onPointerDown={beginAdjustment}
+                                    onPointerUp={endAdjustment}
+                                    onPointerCancel={endAdjustment}
+                                    onBlur={endAdjustment}
                                 />
                             </div>
 
@@ -421,9 +449,14 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                     <span>{contrast}%</span>
                                 </div>
                                 <input
+                                    aria-label="Contrast" aria-valuetext={`${contrast}%`}
                                     type="range" min="0" max="200" value={contrast}
                                     onChange={(e) => setContrast(Number(e.target.value))}
                                     className="editor-slider"
+                                    onPointerDown={beginAdjustment}
+                                    onPointerUp={endAdjustment}
+                                    onPointerCancel={endAdjustment}
+                                    onBlur={endAdjustment}
                                 />
                             </div>
 
@@ -433,9 +466,14 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                     <span>{saturation}%</span>
                                 </div>
                                 <input
+                                    aria-label="Saturation" aria-valuetext={`${saturation}%`}
                                     type="range" min="0" max="200" value={saturation}
                                     onChange={(e) => setSaturation(Number(e.target.value))}
                                     className="editor-slider"
+                                    onPointerDown={beginAdjustment}
+                                    onPointerUp={endAdjustment}
+                                    onPointerCancel={endAdjustment}
+                                    onBlur={endAdjustment}
                                 />
                             </div>
                         </div>
@@ -457,53 +495,42 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                             <div className="filter-grid">
                                 <button
                                     className={`filter-btn ${filter === 'none' ? 'active' : ''}`}
+                                    aria-pressed={filter === 'none'}
                                     onClick={() => setFilter('none')}
                                 >Normal</button>
                                 <button
                                     className={`filter-btn ${filter === 'grayscale(100%)' ? 'active' : ''}`}
+                                    aria-pressed={filter === 'grayscale(100%)'}
                                     onClick={() => setFilter('grayscale(100%)')}
                                 >B&W</button>
                                 <button
                                     className={`filter-btn ${filter === 'sepia(100%)' ? 'active' : ''}`}
+                                    aria-pressed={filter === 'sepia(100%)'}
                                     onClick={() => setFilter('sepia(100%)')}
                                 >Sepia</button>
                                 <button
                                     className={`filter-btn ${filter === 'blur(5px)' ? 'active' : ''}`}
+                                    aria-pressed={filter === 'blur(5px)'}
                                     onClick={() => setFilter('blur(5px)')}
                                 >Soft</button>
                             </div>
                         </div>
                     </div>
 
-                    <div className="sidebar-group">
-                        <div className="section-title">
-                            <Sparkles size={18} className="icon-purple" />
-                            <h3>AI Superpowers</h3>
-                        </div>
+                    <details className="sidebar-group ai-edit-section" open={!!replay?.prompt}>
+                        <summary>AI transform</summary>
                         <div className="ai-edit-box">
                             <div className="option-group">
-                                <label>MODEL</label>
-                                <div className="toggle-group">
-                                    {getImageModelUiChoices().map((choice) => {
-                                        const available = !!getProviderCredential(choice.provider);
-                                        return (
-                                            <button
-                                                key={choice.slug}
-                                                className={aiEditModel === choice.slug ? 'active' : ''}
-                                                onClick={() => setAiEditModel(choice.slug)}
-                                                disabled={!available}
-                                                title={available ? choice.label : choice.provider === LOCAL_PROVIDER
-                                                    ? 'Save a Local server URL in Settings'
-                                                    : `Add a ${getProviderLabel(choice.provider)} API key in Settings`}
-                                            >
-                                                {choice.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                <label htmlFor="editor-image-model">Image model</label>
+                                <select id="editor-image-model" value={aiEditModel} onChange={(event) => {
+                                    if (isImageModelSlug(event.target.value)) setAiEditModel(event.target.value);
+                                }}>
+                                    {getImageModelUiChoices().map((choice) => <option key={choice.slug} value={choice.slug}>{choice.label}</option>)}
+                                </select>
                             </div>
 
                             <textarea
+                                aria-label="AI transformation prompt"
                                 placeholder="Describe your transformation... (e.g. 'Make it a sunset', 'Add a dragon in the sky')"
                                 value={aiPrompt}
                                 onChange={(e) => setAiPrompt(e.target.value)}
@@ -558,6 +585,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                             <img src={url} alt="Reference" />
                                             <button
                                                 className="remove-ref"
+                                                aria-label={`Remove reference ${idx + 1}`}
                                                 onClick={() => removeReferenceAt(idx)}
                                             >
                                                 <X size={12} />
@@ -571,8 +599,10 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                             accept="image/*"
                                             onChange={(e) => {
                                                 addReferenceFiles(Array.from(e.target.files || []));
+                                                e.currentTarget.value = '';
                                             }}
-                                            style={{ display: 'none' }}
+                                            className="file-input-overlay"
+                                            aria-label="Add reference images"
                                         />
                                         <Upload size={16} />
                                         <span>Add</span>
@@ -580,40 +610,21 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                 </div>
                             </div>
 
-                            {aiError && <div className="error-message mini">{aiError}</div>}
                             {aiReferenceWarning && <div className="info-message mini">{aiReferenceWarning}</div>}
                             {!imageCredential && <div className="error-message mini">{activeModel.provider === LOCAL_PROVIDER
                                 ? 'Set Local server URL in Settings'
-                                : `Set ${getProviderLabel(activeModel.provider)} API key in Settings`}</div>}
+                                : `Set ${getProviderLabel(activeModel.provider)} API key in Settings`} <button className="inline-link" onClick={onOpenSettings}>Open Settings</button></div>}
                         </div>
-                    </div>
+                    </details>
 
                     <div className="editor-actions">
-                        <button className="btn-amber" onClick={() => { void save(false); }} disabled={!isCanvasReady}>
-                            <Save size={18} /> Save Changes
-                        </button>
-                        <button className="btn-ghost" onClick={() => { void save(true); }} disabled={!isCanvasReady}>
-                            <Copy size={18} /> Save as Copy
-                        </button>
-                        <button className="btn-ghost" onClick={resetAdjustments}>
-                            <RotateCcw size={18} /> Reset Adjustments
-                        </button>
-                        <button className="btn-ghost" onClick={revertDraft}>
-                            <Undo2 size={18} /> {isDirty ? 'Revert Draft' : 'Draft Saved'}
-                        </button>
-                        <div className="history-actions">
-                            <button className="btn-ghost" onClick={undo} disabled={!canUndo}>
-                                <Undo2 size={18} /> Undo
-                            </button>
-                            <button className="btn-ghost" onClick={redo} disabled={!canRedo}>
-                                <Redo2 size={18} /> Redo
-                            </button>
-                        </div>
+                        <button className="btn-ghost" onClick={resetAdjustments} disabled={brightness === 100 && contrast === 100 && saturation === 100 && filter === 'none'}><RotateCcw size={18} /> Reset adjustments</button>
+                        <button className="btn-ghost" onClick={revertDraft} disabled={!isDirty}><Undo2 size={18} /> Revert to saved image</button>
                     </div>
-                </aside>
+                </fieldset>
             </div>
             {maskEditorOpen && (
-                <div className="modal-overlay transform-mask-modal" role="dialog" aria-modal="true">
+                <Modal label="Transform mask" className="transform-mask-modal" onClose={() => setMaskEditorOpen(false)}>
                     <div className="modal-content transform-mask-dialog">
                         <div className="transform-mask-toolbar">
                             <div className="section-title">
@@ -656,6 +667,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                             <div className="toggle-group mask-tool-toggle">
                                 <button
                                     className={maskTool === 'brush' ? 'active' : ''}
+                                    aria-pressed={maskTool === 'brush'}
                                     onClick={() => setMaskTool('brush')}
                                     type="button"
                                     title="Brush"
@@ -664,6 +676,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                                 </button>
                                 <button
                                     className={maskTool === 'eraser' ? 'active' : ''}
+                                    aria-pressed={maskTool === 'eraser'}
                                     onClick={() => setMaskTool('eraser')}
                                     type="button"
                                     title="Eraser"
@@ -691,7 +704,7 @@ const EditorView: React.FC<EditorViewProps> = ({ image, replay, getProviderCrede
                         </div>
                         {maskError && <div className="error-message mini">{maskError}</div>}
                     </div>
-                </div>
+                </Modal>
             )}
         </div>
     );

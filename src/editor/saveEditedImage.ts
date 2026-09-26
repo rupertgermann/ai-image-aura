@@ -56,6 +56,9 @@ function buildSavedImage(
     timestamp: string,
     makeId?: () => string,
 ): ArchiveImage {
+    const layerStack = context.layerStack
+        ? { ...context.layerStack, adjustments: context.adjustments }
+        : undefined;
     if (context.isCopy) {
         return {
             ...sourceImage,
@@ -64,7 +67,7 @@ function buildSavedImage(
             timestamp,
             references: context.references ?? sourceImage.references,
             costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
-            layerStack: context.layerStack ?? undefined,
+            layerStack,
         };
     }
 
@@ -73,7 +76,7 @@ function buildSavedImage(
         url: updatedUrl,
         references: context.references ?? sourceImage.references,
         costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
-        layerStack: context.layerStack ?? undefined,
+        layerStack,
     };
 }
 

@@ -1,35 +1,24 @@
 # Domain Docs
 
-How the engineering skills should consume this repo's domain documentation when exploring the codebase.
+This is a single-context repo: root `CONTEXT.md` and `docs/adr/`.
 
-This is a **single-context** repo: one `CONTEXT.md` + `docs/adr/` at the repo root.
+## Before exploring
 
-## Before exploring, read these
+Read `CONTEXT.md` and the ADRs relevant to the area being changed.
 
-- **`CONTEXT.md`** at the repo root.
-- **`docs/adr/`** — read ADRs that touch the area you're about to work in.
+If these files are absent, proceed silently. The `/domain-modeling`
+skill creates them when domain terms or decisions are resolved.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
+## Vocabulary
 
-## File structure
+Use the terms defined in `CONTEXT.md`, including its distinctions and
+synonyms to avoid.
 
-```
-/
-├── CONTEXT.md
-├── docs/adr/
-│   ├── 0001-....md
-│   └── 0002-....md
-└── src/
-```
+For an undefined concept, reconsider whether the project needs the term.
+Record genuine gaps for `/domain-modeling`.
 
-## Use the glossary's vocabulary
+## ADR conflicts
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
+Explicitly identify any proposal that contradicts an existing ADR:
 
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/grill-with-docs`).
-
-## Flag ADR conflicts
-
-If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
-
-> _Contradicts ADR-0007 — but worth reopening because…_
+> Contradicts ADR-0007 — worth reopening because…

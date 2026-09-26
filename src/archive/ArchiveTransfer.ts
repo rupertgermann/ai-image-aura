@@ -285,6 +285,7 @@ async function importLayerStack(zip: JSZip, layerStack: ArchiveManifestLayerStac
     return {
         canvasWidth: layerStack.canvasWidth,
         canvasHeight: layerStack.canvasHeight,
+        adjustments: layerStack.adjustments,
         layers,
     };
 }

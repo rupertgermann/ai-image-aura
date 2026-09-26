@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ApiCostKind, ApiCostLedger, ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
+import { createEditorDraft } from './layers';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
@@ -37,6 +38,18 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
 }
 
 describe('saveEditedImage', () => {
+    it.each([false, true])('reopens saved adjustments only for editable layer stacks (copy: %s)', async (isCopy) => {
+        const context = { ...createSaveContext(), isCopy };
+        const deps = { saveImage: vi.fn(async (image: ArchiveImage) => image), lineageStore: createStore() };
+        const flat = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,flattened', context, deps);
+        expect(createEditorDraft(flat).adjustments.brightness).toBe(100);
+        expect(createEditorDraft(flat).layerStack.layers[0].assetUrl).toBe(flat.url);
+
+        const layered = await saveEditedImage(createArchiveImage(), flat.url, { ...context, layerStack: createLayerStack() }, deps);
+        expect(createEditorDraft(layered).adjustments).toEqual(context.adjustments);
+        expect(createEditorDraft(layered).layerStack.layers).toEqual(createLayerStack().layers);
+    });
+
     it('writes an ai-edit step when an AI edit is saved as a copy', async () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);

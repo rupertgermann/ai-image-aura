@@ -6,8 +6,10 @@ import { generateSessionStore, transferSimilarFromArchive } from '../generate-se
 import { useAppNotifications } from './useAppNotifications';
 import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import { initializeAuraPersistence } from '../db/AuraPersistence';
 import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
+import { clearEditorDraft } from '../editor/editorDraftStorage';
 import { lineageStore } from '../lineage/LineageStore';
 import { createLineageNavigator } from '../lineage/LineageNavigator';
 import type { EditorReplay } from '../lineage/replayLineageStep';
@@ -31,10 +33,15 @@ export function useAppController() {
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
     }, [notifyError]);
-    const { images, addImage, deleteImage, refresh } = useImageArchive({
+    const { images, loading: archiveLoading, error: archiveError, addImage, deleteImage, refresh } = useImageArchive({
         onError: handleArchiveError,
     });
-    const [editingImage, setEditingImage] = useState<ArchiveImage | null>(null);
+    const [generateTransferKey, setGenerateTransferKey] = useState(0);
+    const [generateBusy, setGenerateBusy] = useState(false);
+    const [editorBusy, setEditorBusy] = useState(false);
+    const [editingImageOverride, setEditingImage] = useState<ArchiveImage | null>(null);
+    const [savedEditorImageId, setSavedEditorImageId] = useLocalStorage<string | null>('editor_image_id', null);
+    const editingImage = editingImageOverride ?? images.find((image) => image.id === savedEditorImageId) ?? null;
     const [editorReplay, setEditorReplay] = useState<EditorReplay | null>(null);
     const [completionNotificationReadiness, setCompletionNotificationReadiness] = useState<CompletionNotificationReadiness>(
         () => browserCompletionNotificationPort.getReadiness(),
@@ -131,10 +138,15 @@ export function useAppController() {
     }, [addImage, addToast]);
 
     const editImage = useCallback((image: ArchiveImage) => {
+        if (editorBusy) {
+            addToast('Wait for the current edit to finish before opening another image.', 'info');
+            return;
+        }
         setEditingImage(image);
+        setSavedEditorImageId(image.id);
         setEditorReplay(null);
         changeView('editor');
-    }, [changeView]);
+    }, [addToast, changeView, editorBusy, setSavedEditorImageId]);
 
     const handleSaveEditedImage = useCallback(async (updatedUrl: string, context: EditorSaveContext) => {
         if (!editingImage) {
@@ -150,25 +162,33 @@ export function useAppController() {
         generateSessionStore.clearLineageSource();
 
         if (savedImage.id !== editingImage.id) {
-            addToast('Design saved as new copy', 'success');
+            addToast('Image saved as a copy', 'success');
         } else {
-            addToast('Masterpiece updated', 'success');
+            await clearEditorDraft(editingImage.id);
+            addToast('Changes saved', 'success');
         }
 
         changeView('archive');
+        setEditorBusy(false);
         setEditingImage(null);
+        setSavedEditorImageId(null);
         setEditorReplay(null);
-    }, [addImage, addToast, changeView, editingImage]);
+    }, [addImage, addToast, changeView, editingImage, setSavedEditorImageId]);
 
     const createSimilar = useCallback(async (image: ArchiveImage) => {
+        if (generateBusy) {
+            addToast('Wait for the current generation to finish before loading another image.', 'info');
+            return;
+        }
         try {
             await transferSimilarFromArchive(image, generateSessionStore, lineageStore);
+            setGenerateTransferKey((key) => key + 1);
             changeView('generate');
             addToast('Settings & references transferred', 'info');
         } catch (error) {
             notifyError(error, 'Failed to transfer image settings');
         }
-    }, [addToast, changeView, notifyError]);
+    }, [addToast, changeView, generateBusy, notifyError]);
 
     const lineageNavigator = useMemo(() => createLineageNavigator({
         lineageStore,
@@ -177,20 +197,29 @@ export function useAppController() {
     }), [images]);
 
     const replayGenerateFromLineageStep = useCallback(async (stepId: string) => {
+        if (generateBusy) {
+            addToast('Wait for the current generation to finish before replaying a step.', 'info');
+            return;
+        }
         try {
             const outcome = await lineageNavigator.replayIntoGenerate(stepId);
             if (outcome.status === 'unavailable') {
                 notifyError(new Error(outcome.reason), 'Replay unavailable');
                 return;
             }
+            setGenerateTransferKey((key) => key + 1);
             changeView('generate');
             addToast('Lineage step loaded into Generate', 'info');
         } catch (error) {
             notifyError(error, 'Failed to replay lineage step');
         }
-    }, [addToast, changeView, lineageNavigator, notifyError]);
+    }, [addToast, changeView, generateBusy, lineageNavigator, notifyError]);
 
     const replayEditorFromLineageStep = useCallback(async (stepId: string) => {
+        if (editorBusy) {
+            addToast('Wait for the current edit to finish before replaying a step.', 'info');
+            return;
+        }
         try {
             const outcome = await lineageNavigator.replayIntoEditor(stepId);
             if (outcome.status === 'unavailable') {
@@ -198,13 +227,14 @@ export function useAppController() {
                 return;
             }
             setEditingImage(outcome.image);
+            setSavedEditorImageId(outcome.image.id);
             setEditorReplay(outcome.replay);
             changeView('editor');
             addToast('Lineage step loaded into Editor', 'info');
         } catch (error) {
             notifyError(error, 'Failed to replay lineage step');
         }
-    }, [addToast, changeView, lineageNavigator, notifyError]);
+    }, [addToast, changeView, editorBusy, lineageNavigator, notifyError, setSavedEditorImageId]);
 
     const forkFromLineageStep = useCallback(async (stepId: string) => {
         try {
@@ -228,6 +258,7 @@ export function useAppController() {
 
     return {
         currentView,
+        generateTransferKey,
         apiKey,
         editingImage,
         toasts,
@@ -239,7 +270,8 @@ export function useAppController() {
         replayEditorFromLineageStep,
         forkFromLineageStep,
         generateViewProps: {
-            apiKey,
+            onBusyChange: setGenerateBusy,
+            onOpenSettings: () => changeView('settings'),
             getProviderCredential: getCredential,
             onSaveImage: saveImage,
             completionNotificationsEnabled,
@@ -248,6 +280,15 @@ export function useAppController() {
         },
         archiveViewProps: {
             images,
+            filteredImages: archiveController.filteredImages,
+            search: archiveController.search,
+            onSearchChange: archiveController.setSearch,
+            favoritesOnly: archiveController.favoritesOnly,
+            onFavoritesOnlyChange: archiveController.setFavoritesOnly,
+            loading: archiveLoading,
+            error: archiveError,
+            onRetry: refresh,
+            onOpenGenerate: () => changeView('generate'),
             selectedIds: archiveController.selectedIds,
             onDeleteImage: (id: string) => archiveController.requestDelete([id]),
             onEditImage: archiveController.editImage,
@@ -260,12 +301,16 @@ export function useAppController() {
             onBulkDownloadError: (error: Error) => notifyError(error, 'Failed to export archive ZIP'),
         },
         editorViewProps: {
+            onBusyChange: setEditorBusy,
+            onOpenArchive: () => changeView('archive'),
+            onOpenSettings: () => changeView('settings'),
             image: editingImage,
             replay: editorReplay,
             getProviderCredential: getCredential,
             onSave: handleSaveEditedImage,
         },
         settingsViewProps: {
+            onOpenGenerate: () => changeView('generate'),
             apiKey,
             googleApiKey,
             localServerUrl,

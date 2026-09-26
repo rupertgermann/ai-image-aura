@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import type { ArchiveImage, ArchiveLayerBlendMode } from '../db/types';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { loadEditorDraft, saveEditorDraft } from './editorDraftStorage';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import { fileToDataURL } from '../utils/file';
 import {
@@ -30,27 +30,47 @@ const DEFAULT_SATURATION = 100;
 const DEFAULT_FILTER = 'none';
 
 export function useEditorSession(image: ArchiveImage | null) {
+    const adjustmentGesture = useRef<'idle' | 'start' | 'active'>('idle');
     const sessionKey = image?.id ?? 'default';
     const savedDraft = useMemo(() => image ? createEditorDraft(image) : null, [image]);
-    const [persistedDraft, setPersistedDraft] = useLocalStorage<EditorDraft | null>(`editor_${sessionKey}_draft`, savedDraft);
-    const repairedPersistedDraft = useMemo(() => {
-        return image && persistedDraft ? repairEditorDraftForImage(persistedDraft, image) : persistedDraft;
-    }, [image, persistedDraft]);
-    const initialDraft = repairedPersistedDraft ?? savedDraft;
-    const [history, setHistory] = useState<LayerHistoryState | null>(() => initialDraft ? {
-        past: [],
-        present: initialDraft,
-        future: [],
-    } : null);
+    const [history, setHistory] = useState<LayerHistoryState | null>(null);
+    const [draftLoading, setDraftLoading] = useState(true);
+    const [draftError, setDraftError] = useState<string | null>(null);
+    const latestDraft = useRef<EditorDraft | null>(null);
+    const restoreDraft = useEffectEvent((persisted: EditorDraft | null) => {
+        const next = image && persisted ? repairEditorDraftForImage(persisted, image) : savedDraft;
+        latestDraft.current = next;
+        setHistory(next ? { past: [], present: next, future: [] } : null);
+        setDraftLoading(false);
+    });
+    useEffect(() => {
+        let cancelled = false;
+        loadEditorDraft(sessionKey).then((persisted) => {
+            if (!cancelled) restoreDraft(persisted);
+        }).catch(() => {
+            if (!cancelled) {
+                setDraftError('Could not restore your draft. Your saved archive image is still available.');
+                restoreDraft(null);
+            }
+        });
+        return () => { cancelled = true; };
+    }, [sessionKey]);
+    const persistDraft = useCallback((next: EditorDraft) => {
+        void saveEditorDraft(sessionKey, next).then(() => setDraftError(null)).catch(() => {
+            setDraftError('Your draft could not be stored. Save to the archive before leaving this page.');
+        });
+    }, [sessionKey]);
     const draft = history?.present ?? savedDraft;
     const referenceCollection = useReferenceImageCollection({ initialDataUrls: draft?.references ?? image?.references });
     const replaceReferenceDataUrls = referenceCollection.replaceWithDataUrls;
     const makeId = useCallback(() => crypto.randomUUID(), []);
-    const isDirty = useMemo(() => {
-        return !!draft && !!savedDraft && JSON.stringify(draft) !== JSON.stringify(savedDraft);
-    }, [draft, savedDraft]);
+    const stackChanged = useMemo(() => JSON.stringify(draft?.layerStack) !== JSON.stringify(savedDraft?.layerStack), [draft?.layerStack, savedDraft?.layerStack]);
+    const referencesChanged = useMemo(() => JSON.stringify(draft?.references) !== JSON.stringify(savedDraft?.references), [draft?.references, savedDraft?.references]);
+    const isDirty = !draftLoading && !!draft && !!savedDraft && (stackChanged || referencesChanged || JSON.stringify(draft.adjustments) !== JSON.stringify(savedDraft.adjustments));
 
     const commitDraft = useCallback((nextDraft: EditorDraft, recordHistory = true) => {
+        if (draftLoading) return;
+        latestDraft.current = nextDraft;
         setHistory((current) => {
             if (!current) {
                 return { past: [], present: nextDraft, future: [] };
@@ -58,14 +78,17 @@ export function useEditorSession(image: ArchiveImage | null) {
 
             return recordHistory ? pushHistory(current, nextDraft) : { ...current, present: nextDraft };
         });
-        setPersistedDraft(nextDraft);
-    }, [setPersistedDraft]);
+        if (adjustmentGesture.current !== 'active') persistDraft(nextDraft);
+    }, [draftLoading, persistDraft]);
 
-    const updateAdjustments = useCallback((patch: Partial<EditorDraft['adjustments']>, recordHistory = true) => {
+    const updateAdjustments = useCallback((patch: Partial<EditorDraft['adjustments']>) => {
         if (!draft) {
             return;
         }
 
+        // One undo step per slider drag; keyboard changes remain individual steps.
+        const recordHistory = adjustmentGesture.current !== 'active';
+        if (adjustmentGesture.current !== 'idle') adjustmentGesture.current = 'active';
         commitDraft({ ...draft, adjustments: { ...draft.adjustments, ...patch } }, recordHistory);
     }, [commitDraft, draft]);
 
@@ -148,39 +171,28 @@ export function useEditorSession(image: ArchiveImage | null) {
     }, [commitDraft, draft]);
 
     const undo = useCallback(() => {
-        setHistory((current) => {
-            if (!current) {
-                return current;
-            }
-            const next = undoHistory(current);
-            setPersistedDraft(next.present);
-            return next;
-        });
-    }, [setPersistedDraft]);
+        if (!history) return;
+        const next = undoHistory(history);
+        latestDraft.current = next.present;
+        setHistory(next);
+        persistDraft(next.present);
+    }, [history, persistDraft]);
 
     const redo = useCallback(() => {
-        setHistory((current) => {
-            if (!current) {
-                return current;
-            }
-            const next = redoHistory(current);
-            setPersistedDraft(next.present);
-            return next;
-        });
-    }, [setPersistedDraft]);
+        if (!history) return;
+        const next = redoHistory(history);
+        latestDraft.current = next.present;
+        setHistory(next);
+        persistDraft(next.present);
+    }, [history, persistDraft]);
 
     const revertDraft = useCallback(() => {
         if (!savedDraft) {
             return;
         }
 
-        if (isDirty && !window.confirm('Discard the current editor draft and restore the last saved archive state?')) {
-            return;
-        }
-
-        setHistory({ past: [], present: savedDraft, future: [] });
-        setPersistedDraft(savedDraft);
-    }, [isDirty, savedDraft, setPersistedDraft]);
+        commitDraft(savedDraft);
+    }, [savedDraft, commitDraft]);
 
     useEffect(() => {
         if (!isDirty) {
@@ -199,14 +211,6 @@ export function useEditorSession(image: ArchiveImage | null) {
     useEffect(() => {
         replaceReferenceDataUrls(draft?.references ?? []);
     }, [draft?.references, replaceReferenceDataUrls]);
-
-    useEffect(() => {
-        if (!persistedDraft || !repairedPersistedDraft || JSON.stringify(persistedDraft) === JSON.stringify(repairedPersistedDraft)) {
-            return;
-        }
-
-        setPersistedDraft(repairedPersistedDraft);
-    }, [persistedDraft, repairedPersistedDraft, setPersistedDraft]);
 
     const addReferenceFiles = useCallback(async (files: File[]) => {
         if (!draft || files.length === 0) {
@@ -238,16 +242,23 @@ export function useEditorSession(image: ArchiveImage | null) {
     }, [commitDraft, draft]);
 
     return {
+        beginAdjustment: () => { adjustmentGesture.current = 'start'; },
+        endAdjustment: () => {
+            if (adjustmentGesture.current === 'active' && latestDraft.current) persistDraft(latestDraft.current);
+            adjustmentGesture.current = 'idle';
+        },
+        draftLoading,
+        draftError,
         draft,
         layerStack: draft?.layerStack ?? null,
         selectedLayerIds: draft?.selectedLayerIds ?? [],
         primarySelectedLayerId: draft?.primarySelectedLayerId ?? null,
         brightness: draft?.adjustments.brightness ?? DEFAULT_BRIGHTNESS,
-        setBrightness: (value: number) => updateAdjustments({ brightness: value }, false),
+        setBrightness: (value: number) => updateAdjustments({ brightness: value }),
         contrast: draft?.adjustments.contrast ?? DEFAULT_CONTRAST,
-        setContrast: (value: number) => updateAdjustments({ contrast: value }, false),
+        setContrast: (value: number) => updateAdjustments({ contrast: value }),
         saturation: draft?.adjustments.saturation ?? DEFAULT_SATURATION,
-        setSaturation: (value: number) => updateAdjustments({ saturation: value }, false),
+        setSaturation: (value: number) => updateAdjustments({ saturation: value }),
         filter: draft?.adjustments.filter ?? DEFAULT_FILTER,
         setFilter: (value: string) => updateAdjustments({ filter: value }),
         adjustments: draft?.adjustments ?? {

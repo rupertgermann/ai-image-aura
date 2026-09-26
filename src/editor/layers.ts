@@ -1,13 +1,8 @@
-import { isLayerBlendMode, type ArchiveImage, type ArchiveLayer, type ArchiveLayerStack } from '../db/types';
+import { isLayerBlendMode, type ArchiveImage, type ArchiveLayer, type ArchiveLayerStack, type CompositionAdjustments } from '../db/types';
 
 export const DEFAULT_HISTORY_LIMIT = 50;
 
-export interface EditorAdjustments {
-    brightness: number;
-    contrast: number;
-    saturation: number;
-    filter: string;
-}
+export type EditorAdjustments = CompositionAdjustments;
 
 export interface EditorDraft {
     layerStack: ArchiveLayerStack;
@@ -61,6 +56,7 @@ export function normalizeLayerStack(layerStack: ArchiveLayerStack): ArchiveLayer
     return {
         canvasWidth: layerStack.canvasWidth,
         canvasHeight: layerStack.canvasHeight,
+        adjustments: layerStack.adjustments,
         layers: layerStack.layers.map((layer, index) => ({
             ...layer,
             name: layer.name || (index === 0 ? 'Base' : `Layer ${index + 1}`),
@@ -78,7 +74,7 @@ export function createEditorDraft(image: ArchiveImage): EditorDraft {
 
     return {
         layerStack,
-        adjustments: {
+        adjustments: layerStack.adjustments ?? {
             brightness: 100,
             contrast: 100,
             saturation: 100,

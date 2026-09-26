@@ -1,13 +1,19 @@
 import React from 'react';
-import { downloadArchiveImagesAsZip } from '../archive/ArchiveExport';
 import ImageCard from '../components/ImageCard';
 import type { ArchiveImage } from '../db/types';
 import { Image as ImageIcon, Search, Download, Trash2, X, Loader2, Star } from 'lucide-react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { filterArchiveImages } from '../hooks/useImageArchive';
 
 interface ArchiveViewProps {
     images: ArchiveImage[];
+    filteredImages: ArchiveImage[];
+    search: string;
+    onSearchChange: (value: string) => void;
+    favoritesOnly: boolean;
+    onFavoritesOnlyChange: (value: boolean) => void;
+    loading: boolean;
+    error: Error | null;
+    onRetry: () => void;
+    onOpenGenerate: () => void;
     selectedIds: Set<string>;
     onDeleteImage: (id: string) => void;
     onEditImage: (image: ArchiveImage) => void;
@@ -21,7 +27,8 @@ interface ArchiveViewProps {
 }
 
 const ArchiveView: React.FC<ArchiveViewProps> = ({
-    images,
+    images, filteredImages, search, onSearchChange, favoritesOnly, onFavoritesOnlyChange,
+    loading, error, onRetry, onOpenGenerate,
     selectedIds,
     onDeleteImage,
     onEditImage,
@@ -33,8 +40,6 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
     onDeleteSelected,
     onBulkDownloadError,
 }) => {
-    const [search, setSearch] = useLocalStorage('archive_search', '');
-    const [favoritesOnly, setFavoritesOnly] = useLocalStorage('archive_favorites_only', false);
     const [isZipping, setIsZipping] = React.useState(false);
 
     const handleBulkDownload = async () => {
@@ -42,6 +47,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
 
         setIsZipping(true);
         try {
+            const { downloadArchiveImagesAsZip } = await import('../archive/ArchiveExport');
             await downloadArchiveImagesAsZip(images.filter((image) => selectedIds.has(image.id)));
         } catch (error) {
             onBulkDownloadError(error instanceof Error ? error : new Error('Failed to create ZIP archive'));
@@ -50,9 +56,9 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
         }
     };
 
-    const filteredImages = filterArchiveImages(images, { search, favoritesOnly });
     const filteredImageIds = filteredImages.map((image) => image.id);
     const allFilteredSelected = filteredImageIds.length > 0 && filteredImageIds.every((id) => selectedIds.has(id));
+    const hiddenSelectedCount = selectedIds.size - filteredImageIds.filter((id) => selectedIds.has(id)).length;
 
     return (
         <div className="archive-container">
@@ -60,7 +66,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 <div className="header-flex">
                     <div>
                         <h1>Archive</h1>
-                        <p>Your creative collection across time.</p>
+                        <p>{images.length === 0 ? 'Your saved images, all in one place.' : `${filteredImages.length} of ${images.length} image${images.length === 1 ? '' : 's'}`}</p>
                     </div>
                     <div className="header-actions archive-toolbar">
                         <button
@@ -72,7 +78,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         </button>
                         <button
                             className={`btn-ghost archive-filter-toggle ${favoritesOnly ? 'active' : ''}`}
-                            onClick={() => setFavoritesOnly((current) => !current)}
+                            onClick={() => onFavoritesOnlyChange(!favoritesOnly)}
                             aria-pressed={favoritesOnly}
                             title={favoritesOnly ? 'Show all archive images' : 'Show favorites only'}
                         >
@@ -82,10 +88,11 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         <div className="search-box archive-search-box glass-panel">
                             <Search size={18} className="search-icon archive-search-icon" />
                             <input
-                                type="text"
-                                placeholder="Search prompts..."
+                                type="search"
+                                aria-label="Search archive prompts"
+                                placeholder="Search prompts…"
                                 value={search}
-                                onChange={(e) => setSearch(e.target.value)}
+                                onChange={(e) => onSearchChange(e.target.value)}
                                 className="aura-input"
                             />
                         </div>
@@ -93,12 +100,16 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 </div>
             </header>
 
-            {images.length === 0 ? (
+            {error && <div className="error-message" role="alert">{error.message} <button className="inline-link" onClick={onRetry}>Try again</button></div>}
+            {loading && images.length === 0 ? (
+                <div className="empty-state" role="status"><Loader2 className="spin" size={28} /><p>Loading your archive…</p></div>
+            ) : error && images.length === 0 ? null : images.length === 0 ? (
                 <div className="empty-archive">
                     <div className="empty-state glass-panel">
                         <ImageIcon size={48} className="dim-icon" />
                         <h3>No Images Yet</h3>
-                        <p>Generated images will appear here after you save them.</p>
+                        <p>Save a generated image to start your collection.</p>
+                        <button className="btn-primary" onClick={onOpenGenerate}>Create an image</button>
                     </div>
                 </div>
             ) : filteredImages.length === 0 ? (
@@ -107,7 +118,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         <Search size={48} className="dim-icon" />
                         <h3>No Matches</h3>
                         <p>No archived images match the current filters.</p>
-                        <button className="btn-ghost" onClick={() => { setSearch(''); setFavoritesOnly(false); }}>
+                        <button className="btn-ghost" onClick={() => { onSearchChange(''); onFavoritesOnlyChange(false); }}>
                             <X size={18} /> Clear Filters
                         </button>
                     </div>
@@ -133,7 +144,8 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 <div className="bulk-action-bar glass-panel active">
                     <div className="bulk-info">
                         <span className="selection-count">{selectedIds.size}</span>
-                        <span>Images Selected</span>
+                        <span>{selectedIds.size === 1 ? 'image selected' : 'images selected'}</span>
+                        {hiddenSelectedCount > 0 && <span>({hiddenSelectedCount} hidden by filters)</span>}
                     </div>
                     <div className="bulk-actions">
                         <button className="btn-ghost" onClick={onClearSelection}>
@@ -147,8 +159,8 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                             {isZipping ? <Loader2 size={18} className="spin" /> : <Download size={18} />}
                             {isZipping ? 'Generating ZIP...' : 'Download as ZIP'}
                         </button>
-                        <button className="btn-amber" onClick={onDeleteSelected}>
-                            <Trash2 size={18} /> Delete All
+                        <button className="btn-ghost" onClick={onDeleteSelected}>
+                            <Trash2 size={18} /> Delete selected
                         </button>
                     </div>
                 </div>

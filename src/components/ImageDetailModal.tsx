@@ -1,4 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- Image detail helpers share this module with the modal. */
+import Modal from './Modal';
 import React, { useState } from 'react';
 import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History, Star } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
@@ -19,6 +20,8 @@ import {
 interface ImageDetailModalProps {
     image: ArchiveImage;
     images: ArchiveImage[];
+    hasNext: boolean;
+    hasPrevious: boolean;
     onClose: () => void;
     onEdit: () => void;
     onDelete: () => void;
@@ -32,12 +35,14 @@ interface ImageDetailModalProps {
 }
 
 const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
-    image, images, onClose, onEdit, onDelete, onCreateSimilar, onToggleFavorite, onReplayGenerate, onReplayEditor, onForkFromStep, onNext, onPrevious
+    image, images, hasNext, hasPrevious, onClose, onEdit, onDelete, onCreateSimilar, onToggleFavorite, onReplayGenerate, onReplayEditor, onForkFromStep, onNext, onPrevious
 }) => {
-    const [sidebarOpen, setSidebarOpen] = useState(true);
     const [copied, setCopied] = useState(false);
+    const [copyError, setCopyError] = useState<string | null>(null);
     const [timeline, setTimeline] = useState<LineageTimelineData | null>(null);
     const [timelineLoading, setTimelineLoading] = useState(true);
+    const [timelineError, setTimelineError] = useState(false);
+    const [timelineRetry, setTimelineRetry] = useState(0);
     const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
     const [lineageCollapsed, setLineageCollapsed] = useLocalStorage('archive_detail_lineage_collapsed', false);
 
@@ -51,10 +56,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     });
     const detailCostLedger = resolveImageDetailCostLedger(image.costLedger, timeline?.entries ?? []);
 
-    const copyPrompt = () => {
-        navigator.clipboard.writeText(image.prompt);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+    const copyPrompt = async () => {
+        try {
+            await navigator.clipboard.writeText(image.prompt);
+            setCopied(true);
+            setCopyError(null);
+        } catch {
+            setCopyError('Could not copy. Select the prompt text to copy it manually.');
+        }
     };
 
     const downloadImage = () => {
@@ -62,19 +71,14 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     };
 
     React.useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowRight') onNext();
-            if (e.key === 'ArrowLeft') onPrevious();
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onNext, onPrevious, onClose]);
-
-    React.useEffect(() => {
         let cancelled = false;
 
         setTimelineLoading(true);
+        setTimelineError(false);
+        setTimeline(null);
+        setSelectedStepId(null);
+        setCopied(false);
+        setCopyError(null);
         loadLineageTimeline(image.id, lineageStore)
             .then((nextTimeline) => {
                 if (!cancelled) {
@@ -84,11 +88,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
             })
             .catch(() => {
                 if (!cancelled) {
-                    setTimeline({
-                        entries: [],
-                        parent: null,
-                        descendantCount: 0,
-                    });
+                    setTimelineError(true);
                     setSelectedStepId(null);
                 }
             })
@@ -101,7 +101,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         return () => {
             cancelled = true;
         };
-    }, [image.id]);
+    }, [image.id, timelineRetry]);
 
     const selectedEntry = timeline?.entries.find((entry) => entry.id === selectedStepId) ?? null;
     const selectedImage = selectedEntry ? images.find((entryImage) => entryImage.id === selectedEntry.archiveImageId) ?? null : null;
@@ -112,9 +112,13 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         : null;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className={`modal-content ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`} onClick={(e) => e.stopPropagation()}>
-                <button className="modal-close" onClick={onClose}>
+        <Modal label="Image details" onClose={onClose}>
+            <div className="modal-content" onKeyDown={(event) => {
+                if (event.target instanceof HTMLElement && event.target.closest('input, textarea, select')) return;
+                if (event.key === 'ArrowRight') onNext();
+                if (event.key === 'ArrowLeft') onPrevious();
+            }}>
+                <button className="modal-close" aria-label="Close image details" onClick={onClose}>
                     <X size={20} />
                 </button>
 
@@ -125,7 +129,17 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
                         {comparisonError && <div className="comparison-error">{comparisonError}</div>}
 
-                        <div className="floating-actions">
+
+
+                        <button className="nav-arrow prev" disabled={!hasPrevious} onClick={onPrevious} title="Previous (Left Arrow)">
+                            <ChevronLeft size={32} />
+                        </button>
+                        <button className="nav-arrow next" disabled={!hasNext} onClick={onNext} title="Next (Right Arrow)">
+                            <ChevronRight size={32} />
+                        </button>
+                    </div>
+
+                        <div className="image-detail-actions">
                             <button
                                 className={`btn-ghost favorite-action ${image.favorite ? 'active' : ''}`}
                                 onClick={onToggleFavorite}
@@ -141,34 +155,19 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             </button>
                         </div>
 
-                        <button className="nav-arrow prev" onClick={onPrevious} title="Previous (Left Arrow)">
-                            <ChevronLeft size={32} />
-                        </button>
-                        <button className="nav-arrow next" onClick={onNext} title="Next (Right Arrow)">
-                            <ChevronRight size={32} />
-                        </button>
-                    </div>
-
-                    <button
-                        className="sidebar-toggle"
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        title={sidebarOpen ? "Hide Studio Info" : "Show Studio Info"}
-                    >
-                        {sidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-                    </button>
                 </div>
 
                 <aside className="modal-sidebar">
                     <div className="sidebar-inner">
                         <header className="sidebar-header">
-                            <h2>Studio Info</h2>
+                            <h2>Image details</h2>
                         </header>
 
                         <div className="sidebar-section">
                             <label className="section-label">PROMPT</label>
                             <div className="prompt-container">
                                 <p>{image.prompt}</p>
-                                <button className="copy-btn" onClick={copyPrompt}>
+                                <button className="copy-btn" aria-label={copied ? 'Prompt copied' : 'Copy prompt'} onClick={copyPrompt}>
                                     {copied ? <Check size={14} className="success-icon" /> : <Copy size={14} />}
                                 </button>
                             </div>
@@ -217,6 +216,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             <div className="lineage-header-row">
                                 <button
                                     className="lineage-section-toggle"
+                                    aria-expanded={!lineageCollapsed}
                                     onClick={() => setLineageCollapsed((current) => !current)}
                                     type="button"
                                 >
@@ -237,6 +237,8 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 </div>
                             ) : timelineLoading ? (
                                 <div className="lineage-empty">Loading history...</div>
+                            ) : timelineError ? (
+                                <div className="error-message" role="alert">Could not load history. <button className="inline-link" onClick={() => setTimelineRetry((retry) => retry + 1)}>Try again</button></div>
                             ) : timeline && timeline.entries.length > 0 ? (
                                 <div className="lineage-panel">
                                     {timeline.parent && (
@@ -308,21 +310,22 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                         </div>
 
                         <div className="sidebar-actions">
+                            {copyError && <p role="alert" className="error-message">{copyError}</p>}
                             <button className="btn-amber" onClick={onCreateSimilar} style={{ width: '100%', padding: '1rem' }}>
                                 <Wand2 size={18} /> Create Similar
                             </button>
                             <button className="btn-ghost" onClick={copyPrompt} style={{ width: '100%', padding: '1rem' }}>
-                                <Copy size={18} /> Copy Prompt
+                                {copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copied' : 'Copy prompt'}
                             </button>
                             <div className="divider" style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
-                            <button className="btn-amber" onClick={onDelete} style={{ width: '100%', padding: '1rem' }}>
+                            <button className="btn-ghost" onClick={onDelete} style={{ width: '100%', padding: '1rem' }}>
                                 <Trash2 size={18} /> Delete Permanently
                             </button>
                         </div>
                     </div>
                 </aside>
             </div>
-        </div>
+        </Modal>
     );
 };
 

@@ -1,4 +1,5 @@
-import React from 'react';
+import Modal from './Modal';
+import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -7,7 +8,7 @@ interface ConfirmModalProps {
     message: string;
     confirmText?: string;
     cancelText?: string;
-    onConfirm: () => void;
+    onConfirm: () => void | Promise<void>;
     onCancel: () => void;
     type?: 'danger' | 'info';
 }
@@ -22,10 +23,21 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     onCancel,
     type = 'info'
 }) => {
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     if (!isOpen) return null;
+    const cancel = () => { if (!busy) { setError(null); onCancel(); } };
+    const confirm = async () => {
+        if (busy) return;
+        setBusy(true);
+        setError(null);
+        try { await onConfirm(); }
+        catch (error) { setError(error instanceof Error ? error.message : 'Could not complete this action. Try again.'); }
+        finally { setBusy(false); }
+    };
 
     return (
-        <div className="modal-overlay dialog-overlay" onClick={onCancel}>
+        <Modal label={title} className="dialog-overlay" onClose={cancel}>
             <div className="modal-content confirm-dialog" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-icon-container">
                     <div className={`modal-icon ${type}`}>
@@ -36,19 +48,21 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                 <div className="confirm-body">
                     <h3>{title}</h3>
                     <p>{message}</p>
+                    {error && <p role="alert">{error}</p>}
 
                     <div className="confirm-actions">
-                        <button className="btn-ghost" onClick={onCancel}>{cancelText}</button>
+                        <button className="btn-ghost" autoFocus disabled={busy} onClick={cancel}>{cancelText}</button>
                         <button
-                            className={type === 'danger' ? 'btn-amber' : 'btn-primary'}
-                            onClick={onConfirm}
+                            className="btn-primary"
+                            disabled={busy}
+                            onClick={() => { void confirm(); }}
                         >
-                            {confirmText}
+                            {busy ? 'Working…' : confirmText}
                         </button>
                     </div>
                 </div>
             </div>
-        </div>
+        </Modal>
     );
 };
 

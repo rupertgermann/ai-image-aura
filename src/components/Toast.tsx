@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useEffectEvent } from 'react';
 import { CheckCircle, AlertCircle, X } from 'lucide-react';
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -10,10 +10,12 @@ interface ToastProps {
 }
 
 const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
+    const dismiss = useEffectEvent(onClose);
     useEffect(() => {
-        const timer = setTimeout(onClose, 3000);
+        if (type === 'error') return;
+        const timer = setTimeout(dismiss, 5000);
         return () => clearTimeout(timer);
-    }, [onClose]);
+    }, [message, type]);
 
     const icons = {
         success: <CheckCircle size={18} className="success-icon" />,
@@ -22,10 +24,10 @@ const Toast: React.FC<ToastProps> = ({ message, type, onClose }) => {
     };
 
     return (
-        <div className={`toast ${type}`}>
+        <div className={`toast ${type}`} role={type === 'error' ? 'alert' : 'status'}>
             {icons[type]}
             <span>{message}</span>
-            <button onClick={onClose} className="toast-close">
+            <button onClick={onClose} className="toast-close" aria-label="Dismiss notification">
                 <X size={14} />
             </button>
         </div>

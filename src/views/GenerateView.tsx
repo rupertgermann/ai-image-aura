@@ -1,21 +1,20 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
-import type { ApiCostLedger, ApiCostLineItem, ArchiveImage } from '../db/types';
+import type { ApiCostLedger, ArchiveImage } from '../db/types';
 import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
 import { addGeneratedResultAsReferenceFromAction, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
+import ConfirmModal from '../components/ConfirmModal';
 import ReferenceImageModal from '../components/ReferenceImageModal';
+import PaletteSelect from '../components/PaletteSelect';
 import ActualParametersPanel from '../components/ActualParametersPanel';
-import CostSummaryPanel, { hasApiCostLedger } from '../components/CostSummaryPanel';
+import CostSummaryPanel from '../components/CostSummaryPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import {
     buildActualParameterDetails,
     getRequestedGenerateParameters,
-    hasActualParameterDetails,
-    type ActualParameterDetails,
 } from '../generate-session/actualParameters';
-import { calculateApiCostTotals, formatUsd } from '../costs/apiCost';
 import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
 import { createPromptRefiner } from '../autopilot/PromptRefiner';
@@ -26,11 +25,15 @@ import {
     buildImageModelGenerateReferenceRunPlan,
     coerceImageModelControlValue,
     getImageModelGenerateControls,
+    getImageModelUiChoices,
     getImageModelReferenceCapacityMessage,
     type ImageModelControlId,
 } from '../image-models/ImageModelControls';
 import {
     OPENAI_RESPONSES_MODEL,
+    REASONING_MODEL_REGISTRY,
+    isImageModelSlug,
+    type ReasoningModelSlug,
     LOCAL_PROVIDER,
     getProviderLabel,
     resolveImageModelConfig,
@@ -40,6 +43,8 @@ import {
 } from '../utils/openaiModels';
 
 interface GenerateViewProps {
+    onBusyChange: (busy: boolean) => void;
+    onOpenSettings: () => void;
     getProviderCredential: (provider: Provider) => string | null;
     onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
     completionNotificationsEnabled?: boolean;
@@ -88,242 +93,21 @@ const LIGHTING_OPTIONS = [
     "dramatic chiaroscuro",
 ];
 
-const PALETTES = [
-    "copper + teal + cream",
-    "cobalt + vermilion + bone",
-    "sage + sand + charcoal",
-    "magenta + midnight blue + silver",
-    "emerald + burgundy + gold",
-    "dusty rose + slate + ivory",
-    "burnt orange + navy + warm white",
-];
-
-const PALETTE_COLORS: Record<string, string[]> = {
-    "copper + teal + cream": ["#b87333", "#009688", "#f5f0e8"],
-    "cobalt + vermilion + bone": ["#0047ab", "#e34234", "#e8dcc8"],
-    "sage + sand + charcoal": ["#9caf88", "#c2b280", "#36454f"],
-    "magenta + midnight blue + silver": ["#cc00cc", "#003366", "#c0c0c0"],
-    "emerald + burgundy + gold": ["#2e8b57", "#800020", "#d4af37"],
-    "dusty rose + slate + ivory": ["#c4a4a4", "#708090", "#fffff0"],
-    "burnt orange + navy + warm white": ["#cc5500", "#002147", "#faf9f0"],
-};
-
-interface CustomSelectOption {
-    value: string;
+const Select = ({ label, value, options, onChange, className }: {
     label: string;
-    swatches?: string[];
-}
-
-interface CustomSelectProps {
     value: string;
-    options: CustomSelectOption[];
+    options: { value: string; label: string }[];
     onChange: (value: string) => void;
     className?: string;
-}
-
-const CustomSelect: React.FC<CustomSelectProps> = ({ value, options, onChange, className }) => {
-    const [open, setOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        if (!open) return;
-        const handler = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, [open]);
-    const selected = options.find((o) => o.value === value);
-    return (
-        <div ref={ref} className={className} style={{ position: 'relative' }}>
-            <button
-                type="button"
-                className="custom-select-trigger"
-                onClick={() => setOpen((o) => !o)}
-            >
-                {selected?.swatches && (
-                    <span className="select-swatches">
-                        {selected.swatches.map((c) => (
-                            <span key={c} className="swatch" style={{ background: c }} />
-                        ))}
-                    </span>
-                )}
-                <span className="custom-select-value">{selected?.label ?? value}</span>
-                <span className="custom-select-arrow">▾</span>
-            </button>
-            {open && (
-                <div className="custom-select-dropdown">
-                    {options.map((opt) => (
-                        <button
-                            key={opt.value}
-                            type="button"
-                            className={`custom-select-option${value === opt.value ? ' selected' : ''}`}
-                            onClick={() => { onChange(opt.value); setOpen(false); }}
-                        >
-                            {opt.swatches && (
-                                <span className="select-swatches">
-                                    {opt.swatches.map((c) => (
-                                        <span key={c} className="swatch" style={{ background: c }} />
-                                    ))}
-                                </span>
-                            )}
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-};
-
-interface ResultSummaryTableProps {
-    actualDetails: ActualParameterDetails | null;
-    costLedger?: ApiCostLedger;
-    resultSlot: SuccessfulGenerateResultSlot | null;
-    isSaved: boolean;
-    resultReferenceCapacityMessage: string | null;
-    onSave: () => void;
-    onDownload: () => void;
-    onUseAsReference: (result: SuccessfulGenerateResultSlot) => void;
-    onClear: () => void;
-}
-
-const ResultSummaryTable: React.FC<ResultSummaryTableProps> = ({
-    actualDetails,
-    costLedger,
-    resultSlot,
-    isSaved,
-    resultReferenceCapacityMessage,
-    onSave,
-    onDownload,
-    onUseAsReference,
-    onClear,
-}) => {
-    const hasActualDetails = actualDetails ? hasActualParameterDetails(actualDetails) : false;
-    const hasCostLedger = hasApiCostLedger(costLedger);
-    const costTotals = hasCostLedger ? calculateApiCostTotals(costLedger) : null;
-
-    return (
-        <table className="result-summary-table" aria-label="Generated image details and actions">
-            <tbody>
-                <tr>
-                    <td className="result-summary-cell result-summary-cell-parameters">
-                        <label className="section-label">Actual Parameters</label>
-                        {hasActualDetails && actualDetails ? (
-                            <div className="result-summary-metrics">
-                                {actualDetails.rows.map((row) => (
-                                    <div
-                                        key={row.label}
-                                        className={`result-summary-metric result-summary-metric-compare${row.changed ? ' changed' : ''}`}
-                                    >
-                                        <span className="result-summary-metric-label">{row.label}</span>
-                                        <div className="result-summary-pair">
-                                            <span>
-                                                <small>Requested</small>
-                                                <strong>{row.requested ?? 'Not set'}</strong>
-                                            </span>
-                                            <span>
-                                                <small>Actual</small>
-                                                <strong>{row.actual}</strong>
-                                            </span>
-                                        </div>
-                                        {row.changed && <em>Changed</em>}
-                                    </div>
-                                ))}
-                                {actualDetails.elapsedLabel && (
-                                    <div className="result-summary-metric">
-                                        <span className="result-summary-metric-label">Elapsed</span>
-                                        <strong>{actualDetails.elapsedLabel}</strong>
-                                    </div>
-                                )}
-                                {actualDetails.revisedPrompt && (
-                                    <div className="result-summary-metric result-summary-prompt">
-                                        <span className="result-summary-metric-label">Rewritten Prompt</span>
-                                        <p>{actualDetails.revisedPrompt}</p>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <span className="result-summary-empty">Not returned</span>
-                        )}
-                    </td>
-                    <td className="result-summary-cell result-summary-cell-cost">
-                        <label className="section-label">API Cost</label>
-                        {hasCostLedger ? (
-                            <div className="result-summary-metrics">
-                                <div className="result-summary-metric">
-                                    <span className="result-summary-metric-label">Total</span>
-                                    <strong>{formatResultSummaryTotal(costTotals)}</strong>
-                                </div>
-                                {costLedger.items.map((item) => (
-                                    <div key={item.id} className={`result-summary-metric ${item.status}`}>
-                                        <span className="result-summary-metric-label">{item.label}</span>
-                                        <strong>{formatResultSummaryLineItem(item)}</strong>
-                                        {item.note && <small className="result-summary-note">{item.note}</small>}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <span className="result-summary-empty">Unavailable</span>
-                        )}
-                    </td>
-                    <td className="result-summary-cell result-summary-cell-actions">
-                        <label className="section-label">Actions</label>
-                        <div className="result-summary-actions">
-                            <button
-                                onClick={onSave}
-                                className="btn-amber"
-                                disabled={isSaved}
-                            >
-                                <Archive size={18} /> {isSaved ? 'Saved to Archive' : 'Save to Archive'}
-                            </button>
-                            <button className="btn-ghost result-summary-action" onClick={onDownload}>
-                                <Download size={16} /> Download
-                            </button>
-                            {resultSlot && (
-                                <button
-                                    className="btn-ghost result-summary-action"
-                                    onClick={() => onUseAsReference(resultSlot)}
-                                    disabled={!!resultReferenceCapacityMessage}
-                                    title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
-                                >
-                                    <ImagePlus size={16} /> Reference
-                                </button>
-                            )}
-                            <button
-                                onClick={onClear}
-                                className="btn-ghost btn-icon result-summary-clear"
-                                title="Clear result"
-                                aria-label="Clear result"
-                            >
-                                <Trash2 size={16} />
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    );
-};
-
-function formatResultSummaryTotal(totals: ReturnType<typeof calculateApiCostTotals> | null) {
-    if (!totals) {
-        return 'Unavailable';
-    }
-
-    if (typeof totals.totalUsd === 'number') {
-        return formatUsd(totals.totalUsd);
-    }
-
-    return totals.status === 'partial' ? 'Partial' : 'Unavailable';
-}
-
-function formatResultSummaryLineItem(item: ApiCostLineItem) {
-    return item.status === 'calculated' && typeof item.amountUsd === 'number'
-        ? formatUsd(item.amountUsd)
-        : 'Unavailable';
-}
+}) => (
+    <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className={className}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+);
 
 const GenerateView: React.FC<GenerateViewProps> = ({
+    onBusyChange,
+    onOpenSettings,
     getProviderCredential,
     onSaveImage,
     completionNotificationsEnabled,
@@ -331,11 +115,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     isDocumentHidden,
 }) => {
     const [draft, setDraft] = useGenerateDraft();
+    const previewRef = useRef<HTMLElement>(null);
+    const [pendingAction, setPendingAction] = useState<'generate' | 'autopilot' | 'clear' | null>(null);
     const [mode, setMode] = useLocalStorage<'single-shot' | 'autopilot'>('generate_mode', 'single-shot');
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
     const [maxIterations, setMaxIterations] = useLocalStorage('generate_autopilot_max_iterations', DEFAULT_AUTOPILOT_MAX_ITERATIONS);
     const [satisfactionThreshold, setSatisfactionThreshold] = useLocalStorage('generate_autopilot_threshold', DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD);
-    const [storedReasoningModel] = useLocalStorage<string>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+    const [storedReasoningModel, setReasoningModel] = useLocalStorage<string>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
     const reasoningModel = sanitizeReasoningModel(storedReasoningModel);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
@@ -371,6 +157,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         currentBatchResults,
         currentRunDraft,
         loading,
+        saving,
         error,
         autopilot,
         updateDraft,
@@ -399,6 +186,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         completionNotificationPort,
         isDocumentHidden,
     });
+    useEffect(() => { onBusyChange(loading || saving || translatingGoal); }, [loading, saving, translatingGoal, onBusyChange]);
 
     const handleNextReference = () => {
         if (viewingReferenceIndex === null) return;
@@ -510,6 +298,19 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const activeModelControls = draft[activeModelDraftKey] as Record<string, string | number>;
     const successfulBatchResults = currentBatchResults.filter((result) => result.status === 'success');
     const hasUnsavedSuccessfulBatchResults = successfulBatchResults.some((result) => !result.isSaved);
+    const requestAction = (action: 'generate' | 'autopilot' | 'clear') => {
+        if (hasUnsavedSuccessfulBatchResults) {
+            setPendingAction(action);
+        } else {
+            performAction(action);
+        }
+    };
+    const performAction = (action: 'generate' | 'autopilot' | 'clear') => {
+        setPendingAction(null);
+        if (action === 'generate') void generate();
+        else if (action === 'clear') void clear();
+        else setShowCostDisclosure(true);
+    };
     const showBatchGrid = currentBatchResults.length > 1 || currentBatchResults.some((result) => result.status === 'failed');
     const singleResultSlot = !showBatchGrid ? successfulBatchResults[0] : null;
     const requestedParameters = getRequestedGenerateParameters(currentRunDraft ?? draft);
@@ -543,16 +344,27 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     return (
         <div className="generate-container" onPaste={handlePaste}>
             <header className="view-header">
-                <h1>Create Magic</h1>
-                <p>Harness the power of {activeModel.label} to bring your ideas to life.</p>
+                <h1>Generate</h1>
+                <p>Start with an idea. Make it your own.</p>
             </header>
 
             <div className="generate-grid">
                 <section className="controls-panel glass-panel">
+                    <div className="option-group">
+                        <label htmlFor="image-model">Image model</label>
+                        <select id="image-model" value={model} disabled={loading} onChange={(event) => {
+                            if (isImageModelSlug(event.target.value)) updateDraft({ model: event.target.value });
+                        }}>
+                            {getImageModelUiChoices().map((choice) => (
+                                <option key={choice.slug} value={choice.slug}>{choice.label}</option>
+                            ))}
+                        </select>
+                    </div>
                     <div className="input-section">
                         <div className="prompt-header">
-                            <label>{isAutopilotMode ? 'STARTING PROMPT' : 'PROMPT'}</label>
-                            <CustomSelect
+                            <label htmlFor="generation-prompt">{isAutopilotMode ? 'Starting prompt' : 'Prompt'}</label>
+                            <Select
+                                label="Example prompts"
                                 className="example-prompt-select"
                                 value=""
                                 onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
@@ -563,6 +375,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             />
                         </div>
                         <textarea
+                            id="generation-prompt"
                             placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
                             value={prompt}
                             onChange={(e) => updateDraft({ prompt: e.target.value })}
@@ -580,20 +393,32 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div className="toggle-group">
                             <button
                                 className={!isAutopilotMode ? 'active' : ''}
+                                aria-pressed={!isAutopilotMode}
+                                disabled={loading}
                                 onClick={() => setMode('single-shot')}
                             >Single Shot</button>
                             <button
                                 className={isAutopilotMode ? 'active' : ''}
+                                aria-pressed={isAutopilotMode}
+                                disabled={loading}
                                 onClick={() => setMode('autopilot')}
                             >Autopilot</button>
                         </div>
                     </div>
 
                     {isAutopilotMode && (
-                        <div className="autopilot-panel glass-panel">
+                        <div className="autopilot-panel">
+                            <div className="option-group">
+                                <label htmlFor="reasoning-model">Reasoning model</label>
+                                <select id="reasoning-model" value={reasoningModel} disabled={loading} onChange={(event) => setReasoningModel(event.target.value)}>
+                                    {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((slug) => (
+                                        <option key={slug} value={slug}>{resolveReasoningModelConfig(slug).label}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <div className="input-section">
                                 <div className="prompt-header">
-                                    <label>GOAL</label>
+                                    <label htmlFor="autopilot-goal">Goal</label>
                                     <button
                                         className="btn-ghost autopilot-inline-btn"
                                         onClick={() => { void handleTranslateGoal(); }}
@@ -603,6 +428,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     </button>
                                 </div>
                                 <textarea
+                                    id="autopilot-goal"
                                     placeholder="Describe the outcome you want in plain language..."
                                     value={goal}
                                     onChange={(e) => setGoal(e.target.value)}
@@ -615,9 +441,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                             <div className="autopilot-settings-grid">
                                 <div className="option-group">
-                                    <label>MAX ITERATIONS</label>
+                                    <label htmlFor="max-iterations">Max iterations</label>
                                     <input
                                         type="range"
+                                        id="max-iterations"
                                         min={1}
                                         max={MAX_AUTOPILOT_ITERATIONS}
                                         value={maxIterations}
@@ -628,9 +455,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 </div>
 
                                 <div className="option-group">
-                                    <label>SATISFACTION THRESHOLD</label>
+                                    <label htmlFor="satisfaction-threshold">Satisfaction threshold</label>
                                     <input
                                         type="range"
+                                        id="satisfaction-threshold"
                                         min={50}
                                         max={100}
                                         value={satisfactionThreshold}
@@ -653,11 +481,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                     <div className="options-grid">
                         <div className="image-model-options-grid">
-                            {getImageModelGenerateControls(model).map((control) => (
+                            {getImageModelGenerateControls(model).filter((control) => !isAutopilotMode || control.id !== 'batchSize').map((control) => (
                                 <div className="option-group" key={control.id}>
                                     <label>{control.label}</label>
                                     {control.kind === 'select' ? (
-                                        <CustomSelect
+                                        <Select
+                                            label={control.label}
                                             value={String(activeModelControls[control.id] ?? '')}
                                             onChange={(value) => updateImageModelControl(control.id, value)}
                                             options={control.options}
@@ -668,6 +497,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                                 <button
                                                     key={option.value}
                                                     className={String(activeModelControls[control.id] ?? '') === option.value ? 'active' : ''}
+                                                    aria-pressed={String(activeModelControls[control.id] ?? '') === option.value}
                                                     onClick={() => updateImageModelControl(control.id, option.value)}
                                                 >{option.label}</button>
                                             ))}
@@ -677,9 +507,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             ))}
                         </div>
 
-                        <div className="option-group">
-                            <label>STYLE</label>
-                            <CustomSelect
+                        <details className="style-options">
+                            <summary>Style &amp; mood{[style, lighting, palette].some((value) => value !== 'none') ? ' · Applied' : ' · Optional'}</summary>
+                            <div className="option-group">
+                            <label>Style</label>
+                            <Select
+                                label="Style"
                                 value={style}
                                 onChange={(v) => updateDraft({ style: v })}
                                 options={[
@@ -691,7 +524,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                         <div className="option-group">
                             <label>LIGHTING</label>
-                            <CustomSelect
+                            <Select
+                                label="Lighting"
                                 value={lighting}
                                 onChange={(v) => updateDraft({ lighting: v })}
                                 options={[
@@ -703,15 +537,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                         <div className="option-group">
                             <label>PALETTE</label>
-                            <CustomSelect
+                            <PaletteSelect
                                 value={palette}
                                 onChange={(v) => updateDraft({ palette: v })}
-                                options={[
-                                    { value: 'none', label: 'None' },
-                                    ...PALETTES.map((p) => ({ value: p, label: p, swatches: PALETTE_COLORS[p] })),
-                                ]}
                             />
                         </div>
+                        </details>
                     </div>
 
                     <div
@@ -724,14 +555,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div className="reference-grid">
                             {referencePreviews.map((url: string, idx: number) => (
                                 <div key={url} className="reference-preview glass-panel">
-                                    <img
-                                        src={url}
-                                        alt="Reference"
-                                        onClick={() => setViewingReferenceIndex(idx)}
-                                        style={{ cursor: 'pointer' }}
-                                    />
+                                    <button className="reference-open" aria-label={`Preview reference ${idx + 1}`} onClick={() => setViewingReferenceIndex(idx)}>
+                                        <img src={url} alt={`Reference ${idx + 1}`} />
+                                    </button>
                                     <button
                                         className="remove-ref"
+                                        aria-label={`Remove reference ${idx + 1}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             removeReferenceAt(idx);
@@ -749,8 +578,10 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     accept="image/*"
                                     onChange={(e) => {
                                         addReferenceFiles(Array.from(e.target.files || []));
+                                        e.currentTarget.value = '';
                                     }}
-                                    style={{ display: 'none' }}
+                                    className="file-input-overlay"
+                                    aria-label="Add reference images"
                                 />
                                 <Upload size={20} />
                                 <span>Add / Drop</span>
@@ -779,8 +610,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             )}
                             <button
                                 className="btn-amber"
-                                onClick={() => setShowCostDisclosure(true)}
-                                disabled={loading || !prompt.trim() || !goal.trim() || !imageCredential || !reasoningApiKey}
+                                onClick={() => requestAction('autopilot')}
+                                disabled={loading || saving || !prompt.trim() || !goal.trim() || !imageCredential || !reasoningApiKey}
                                 style={{ width: '100%' }}
                             >
                                 {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
@@ -790,20 +621,22 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     ) : (
                         <button
                             className="btn-amber"
-                            onClick={() => { void generate(); }}
-                            disabled={loading || !prompt.trim() || !imageCredential}
+                            onClick={() => requestAction('generate')}
+                            disabled={loading || saving || !prompt.trim() || !imageCredential}
                             style={{ width: '100%' }}
                         >
                             {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
-                            {loading ? 'Generating...' : 'Generate Image'}
+                            {loading ? 'Generating…' : Number(activeModelControls.batchSize) > 1 ? `Generate ${activeModelControls.batchSize} images` : 'Generate image'}
                         </button>
                     )}
+
+                    {currentBatchResults.length > 0 && !loading && <button className="btn-text-link jump-to-results" onClick={() => previewRef.current?.scrollIntoView({ block: 'start' })}>View {successfulBatchResults.length === 1 ? 'result' : 'results'} ↓</button>}
 
                     {isAutopilotMode && autopilot.running && (
                         <div className="autopilot-live-panel glass-panel">
                             <div className="autopilot-live-header">
                                 <strong>Iteration {autopilot.iterations.length}/{maxIterations}</strong>
-                                <button className="btn-ghost" onClick={cancelAutopilot}>Pause / Cancel</button>
+                                <button className="btn-ghost" onClick={cancelAutopilot}>Stop after this iteration</button>
                             </div>
                             <p className="autopilot-live-feedback">
                                 {autopilot.iterations.at(-1)?.feedback[0] ?? 'Generating the first candidate...'}
@@ -821,19 +654,19 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                     {!imageCredential && (
                         <div className="error-message">{activeModel.provider === LOCAL_PROVIDER
-                            ? 'Local server URL missing. Go to Settings to configure.'
-                            : `${getProviderLabel(activeModel.provider)} API key missing. Go to Settings to configure.`}</div>
+                            ? 'Connect a local server to use this model.'
+                            : `Add an ${getProviderLabel(activeModel.provider)} API key to use this model.`} <button className="inline-link" onClick={onOpenSettings}>Open Settings</button></div>
                     )}
                     {isAutopilotMode && !reasoningApiKey && (
-                        <div className="error-message">{getProviderLabel(activeReasoningModel.provider)} API key missing for {activeReasoningModel.label}. Go to Settings to configure.</div>
+                        <div className="error-message">{activeReasoningModel.label} needs a {getProviderLabel(activeReasoningModel.provider)} API key. <button className="inline-link" onClick={onOpenSettings}>Open Settings</button></div>
                     )}
                     {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
                     {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}
-                    {error && <div className="error-message">{error}</div>}
+                    {error && <div role="alert" className="error-message">{error}</div>}
                     {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
                 </section>
 
-                <section className={`preview-panel glass-panel${showBatchGrid && !currentPartialResult ? ' batch-preview-panel' : ''}`}>
+                <section ref={previewRef} className={`preview-panel glass-panel${showBatchGrid && !currentPartialResult ? ' batch-preview-panel' : ''}`}>
                     {currentPartialResult ? (
                         <div className="result-container partial-result-container">
                             <img src={currentPartialResult} alt="In-progress generation preview" className="result-image partial-result-image" />
@@ -856,6 +689,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         {result.status === 'success' ? (
                                             <>
                                                 <img src={result.imageUrl} alt={`Generated result ${result.slotIndex + 1}`} className="result-slot-image" />
+                                                <details className="batch-result-details"><summary>Generation details</summary>
                                                 <ActualParametersPanel
                                                     compact
                                                     details={buildActualParameterDetails({
@@ -864,13 +698,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                                     })}
                                                 />
                                                 <CostSummaryPanel compact ledger={result.costLedger} />
+                                                </details>
                                                 <div className="result-slot-actions">
                                                     <button
                                                         onClick={() => { void saveResult(result.slotIndex); }}
                                                         className="btn-amber"
-                                                        disabled={result.isSaved}
+                                                        disabled={result.isSaved || saving || loading}
                                                     >
-                                                        <Archive size={16} /> {result.isSaved ? 'Saved' : 'Save'}
+                                                        <Archive size={16} /> {result.isSaved ? 'Saved' : saving ? 'Saving…' : 'Save'}
                                                     </button>
                                                     <button className="btn-ghost" onClick={() => downloadResult(result.slotIndex)}>
                                                         <Download size={16} /> Download
@@ -881,7 +716,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                                         disabled={!!resultReferenceCapacityMessage}
                                                         title={resultReferenceCapacityMessage ?? 'Use this result as a reference image'}
                                                     >
-                                                        <ImagePlus size={16} /> Use as Reference
+                                                        <ImagePlus size={16} /> Use as reference
                                                     </button>
                                                 </div>
                                             </>
@@ -898,17 +733,18 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 <button
                                     onClick={() => { void saveAllResults(); }}
                                     className="btn-amber"
-                                    disabled={!hasUnsavedSuccessfulBatchResults}
+                                    disabled={!hasUnsavedSuccessfulBatchResults || saving || loading}
                                 >
-                                    <Archive size={18} /> Save All
+                                    <Archive size={18} /> {saving ? 'Saving…' : hasUnsavedSuccessfulBatchResults ? 'Save all' : 'All saved'}
                                 </button>
-                                <button onClick={() => { void clear(); }} className="btn-ghost result-batch-clear">
-                                    <Trash2 size={18} /> Clear Results
+                                <button onClick={() => requestAction('clear')} className="btn-ghost result-batch-clear" disabled={loading || saving}>
+                                    <Trash2 size={18} /> Clear results
                                 </button>
                             </div>
                         </div>
                     ) : currentResult ? (
                         <div className="result-container has-result-summary">
+                            {loading && <div className="run-status" role="status"><Loader2 size={18} className="spin" /> Generating a new image…</div>}
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
                                 <div className="autopilot-result-banner glass-panel">
@@ -924,26 +760,43 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     </span>
                                 </div>
                             )}
-                            <ResultSummaryTable
-                                actualDetails={singleResultActualDetails}
-                                costLedger={singleResultSlot?.costLedger}
-                                resultSlot={singleResultSlot}
-                                isSaved={singleResultSlot?.isSaved ?? isSaved}
-                                resultReferenceCapacityMessage={resultReferenceCapacityMessage}
-                                onSave={() => { void save(); }}
-                                onDownload={download}
-                                onUseAsReference={handleUseResultAsReference}
-                                onClear={() => { void clear(); }}
-                            />
+                            <div className="result-toolbar">
+                                <button className="btn-amber" disabled={saving || loading || (singleResultSlot?.isSaved ?? isSaved)} onClick={() => { void save(); }}>
+                                    <Archive size={18} /> {(singleResultSlot?.isSaved ?? isSaved) ? 'Saved to Archive' : saving ? 'Saving…' : 'Save to Archive'}
+                                </button>
+                                <button className="btn-ghost" onClick={download}><Download size={18} /> Download</button>
+                                {singleResultSlot && <button className="btn-ghost" disabled={!!resultReferenceCapacityMessage} title={resultReferenceCapacityMessage ?? undefined} onClick={() => handleUseResultAsReference(singleResultSlot)}>
+                                    <ImagePlus size={18} /> Use as reference
+                                </button>}
+                            </div>
+                            <div className="result-footer">
+                                <details className="result-details">
+                                    <summary>Generation details{singleResultActualDetails?.elapsedLabel ? ` · ${singleResultActualDetails.elapsedLabel}` : ''}</summary>
+                                    {singleResultActualDetails && <ActualParametersPanel details={singleResultActualDetails} />}
+                                    <CostSummaryPanel ledger={singleResultSlot?.costLedger} />
+                                </details>
+                                <button className="btn-ghost btn-icon" aria-label="Clear result" title="Clear result" disabled={loading || saving} onClick={() => requestAction('clear')}><X size={18} /></button>
+                            </div>
                         </div>
                     ) : (
-                        <div className="empty-preview">
-                            <Sparkles size={48} className="dim-icon" />
-                            <p>Your generation will appear here</p>
+                        <div className="empty-preview" role="status">
+                            {loading ? <Loader2 size={36} className="spin" /> : <ImagePlus size={36} className="dim-icon" />}
+                            <h2>{loading ? 'Creating your image' : 'A little space for your next idea'}</h2>
+                            <p>{loading ? 'You can browse the archive while this runs.' : 'Write a prompt or choose an example to get started.'}</p>
                         </div>
                     )}
                 </section>
             </div>
+
+            <ConfirmModal
+                isOpen={pendingAction !== null}
+                title={pendingAction === 'clear' ? 'Clear unsaved results?' : 'Replace unsaved results?'}
+                message="These images have not been saved to your archive. Save or download them first if you want to keep them."
+                confirmText={pendingAction === 'clear' ? 'Clear results' : 'Continue'}
+                cancelText="Keep results"
+                onCancel={() => setPendingAction(null)}
+                onConfirm={() => { if (pendingAction) performAction(pendingAction); }}
+            />
 
             {viewingReferenceIndex !== null && (
                 <ReferenceImageModal

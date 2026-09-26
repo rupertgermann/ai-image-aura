@@ -1,22 +1,25 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues and specs live as GitHub issues. Use the `gh` CLI from this
+repository; infer the repository from its Git remote.
 
 ## Conventions
 
-- **Create an issue**: `gh issue create --title "..." --body "..."`. Use a heredoc for multi-line bodies.
-- **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
-- **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
-- **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
-- **Close**: `gh issue close <number> --comment "..."`
+- Create: `gh issue create --title "..." --body-file issue.md`
+- Read: `gh issue view <number> --comments`
+- Inspect structured details: `gh issue view <number> --json number,title,body,labels,comments`
+- List: `gh issue list --state open --json number,title,labels`
+- Comment: `gh issue comment <number> --body-file comment.md`
+- Apply/remove labels: `gh issue edit <number> --add-label "..."` or `--remove-label "..."`
+- Close: `gh issue close <number>`
 
-Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
+Write multiline bodies to a file and pass it with `--body-file`.
 
-## When a skill says "publish to the issue tracker"
+## Pull requests as a triage surface
 
-Create a GitHub issue.
+**PRs as a request surface: no.**
 
-## When a skill says "fetch the relevant ticket"
+## Skill terminology
 
-Run `gh issue view <number> --comments`.
+- “Publish to the issue tracker”: create a GitHub issue.
+- “Fetch the relevant ticket”: read the issue, its labels, and comments.

@@ -1,29 +1,14 @@
 import React, { useState } from 'react';
-import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell, SlidersHorizontal, Server } from 'lucide-react';
-import { getImageModelUiChoices } from '../image-models/ImageModelControls';
-import { useGenerateDraft } from '../generate-session/GenerateSession';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell, Server } from 'lucide-react';
 import { normalizeLocalServerUrl } from '../app/providerKeys';
 import { testLocalServerConnection } from '../image-workflow/LocalImageProvider';
-import {
-    LOCAL_PROVIDER,
-    OPENAI_IMAGE_MODEL,
-    OPENAI_SUNBURST_IMAGE_MODEL,
-    OPENAI_RESPONSES_MODEL,
-    REASONING_MODEL_REGISTRY,
-    getProviderLabel,
-    resolveReasoningModelConfig,
-    sanitizeReasoningModel,
-    type Provider,
-    type ReasoningModelSlug,
-} from '../utils/openaiModels';
 import type { CompletionNotificationReadiness } from '../app/CompletionNotificationPort';
 
 interface SettingsViewProps {
+    onOpenGenerate: () => void;
     apiKey: string | null;
     googleApiKey: string | null;
     localServerUrl: string | null;
-    getProviderCredential: (provider: Provider) => string | null;
     completionNotificationsEnabled: boolean;
     completionNotificationReadiness: CompletionNotificationReadiness;
     onApiKeyChange: (key: string) => void;
@@ -33,10 +18,10 @@ interface SettingsViewProps {
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({
+    onOpenGenerate,
     apiKey,
     googleApiKey,
     localServerUrl,
-    getProviderCredential,
     completionNotificationsEnabled,
     completionNotificationReadiness,
     onApiKeyChange,
@@ -47,14 +32,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     return (
         <div className="settings-container">
             <header className="view-header">
-                <h1>Configuration</h1>
-                <p>Manage your providers and application preferences.</p>
+                <h1>Settings</h1>
+                <p>Connect the providers you use. Your images and settings stay in this browser.</p>
+                <button className="btn-text-link" onClick={onOpenGenerate}>Back to Generate →</button>
             </header>
 
             <ProviderKeySection
-                key={`openai-${apiKey ?? ''}`}
                 title="OpenAI API Key"
-                description={`Required for ${OPENAI_IMAGE_MODEL} and ${OPENAI_SUNBURST_IMAGE_MODEL} image generation and ${OPENAI_RESPONSES_MODEL} reasoning.`}
+                description="Use OpenAI image and reasoning models."
                 configured={!!apiKey && apiKey.length > 5}
                 placeholder="sk-..."
                 initialKey={apiKey ?? ''}
@@ -62,9 +47,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             />
 
             <ProviderKeySection
-                key={`google-${googleApiKey ?? ''}`}
                 title="Google (Gemini) API Key"
-                description="Required for Google-hosted image and reasoning models."
+                description="Use Google image and reasoning models."
                 configured={!!googleApiKey && googleApiKey.length > 5}
                 placeholder="AIza..."
                 initialKey={googleApiKey ?? ''}
@@ -74,10 +58,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <LocalServerSection
                 localServerUrl={localServerUrl}
                 onSave={onLocalServerUrlChange}
-            />
-
-            <ModelPreferencesSection
-                getProviderCredential={getProviderCredential}
             />
 
             <section className="settings-section glass-panel">
@@ -101,77 +81,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     );
 };
 
-interface ModelPreferencesSectionProps {
-    getProviderCredential: (provider: Provider) => string | null;
-}
-
-const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
-    getProviderCredential,
-}) => {
-    const [draft, setDraft] = useGenerateDraft();
-    const [storedReasoningModel, setReasoningModel] = useLocalStorage<string>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
-    const reasoningModel = sanitizeReasoningModel(storedReasoningModel);
-
-    return (
-        <section className="settings-section glass-panel">
-            <div className="section-title">
-                <SlidersHorizontal size={20} className="icon-purple" />
-                <h2>Model Preferences</h2>
-            </div>
-
-            <p className="section-desc">
-                These selections control the Generate module. Provider credentials decide which models are available.
-            </p>
-
-            <div className="settings-model-grid">
-                <div className="input-section">
-                    <label>IMAGE MODEL</label>
-                    <div className="toggle-group">
-                        {getImageModelUiChoices().map((choice) => {
-                            const hasCredential = !!getProviderCredential(choice.provider);
-                            return (
-                                <button
-                                    key={choice.slug}
-                                    className={draft.model === choice.slug ? 'active' : ''}
-                                    onClick={() => setDraft((current) => ({
-                                        ...current,
-                                        model: choice.slug,
-                                    }))}
-                                    disabled={!hasCredential}
-                                    title={hasCredential ? choice.label : getProviderSetupHint(choice.provider)}
-                                >
-                                    {choice.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                <div className="input-section">
-                    <label>REASONING MODEL</label>
-                    <div className="toggle-group">
-                        {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((modelSlug) => {
-                            const config = resolveReasoningModelConfig(modelSlug);
-                            const hasCredential = !!getProviderCredential(config.provider);
-                            return (
-                                <button
-                                    key={modelSlug}
-                                    className={reasoningModel === modelSlug ? 'active' : ''}
-                                    onClick={() => setReasoningModel(modelSlug)}
-                                    disabled={!hasCredential}
-                                    title={hasCredential ? config.label : getProviderSetupHint(config.provider)}
-                                >
-                                    {config.label}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-        </section>
-    );
-};
-
 interface LocalServerSectionProps {
     localServerUrl: string | null;
     onSave: (url: string) => void;
@@ -187,12 +96,12 @@ const LocalServerSection: React.FC<LocalServerSectionProps> = ({ localServerUrl,
 
     const handleSave = () => {
         const url = normalizeLocalServerUrl(draftUrl);
-        if (!url) {
+        if (draftUrl.trim() && !url) {
             setError('Enter a valid server URL starting with http:// or https://.');
             return;
         }
-        onSave(url);
-        setDraftUrl(url);
+        onSave(url ?? '');
+        setDraftUrl(url ?? '');
         setError(null);
         setConnection(null);
         setSaved(true);
@@ -234,9 +143,9 @@ const LocalServerSection: React.FC<LocalServerSectionProps> = ({ localServerUrl,
                     aria-invalid={!!error}
                     aria-describedby={error ? 'local-server-url-error' : undefined}
                 />
-                <button className="btn-amber" onClick={handleSave} disabled={!draftUrl.trim()}>
+                <button className="btn-amber" onClick={handleSave} disabled={draftUrl.trim() === (localServerUrl ?? '') || testing}>
                     {saved ? <CheckCircle2 size={18} /> : <Save size={18} />}
-                    {saved ? 'Saved' : 'Save'}
+                    {saved ? 'Saved' : !draftUrl.trim() && configuredUrl ? 'Disconnect' : 'Save'}
                 </button>
                 <button className="btn-ghost" onClick={() => { void handleTest(); }} disabled={!configuredUrl || normalizeLocalServerUrl(draftUrl) !== configuredUrl || testing}>
                     {testing ? 'Testing…' : 'Test connection'}
@@ -277,10 +186,9 @@ const ProviderKeySection: React.FC<ProviderKeySectionProps> = ({
     const [tempKey, setTempKey] = useState(() => initialKey);
     const [status, setStatus] = useState<'idle' | 'saved'>('idle');
     const handleSave = () => {
-        if (!tempKey.trim()) return;
         onSaveKey(tempKey.trim());
         setStatus('saved');
-        setTimeout(() => setStatus('idle'), 3000);
+
     };
 
     return (
@@ -291,53 +199,50 @@ const ProviderKeySection: React.FC<ProviderKeySectionProps> = ({
                 {configured && (
                     <div className="badge-configured">
                         <ShieldCheck size={14} />
-                        <span>Active</span>
+                        <span>Configured</span>
                     </div>
                 )}
             </div>
 
             <p className="section-desc">
-                {description} It is stored locally in your browser and never sent to our servers.
+                {description} Your key is stored in this browser and sent only to the provider.
             </p>
 
             <div className="input-group">
                 <input
                     type="password"
+                    aria-label={title}
+                    autoComplete="off"
+                    spellCheck={false}
                     placeholder={placeholder}
                     value={tempKey}
-                    onChange={(e) => setTempKey(e.target.value)}
+                    onChange={(e) => { setTempKey(e.target.value); setStatus('idle'); }}
                     className="aura-input"
                 />
                 <button
                     className="btn-amber"
                     onClick={handleSave}
-                    disabled={!tempKey.trim()}
+                    disabled={tempKey.trim() === initialKey}
                 >
                     {status === 'saved' ? <CheckCircle2 size={18} /> : <Save size={18} />}
-                    {status === 'saved' ? 'Saved' : 'Save Key'}
+                    {status === 'saved' ? 'Saved' : !tempKey.trim() && configured ? 'Remove key' : 'Save key'}
                 </button>
             </div>
 
             {!configured ? (
                 <div className="warning-box">
                     <AlertCircle size={16} />
-                    <span>This provider is unavailable until a valid API key is provided.</span>
+                    <span>Add a key when you want to use this provider.</span>
                 </div>
             ) : (
                 <div className="success-box">
                     <CheckCircle2 size={16} />
-                    <span>Key is stored and ready. Masked for security.</span>
+                    <span>Key saved on this device.</span>
                 </div>
             )}
         </section>
     );
 };
-
-function getProviderSetupHint(provider: Provider) {
-    return provider === LOCAL_PROVIDER
-        ? `Add a ${getProviderLabel(provider)} URL above`
-        : `Add a ${getProviderLabel(provider)} API key above`;
-}
 
 function getReadinessLabel(readiness: CompletionNotificationReadiness) {
     switch (readiness) {
