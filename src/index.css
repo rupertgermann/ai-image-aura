@@ -1135,7 +1135,7 @@ textarea.aura-input {
     box-shadow: none;
 }
 
-.archive-search-box input {
+.archive-search-box input.aura-input[type="search"] {
     padding-left: 48px;
 }
 
