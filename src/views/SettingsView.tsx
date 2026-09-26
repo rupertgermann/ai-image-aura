@@ -8,10 +8,12 @@ import { testLocalServerConnection } from '../image-workflow/LocalImageProvider'
 import {
     LOCAL_PROVIDER,
     OPENAI_IMAGE_MODEL,
+    OPENAI_SUNBURST_IMAGE_MODEL,
     OPENAI_RESPONSES_MODEL,
     REASONING_MODEL_REGISTRY,
     getProviderLabel,
     resolveReasoningModelConfig,
+    sanitizeReasoningModel,
     type Provider,
     type ReasoningModelSlug,
 } from '../utils/openaiModels';
@@ -52,7 +54,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <ProviderKeySection
                 key={`openai-${apiKey ?? ''}`}
                 title="OpenAI API Key"
-                description={`Required for ${OPENAI_IMAGE_MODEL} image generation and ${OPENAI_RESPONSES_MODEL} reasoning.`}
+                description={`Required for ${OPENAI_IMAGE_MODEL} and ${OPENAI_SUNBURST_IMAGE_MODEL} image generation and ${OPENAI_RESPONSES_MODEL} reasoning.`}
                 configured={!!apiKey && apiKey.length > 5}
                 placeholder="sk-..."
                 initialKey={apiKey ?? ''}
@@ -107,7 +109,8 @@ const ModelPreferencesSection: React.FC<ModelPreferencesSectionProps> = ({
     getProviderCredential,
 }) => {
     const [draft, setDraft] = useGenerateDraft();
-    const [reasoningModel, setReasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+    const [storedReasoningModel, setReasoningModel] = useLocalStorage<string>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+    const reasoningModel = sanitizeReasoningModel(storedReasoningModel);
 
     return (
         <section className="settings-section glass-panel">

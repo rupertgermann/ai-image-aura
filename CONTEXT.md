@@ -11,7 +11,11 @@ into an image. The image model is chosen **per generation** in the Generate view
 and per AI transform in the Editor view. It is recorded on every saved image and
 every lineage step.
 
-Current values: `gpt-image-2`, `nano-banana-pro`, `qwen-image-2.1`.
+Current values: `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`,
+`nano-banana-pro`, `qwen-image-2.1`.
+
+`gpt-image-2` is retired and appears only as a historical label,
+**GPT Image 2 (retired)**.
 
 - Avoid calling it the "engine", "the AI", or "backend" — those are vaguer.
 - Distinct from **provider**: the model is the user-facing choice; the provider
@@ -43,7 +47,7 @@ The model Autopilot uses for its language/vision steps — goal-to-prompt
 translation, satisfaction evaluation (which looks at the generated image), and
 prompt refinement. Selected **independently of the image model**.
 
-Current values: `gpt-5.4` (OpenAI), `gemini-2.5-flash` (Google).
+Current values: `gpt-6-sol` (OpenAI), `gemini-2.5-flash` (Google).
 
 - Not the same thing as the **image model**. An Autopilot run pairs one image
   model with one reasoning model; they may belong to different providers.

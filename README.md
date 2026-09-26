@@ -18,13 +18,13 @@ The interface follows the Telepathic Instruments-inspired visual system document
 
 ## Highlights
 
-- Prompt-based image generation with `gpt-image-2`, `nano-banana-pro`, and locally hosted `qwen-image-2.1`
+- Prompt-based image generation with `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `nano-banana-pro`, and locally hosted `qwen-image-2.1`
 - `Single Shot` and `Autopilot` generation modes
 - Batch generation of up to four images per run with a per-slot result grid, save-all, and per-result reuse actions
 - Streaming partial-image previews during single-shot generation for models that support it
 - Reuse any generated result as a reference image with a single action
 - Actual generation parameter reporting for values returned by the provider or measured by AURA
-- Goal-to-prompt translation, iterative scoring, and prompt refinement with selectable reasoning models: `gpt-5.4` and `gemini-2.5-flash`
+- Goal-to-prompt translation, iterative scoring, and prompt refinement with selectable reasoning models: `gpt-6-sol` and `gemini-2.5-flash`
 - Provider API key storage for OpenAI and Google, plus a server URL and connection test for Local server
 - Prompt enhancement controls for style, lighting, palette, and model-specific output settings
 - Shared image-model facts for Generate and Editor controls, provider routing, capabilities, reference limits, and archive metadata
@@ -63,7 +63,7 @@ npm install
 npm run dev
 ```
 
-Open the app in your browser, go to **Settings**, and configure the providers for the models you want to use. OpenAI powers `gpt-image-2` and `gpt-5.4`; Google powers `nano-banana-pro` and `gemini-2.5-flash`. Qwen Image 2.1 uses a Local server URL instead of an API key.
+Open the app in your browser, go to **Settings**, and configure the providers for the models you want to use. OpenAI powers `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst` for images, and `gpt-6-sol` for reasoning; Google powers `nano-banana-pro` and `gemini-2.5-flash`. Qwen Image 2.1 uses a Local server URL instead of an API key.
 
 ### Qwen Image 2.1 local server
 
@@ -142,19 +142,19 @@ npm run preview
 
 The Generate view supports:
 
-- Image model selection among `GPT Image 2`, `Nano Banana Pro`, and `Qwen Image 2.1` (chosen in **Settings → Model Preferences**)
+- Image model selection among `GPT Image 2.5 Flare`, `GPT Image 2.5 Sunburst`, `Nano Banana Pro`, and `Qwen Image 2.1` (chosen in **Settings → Model Preferences**)
 - Mode toggle between `Single Shot` and `Autopilot`
 - Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode
-- Reasoning model selection between `GPT 5.4` and `Gemini 2.5 Flash` in Autopilot mode
-- `GPT Image 2` quality options: `low`, `medium`, `high`
-- `GPT Image 2` size options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
-- `GPT Image 2` background options: `auto`, `opaque`, `transparent`
+- Reasoning model selection between `GPT 6 Sol` and `Gemini 2.5 Flash` in Autopilot mode
+- GPT Image 2.5 quality options: `low`, `medium`, `high`, `xhigh`, `max`, `auto` (default: `medium`)
+- GPT Image 2.5 size options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
+- GPT Image 2.5 background options: `auto`, `opaque`, `transparent`
 - `Nano Banana Pro` aspect ratio options: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
 - `Nano Banana Pro` resolution options: `1K`, `2K`, `4K`
 - `Qwen Image 2.1` aspect ratios: `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `16:9`, `9:16`
 - `Qwen Image 2.1` resolution options: `1K`, `2K`; background options: `Auto`, `Transparent`
-- `GPT Image 2` batch size options: `1`, `2`, `3`, `4`
+- GPT Image 2.5 batch size options: `1`, `2`, `3`, `4`
 - `Nano Banana Pro` batch size options: `1`, `2`, `3`, `4`
 - `Qwen Image 2.1` batch size options: `1`, `2`, `3`, `4`
 - Style, lighting, and palette modifiers that are merged into the request prompt
@@ -173,13 +173,15 @@ The Generate view supports:
 - Actual parameter panels that surface provider-reported values and measured elapsed time without inventing unavailable values
 - Save-to-archive, download, and clear-result actions
 
-Prompt-only `GPT Image 2` generations use the OpenAI generations endpoint. `GPT Image 2` requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts. `Qwen Image 2.1` uses the local server's OpenAI-compatible image generations and edits endpoints. For Transparent background, AURA adds Qwen's RGBA wording to the request prompt while keeping the saved prompt unchanged; PNG results preserve any alpha channel the model returns.
+Prompt-only GPT Image 2.5 generations use the OpenAI generations endpoint. GPT Image 2.5 requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts. `Qwen Image 2.1` uses the local server's OpenAI-compatible image generations and edits endpoints. For Transparent background, AURA adds Qwen's RGBA wording to the request prompt while keeping the saved prompt unchanged; PNG results preserve any alpha channel the model returns.
 
 Batch runs request multiple images per generation. `Nano Banana Pro` fans batch requests out into parallel `generateContent` calls so a failed slot stays isolated while the rest of the batch succeeds. `Qwen Image 2.1` requests the whole batch in one local call, so a failed call marks every slot failed.
 
 Saved Generate results use the provider-run reference image snapshot, so archive metadata and lineage reflect the exact images sent to the model even if the visible reference collection changes later.
 
 Autopilot reuses the current image model settings and provider-used reference snapshot for every iteration, evaluates results against the goal with the selected reasoning model, refines the prompt between iterations, and keeps the best-scoring result as the primary output. Autopilot result slots carry lineage and actual parameter metadata like regular generated results. With `Qwen Image 2.1`, image inference has no API charge; the selected OpenAI or Google reasoning model may still incur a charge.
+
+Flare is the default image model. Flare and Sunburst share quality, size, background, batch, streaming-preview, and transform-mask controls. Existing `gpt-image-2` archive images and lineage remain labelled **GPT Image 2 (retired)**; replay and editing use Flare while retaining compatible controls. Stored archive, lineage, and cost records are not migrated. Legacy Generate drafts retain their GPT Image controls, and saved `gpt-5.4` reasoning preferences fall back to GPT 6 Sol.
 
 ### Archive
 
@@ -279,8 +281,8 @@ The app calls provider APIs directly from the browser.
 - Google Autopilot reasoning uses Gemini `generateContent`
 - Local server generation uses `POST /v1/images/generations`; reference-based generation and Editor AI transforms use `POST /v1/images/edits`; the Settings connection test uses `GET /v1/models`
 - Local image requests send the model ID `qwen-image-2.1` with no Authorization header or hosted-provider key
-- Image models: `gpt-image-2`, `nano-banana-pro`, `qwen-image-2.1`
-- Reasoning models: `gpt-5.4`, `gemini-2.5-flash`
+- Image models: `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `nano-banana-pro`, `qwen-image-2.1`
+- Reasoning models: `gpt-6-sol`, `gemini-2.5-flash`
 - Shared image-model control facts drive UI choices, default values, validation, provider request mapping, reference limits, mask capability, streaming capability, and archive metadata
 - The app requests between one and four images per generation, fanning `Nano Banana Pro` batches out into isolated parallel requests
 - Local server image inference has a calculated $0.00 API cost; Autopilot totals still include hosted reasoning calls

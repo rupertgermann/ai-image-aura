@@ -37,7 +37,7 @@ describe('PromptRefiner', () => {
     it('attaches reasoning cost metadata when the client returns usage', async () => {
         const refiner = createPromptRefiner({
             provider: 'openai',
-            model: 'gpt-5.4',
+            model: 'gpt-6-sol',
             createResponse: vi.fn(async () => ({
                 outputText: 'Sharper prompt',
                 usage: {

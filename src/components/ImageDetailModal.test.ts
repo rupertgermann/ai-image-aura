@@ -1,8 +1,34 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { ApiCostKind, ApiCostLedger, ArchiveImage } from '../db/types';
-import { getImageDetailRequestedParameters, resolveImageDetailCostLedger } from './ImageDetailModal';
+import ImageDetailModal, { getImageDetailRequestedParameters, resolveImageDetailCostLedger } from './ImageDetailModal';
 
 describe('ImageDetailModal cost ledger', () => {
+    it.each([
+        ['gpt-image-2', 'GPT Image 2 (retired)', 'high'],
+        ['gpt-image-2.5-flare', 'GPT Image 2.5 Flare', 'xhigh'],
+        ['gpt-image-2.5-sunburst', 'GPT Image 2.5 Sunburst', 'max'],
+    ])('renders stored %s with its original controls', (model, label, quality) => {
+        const image: ArchiveImage = { id: 'stored', url: 'data:image/png;base64,AA',
+            prompt: 'historical prompt', timestamp: '2026-04-04', model, quality,
+            aspectRatio: '1024x1536', background: 'transparent',
+        };
+        const noop = () => {};
+        vi.stubGlobal('window', { localStorage: { getItem: () => null } });
+        try {
+            const html = renderToStaticMarkup(createElement(ImageDetailModal, {
+                image, images: [image], onClose: noop, onEdit: noop, onDelete: noop,
+                onCreateSimilar: noop, onToggleFavorite: noop, onReplayGenerate: noop,
+                onReplayEditor: noop, onForkFromStep: noop, onNext: noop, onPrevious: noop,
+            }));
+            for (const value of [label, quality, '1024x1536', 'transparent']) expect(html).toContain(value);
+            expect(image.model).toBe(model);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('shows Qwen aspect ratio, resolution and background in image details', () => {
         const image = {
             id: 'qwen', url: 'data:image/png;base64,AA', prompt: 'cut out', timestamp: '2026-09-22',
@@ -30,6 +56,7 @@ describe('ImageDetailModal cost ledger', () => {
             costLedger: stepLedger,
             replayImageDataUrl: null,
             runLabel: null,
+            imageModelLabel: null,
         }]);
 
         expect(resolved).toBe(imageLedger);

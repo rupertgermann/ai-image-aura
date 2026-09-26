@@ -1,6 +1,6 @@
-import { IMAGE_MODEL_REGISTRY, OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from './openaiModels';
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODEL_REGISTRY, OPENAI_RESPONSES_MODEL, isImageModelSlug } from './openaiModels';
 
-export type ImageQuality = 'low' | 'medium' | 'high';
+export type ImageQuality = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'auto';
 
 export type ImageBackground = 'transparent' | 'opaque' | 'auto';
 
@@ -73,8 +73,9 @@ const OPENAI_PARTIAL_IMAGE_COUNT = 3;
 
 async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiImageResponse[]> {
     const isEdit = request.referenceImages && request.referenceImages.length > 0;
-    const apiModel = request.apiModel ?? request.model ?? OPENAI_IMAGE_MODEL;
-    const endpoints = request.endpoints ?? IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL].endpoints;
+    const defaultModel = IMAGE_MODEL_REGISTRY[DEFAULT_IMAGE_MODEL];
+    const apiModel = request.apiModel ?? request.model ?? defaultModel.apiModel;
+    const endpoints = request.endpoints ?? defaultModel.endpoints;
     const endpoint = isEdit ? endpoints.edit : endpoints.generate;
     const batchSize = coerceOpenAiBatchSize(request.batchSize);
     const streamPartialImages = Boolean(request.onPartialImage) && batchSize === 1 && supportsOpenAiImageStreaming(apiModel);
@@ -173,7 +174,7 @@ async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiI
 }
 
 function supportsOpenAiImageStreaming(apiModel: string) {
-    return apiModel === OPENAI_IMAGE_MODEL;
+    return isImageModelSlug(apiModel) && IMAGE_MODEL_REGISTRY[apiModel].capabilities.partialImageStreaming;
 }
 
 function isEventStreamResponse(response: Response) {

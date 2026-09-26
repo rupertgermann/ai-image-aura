@@ -17,12 +17,13 @@ export function assertNever(value: never): never {
     throw new Error(`Unexpected value: ${value}`);
 }
 
-export const OPENAI_IMAGE_MODEL = 'gpt-image-2';
+export const OPENAI_IMAGE_MODEL = 'gpt-image-2.5-flare';
+export const OPENAI_SUNBURST_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
 export const NANO_BANANA_PRO_IMAGE_MODEL = 'nano-banana-pro';
 export const QWEN_IMAGE_2_1_IMAGE_MODEL = 'qwen-image-2.1';
 export const FLUX_2_KLEIN_4B_IMAGE_MODEL = 'flux-2-klein-4b';
 export const DEFAULT_IMAGE_MODEL = OPENAI_IMAGE_MODEL;
-export const OPENAI_RESPONSES_MODEL = 'gpt-5.4';
+export const OPENAI_RESPONSES_MODEL = 'gpt-6-sol';
 export const GEMINI_FLASH_REASONING_MODEL = 'gemini-2.5-flash';
 
 export type NanoBananaAspectRatio = '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9';
@@ -54,25 +55,35 @@ export interface ReasoningModelConfig {
     endpoint: string;
 }
 
+const OPENAI_IMAGE_CONFIG = {
+    provider: OPENAI_PROVIDER,
+    endpoints: {
+        generate: 'https://api.openai.com/v1/images/generations',
+        edit: 'https://api.openai.com/v1/images/edits',
+    },
+    parameters: {
+        size: 'size',
+        quality: 'quality',
+        background: 'background',
+    },
+    capabilities: {
+        transformMask: true,
+        partialImageStreaming: true,
+    },
+} as const;
+
 export const IMAGE_MODEL_REGISTRY = {
     [OPENAI_IMAGE_MODEL]: {
+        ...OPENAI_IMAGE_CONFIG,
         slug: OPENAI_IMAGE_MODEL,
-        provider: OPENAI_PROVIDER,
         apiModel: OPENAI_IMAGE_MODEL,
-        label: 'GPT Image 2',
-        endpoints: {
-            generate: 'https://api.openai.com/v1/images/generations',
-            edit: 'https://api.openai.com/v1/images/edits',
-        },
-        parameters: {
-            size: 'size',
-            quality: 'quality',
-            background: 'background',
-        },
-        capabilities: {
-            transformMask: true,
-            partialImageStreaming: true,
-        },
+        label: 'GPT Image 2.5 Flare',
+    },
+    [OPENAI_SUNBURST_IMAGE_MODEL]: {
+        ...OPENAI_IMAGE_CONFIG,
+        slug: OPENAI_SUNBURST_IMAGE_MODEL,
+        apiModel: OPENAI_SUNBURST_IMAGE_MODEL,
+        label: 'GPT Image 2.5 Sunburst',
     },
     [NANO_BANANA_PRO_IMAGE_MODEL]: {
         slug: NANO_BANANA_PRO_IMAGE_MODEL,
@@ -130,12 +141,30 @@ export const IMAGE_MODEL_REGISTRY = {
 
 export type ImageModelSlug = keyof typeof IMAGE_MODEL_REGISTRY;
 
+export const RETIRED_IMAGE_MODEL_LABELS = {
+    'gpt-image-2': 'GPT Image 2 (retired)',
+} as const;
+
+export type StoredImageModelSlug = ImageModelSlug | keyof typeof RETIRED_IMAGE_MODEL_LABELS;
+
+export function isStoredImageModelSlug(value: unknown): value is StoredImageModelSlug {
+    return isImageModelSlug(value)
+        || (typeof value === 'string' && Object.hasOwn(RETIRED_IMAGE_MODEL_LABELS, value));
+}
+
+export function getImageModelLabel(slug: string): string {
+    if (isImageModelSlug(slug)) return IMAGE_MODEL_REGISTRY[slug].label;
+    return Object.hasOwn(RETIRED_IMAGE_MODEL_LABELS, slug)
+        ? RETIRED_IMAGE_MODEL_LABELS[slug as keyof typeof RETIRED_IMAGE_MODEL_LABELS]
+        : slug;
+}
+
 export const REASONING_MODEL_REGISTRY = {
     [OPENAI_RESPONSES_MODEL]: {
         slug: OPENAI_RESPONSES_MODEL,
         provider: OPENAI_PROVIDER,
         apiModel: OPENAI_RESPONSES_MODEL,
-        label: 'GPT 5.4',
+        label: 'GPT 6 Sol',
         endpoint: 'https://api.openai.com/v1/responses',
     },
     [GEMINI_FLASH_REASONING_MODEL]: {
@@ -171,4 +200,8 @@ export function resolveReasoningModelConfig(slug: string = OPENAI_RESPONSES_MODE
 
 export function isReasoningModelSlug(value: unknown): value is ReasoningModelSlug {
     return typeof value === 'string' && Object.prototype.hasOwnProperty.call(REASONING_MODEL_REGISTRY, value);
+}
+
+export function sanitizeReasoningModel(value: unknown): ReasoningModelSlug {
+    return isReasoningModelSlug(value) ? value : OPENAI_RESPONSES_MODEL;
 }

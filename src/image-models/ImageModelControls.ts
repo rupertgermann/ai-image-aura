@@ -4,6 +4,7 @@ import {
     IMAGE_MODEL_REGISTRY,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    OPENAI_SUNBURST_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
@@ -18,7 +19,7 @@ import {
 export const NANO_REFERENCE_LIMIT = 14;
 export const FLUX_2_KLEIN_REFERENCE_LIMIT = 4;
 
-export type GptImage2Controls = {
+export type GptImageControls = {
     quality: ImageQuality;
     size: string;
     background: ImageBackground;
@@ -44,7 +45,7 @@ export type Flux2Klein4bControls = {
     batchSize: number;
 };
 
-export type ImageModelControls = GptImage2Controls | NanoBananaProControls | QwenImage2_1Controls | Flux2Klein4bControls;
+export type ImageModelControls = GptImageControls | NanoBananaProControls | QwenImage2_1Controls | Flux2Klein4bControls;
 
 export type ImageModelControlId = 'quality' | 'size' | 'background' | 'batchSize' | 'aspectRatio' | 'imageSize';
 
@@ -87,10 +88,10 @@ interface ImageModelControlFacts {
     referenceLimit: number | null;
 }
 
-const GPT_IMAGE_2_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'] as const;
-const GPT_IMAGE_2_BATCH_SIZE_MIN = 1;
-const GPT_IMAGE_2_BATCH_SIZE_MAX = 4;
-const IMAGE_QUALITIES = ['low', 'medium', 'high'] as const;
+const GPT_IMAGE_SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'] as const;
+const GPT_IMAGE_BATCH_SIZE_MIN = 1;
+const GPT_IMAGE_BATCH_SIZE_MAX = 4;
+const IMAGE_QUALITIES = ['low', 'medium', 'high', 'xhigh', 'max', 'auto'] as const;
 const IMAGE_BACKGROUNDS = ['auto', 'opaque', 'transparent'] as const;
 const NANO_ASPECT_RATIOS = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const;
 const NANO_IMAGE_SIZES = ['1K', '2K', '4K'] as const;
@@ -108,60 +109,66 @@ const LOCAL_SIZE_TABLE: Record<LocalAspectRatio, Record<LocalImageSize, string>>
     '9:16': { '768': '576x1024', '1K': '768x1376', '2K': '1536x2752' },
 };
 
-export const IMAGE_MODEL_CONTROL_FACTS = {
-    [OPENAI_IMAGE_MODEL]: {
-        defaults: {
-            quality: 'medium',
-            size: '1024x1024',
-            background: 'auto',
-            batchSize: 1,
-        },
-        generateControls: [
-            {
-                id: 'quality',
-                label: 'QUALITY',
-                kind: 'select',
-                options: [
-                    { value: 'low', label: 'Low' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'high', label: 'High' },
-                ],
-            },
-            {
-                id: 'size',
-                label: 'SIZE',
-                kind: 'select',
-                options: [
-                    { value: 'auto', label: 'Auto' },
-                    { value: '1024x1024', label: 'Square (1:1)' },
-                    { value: '1536x1024', label: 'Wide (3:2)' },
-                    { value: '1024x1536', label: 'Tall (2:3)' },
-                ],
-            },
-            {
-                id: 'background',
-                label: 'BACKGROUND',
-                kind: 'select',
-                options: [
-                    { value: 'auto', label: 'Auto' },
-                    { value: 'opaque', label: 'Opaque' },
-                    { value: 'transparent', label: 'Transparent' },
-                ],
-            },
-            {
-                id: 'batchSize',
-                label: 'BATCH SIZE',
-                kind: 'select',
-                options: [
-                    { value: '1', label: '1' },
-                    { value: '2', label: '2' },
-                    { value: '3', label: '3' },
-                    { value: '4', label: '4' },
-                ],
-            },
-        ],
-        referenceLimit: null,
+const GPT_IMAGE_CONTROL_FACTS = {
+    defaults: {
+        quality: 'medium',
+        size: '1024x1024',
+        background: 'auto',
+        batchSize: 1,
     },
+    generateControls: [
+        {
+            id: 'quality',
+            label: 'QUALITY',
+            kind: 'select',
+            options: [
+                { value: 'low', label: 'Low' },
+                { value: 'medium', label: 'Medium' },
+                { value: 'high', label: 'High' },
+                { value: 'xhigh', label: 'Extra high' },
+                { value: 'max', label: 'Max' },
+                { value: 'auto', label: 'Auto' },
+            ],
+        },
+        {
+            id: 'size',
+            label: 'SIZE',
+            kind: 'select',
+            options: [
+                { value: 'auto', label: 'Auto' },
+                { value: '1024x1024', label: 'Square (1:1)' },
+                { value: '1536x1024', label: 'Wide (3:2)' },
+                { value: '1024x1536', label: 'Tall (2:3)' },
+            ],
+        },
+        {
+            id: 'background',
+            label: 'BACKGROUND',
+            kind: 'select',
+            options: [
+                { value: 'auto', label: 'Auto' },
+                { value: 'opaque', label: 'Opaque' },
+                { value: 'transparent', label: 'Transparent' },
+            ],
+        },
+        {
+            id: 'batchSize',
+            label: 'BATCH SIZE',
+            kind: 'select',
+            options: [
+                { value: '1', label: '1' },
+                { value: '2', label: '2' },
+                { value: '3', label: '3' },
+                { value: '4', label: '4' },
+            ],
+        },
+    ],
+    referenceLimit: null,
+} as const satisfies ImageModelControlFacts;
+
+export const IMAGE_MODEL_CONTROL_FACTS = {
+    [OPENAI_IMAGE_MODEL]: GPT_IMAGE_CONTROL_FACTS,
+    [OPENAI_SUNBURST_IMAGE_MODEL]: GPT_IMAGE_CONTROL_FACTS,
     [NANO_BANANA_PRO_IMAGE_MODEL]: {
         defaults: {
             aspectRatio: '1:1',
@@ -290,7 +297,7 @@ export const IMAGE_MODEL_CONTROL_FACTS = {
     },
 } as const satisfies Record<ImageModelSlug, ImageModelControlFacts>;
 
-export function getDefaultImageModelControls(model: typeof OPENAI_IMAGE_MODEL): GptImage2Controls;
+export function getDefaultImageModelControls(model: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL): GptImageControls;
 export function getDefaultImageModelControls(model: typeof NANO_BANANA_PRO_IMAGE_MODEL): NanoBananaProControls;
 export function getDefaultImageModelControls(model: typeof QWEN_IMAGE_2_1_IMAGE_MODEL): QwenImage2_1Controls;
 export function getDefaultImageModelControls(model: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL): Flux2Klein4bControls;
@@ -299,9 +306,10 @@ export function getDefaultImageModelControls(model: ImageModelSlug): ImageModelC
     return { ...IMAGE_MODEL_CONTROL_FACTS[model].defaults };
 }
 
-export function getImageModelDraftKey(model: ImageModelSlug): 'gptImage2' | 'nanoBananaPro' | 'qwenImage2_1' | 'flux2Klein4b' {
+export function getImageModelDraftKey(model: ImageModelSlug): 'gptImage' | 'nanoBananaPro' | 'qwenImage2_1' | 'flux2Klein4b' {
     switch (model) {
-        case OPENAI_IMAGE_MODEL: return 'gptImage2';
+        case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL: return 'gptImage';
         case NANO_BANANA_PRO_IMAGE_MODEL: return 'nanoBananaPro';
         case QWEN_IMAGE_2_1_IMAGE_MODEL: return 'qwenImage2_1';
         case FLUX_2_KLEIN_4B_IMAGE_MODEL: return 'flux2Klein4b';
@@ -336,10 +344,10 @@ export function imageModelSupportsTransformMask(model: ImageModelSlug): boolean 
 }
 
 export function sanitizeImageModelControls(
-    model: typeof OPENAI_IMAGE_MODEL,
+    model: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL,
     value: unknown,
-    fallback?: GptImage2Controls,
-): GptImage2Controls;
+    fallback?: GptImageControls,
+): GptImageControls;
 export function sanitizeImageModelControls(
     model: typeof NANO_BANANA_PRO_IMAGE_MODEL,
     value: unknown,
@@ -367,7 +375,8 @@ export function sanitizeImageModelControls(
 ): ImageModelControls {
     const record = asRecord(value);
     switch (model) {
-        case OPENAI_IMAGE_MODEL: {
+        case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL: {
             const controls = asGptControls(fallback);
             return {
                 quality: coerceImageQuality(record?.quality, controls.quality),
@@ -405,7 +414,7 @@ export function sanitizeImageModelControls(
     }
 }
 
-export function sanitizeArchiveImageModelControls(model: typeof OPENAI_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): GptImage2Controls;
+export function sanitizeArchiveImageModelControls(model: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): GptImageControls;
 export function sanitizeArchiveImageModelControls(model: typeof NANO_BANANA_PRO_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): NanoBananaProControls;
 export function sanitizeArchiveImageModelControls(model: typeof QWEN_IMAGE_2_1_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): QwenImage2_1Controls;
 export function sanitizeArchiveImageModelControls(model: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): Flux2Klein4bControls;
@@ -413,6 +422,7 @@ export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: 
 export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: Pick<ArchiveImage, 'quality' | 'aspectRatio' | 'background'>): ImageModelControls {
     switch (model) {
         case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL:
             return sanitizeImageModelControls(model, {
                 quality: image.quality,
                 size: image.aspectRatio,
@@ -440,7 +450,8 @@ export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: 
 
 export function coerceImageModelControlValue(model: ImageModelSlug, controlId: string, value: unknown): string {
     switch (model) {
-        case OPENAI_IMAGE_MODEL: {
+        case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL: {
             const defaults = getDefaultImageModelControls(model);
             if (controlId === 'quality') return coerceImageQuality(value, defaults.quality);
             if (controlId === 'size') return coerceGptImageSize(value, defaults.size);
@@ -476,7 +487,8 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
 
 export function getActiveImageModelGenerateControls(model: ImageModelSlug, controls: ImageModelControls): ActiveImageModelControls {
     switch (model) {
-        case OPENAI_IMAGE_MODEL: {
+        case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL: {
             const sanitized = sanitizeImageModelControls(model, controls);
             return {
                 aspectRatio: sanitized.size,
@@ -526,7 +538,8 @@ export const buildActiveImageModelControls = getActiveImageModelGenerateControls
 
 export function buildImageModelArchiveFields(model: ImageModelSlug, controls: unknown): ImageModelArchiveFields {
     switch (model) {
-        case OPENAI_IMAGE_MODEL: {
+        case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL: {
             const sanitized = sanitizeImageModelControls(model, controls);
             const { width, height } = getExactDimensions(sanitized.size);
             return {
@@ -589,6 +602,7 @@ export function mapImageModelGenerateProviderRequest(
 
     switch (model) {
         case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL:
             return {
                 quality: coerceImageQuality(input.quality, 'medium'),
                 size: coerceGptImageSize(input.aspectRatio, '1024x1024'),
@@ -657,6 +671,7 @@ export function mapImageModelEditProviderRequest(
 
     switch (model) {
         case OPENAI_IMAGE_MODEL:
+        case OPENAI_SUNBURST_IMAGE_MODEL:
             return {
                 quality: coerceImageQuality(input.quality, 'medium'),
                 size: '1024x1024',
@@ -739,7 +754,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
         : null;
 }
 
-function asGptControls(value: ImageModelControls): GptImage2Controls {
+function asGptControls(value: ImageModelControls): GptImageControls {
     return 'quality' in value ? value : IMAGE_MODEL_CONTROL_FACTS[OPENAI_IMAGE_MODEL].defaults;
 }
 
@@ -779,7 +794,7 @@ function coerceGptImageSize(value: unknown, fallback: string): string {
     }
 
     const normalized = value.trim();
-    return (GPT_IMAGE_2_SIZES as readonly string[]).includes(normalized) ? normalized : fallback;
+    return (GPT_IMAGE_SIZES as readonly string[]).includes(normalized) ? normalized : fallback;
 }
 
 function coerceGptBatchSize(value: unknown, fallback: number): number {
@@ -794,8 +809,8 @@ function coerceGptBatchSize(value: unknown, fallback: number): number {
     }
 
     return Math.min(
-        GPT_IMAGE_2_BATCH_SIZE_MAX,
-        Math.max(GPT_IMAGE_2_BATCH_SIZE_MIN, Math.trunc(parsed)),
+        GPT_IMAGE_BATCH_SIZE_MAX,
+        Math.max(GPT_IMAGE_BATCH_SIZE_MIN, Math.trunc(parsed)),
     );
 }
 

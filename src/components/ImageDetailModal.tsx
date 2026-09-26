@@ -8,7 +8,7 @@ import { buildLineageCostLedger } from '../lineage/lineageCostLedger';
 import { loadLineageTimeline, type LineageTimelineData } from '../lineage/loadLineageTimeline';
 import { isEditorReplayable, isGenerateReplayable } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isStoredImageModelSlug, getImageModelLabel, type StoredImageModelSlug } from '../utils/openaiModels';
 import ActualParametersPanel from './ActualParametersPanel';
 import CostSummaryPanel from './CostSummaryPanel';
 import {
@@ -42,8 +42,8 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     const [lineageCollapsed, setLineageCollapsed] = useLocalStorage('archive_detail_lineage_collapsed', false);
 
     const dateStr = new Date(image.timestamp).toLocaleString();
-    const imageModel = isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
-    const modelLabel = resolveImageModelConfig(imageModel).label;
+    const imageModel = isStoredImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
+    const modelLabel = getImageModelLabel(imageModel);
     const requestedParameters = getImageDetailRequestedParameters(imageModel, image);
     const actualParameterDetails = buildActualParameterDetails({
         actualParameters: image.actualParameters,
@@ -256,6 +256,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                                 {entry.runLabel && <div className="lineage-run-label">{entry.runLabel}</div>}
                                                 <div className="lineage-entry-header">
                                                     <button className="status-badge lineage-type lineage-select" type="button">{entry.label}</button>
+                                                    {entry.imageModelLabel && <span className="lineage-time">{entry.imageModelLabel}</span>}
                                                     <span className="lineage-time">{new Date(entry.timestamp).toLocaleString()}</span>
                                                 </div>
                                                 <p className="lineage-summary">{entry.summary}</p>
@@ -325,12 +326,15 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
     );
 };
 
-export function getImageDetailRequestedParameters(model: ImageModelSlug, image: ArchiveImage) {
+export function getImageDetailRequestedParameters(model: StoredImageModelSlug, image: ArchiveImage) {
     switch (model) {
+        case 'gpt-image-2':
+        case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL:
             return [
                 { label: 'QUALITY', value: image.quality, badge: true, Icon: Layers },
                 { label: 'SIZE', value: image.aspectRatio, badge: false, Icon: Layout },
+                { label: 'BACKGROUND', value: image.background, badge: false, Icon: Layout },
             ];
         case NANO_BANANA_PRO_IMAGE_MODEL:
         case FLUX_2_KLEIN_4B_IMAGE_MODEL:

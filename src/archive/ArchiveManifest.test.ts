@@ -7,9 +7,29 @@ import {
     parseLineageManifest,
 } from './ArchiveManifest';
 import type { ArchiveLayerStack } from '../db/types';
-import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, OPENAI_RESPONSES_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('ArchiveManifest', () => {
+    it.each(['gpt-image-2', OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL])('imports %s images and typed lineage without rewriting stored models', (model) => {
+        const image = createManifestImage({ model });
+        const controls = { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 2 };
+        const steps = [
+            createLineageStep({ id: 'generation', stepType: 'generation', metadata: {
+                imageModel: { slug: model, controls },
+            } }),
+            createLineageStep({ id: 'edit', stepType: 'ai-edit', metadata: {
+                aiEdit: { prompt: 'edit', imageModel: { slug: model } },
+            } }),
+            createLineageStep({ id: 'autopilot', stepType: 'autopilot-iteration', metadata: {
+                imageModel: { slug: model, controls }, reasoningModel: { slug: 'gpt-5.4' },
+            } }),
+        ];
+        expect(parseArchiveManifest({ version: 1, images: [image] }).images[0]).toMatchObject(image);
+        const parsed = parseLineageManifest({ version: 1, steps });
+        expect(parsed.steps.map(step => step.metadata)).toEqual(steps.map(step => step.metadata));
+        expect(parseLineageManifest(JSON.parse(JSON.stringify(parsed))).steps).toEqual(parsed.steps);
+    });
+
     it('restores Qwen archive images and typed generation lineage from ZIP manifests', () => {
         const image = createManifestImage({
             model: QWEN_IMAGE_2_1_IMAGE_MODEL, quality: '2K', aspectRatio: '3:4', background: 'transparent',

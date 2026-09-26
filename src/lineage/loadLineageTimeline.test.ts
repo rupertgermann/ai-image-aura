@@ -4,6 +4,26 @@ import type { LineageStep } from './LineageStore';
 import { loadLineageTimeline } from './loadLineageTimeline';
 
 describe('loadLineageTimeline', () => {
+    it.each([
+        ['generation', { imageModel: { slug: 'gpt-image-2' } }],
+        ['reference-generation', { model: 'gpt-image-2' }],
+        ['autopilot-iteration', { imageModel: { slug: 'gpt-image-2' } }],
+        ['ai-edit', { aiEdit: { imageModel: { slug: 'gpt-image-2' } }, model: 'gpt-image-2.5-flare' }],
+    ] as const)('labels a retired %s ancestor independently of the current Flare step', async (stepType, metadata) => {
+        const ancestor = createStep({ id: 'retired', archiveImageId: 'old-image', stepType,
+            timestamp: '2026-04-04', metadata,
+        });
+        const current = createStep({ id: 'current', archiveImageId: 'flare-image', parentStepId: 'retired',
+            stepType: 'generation', timestamp: '2026-09-26', metadata: { imageModel: { slug: 'gpt-image-2.5-flare' } },
+        });
+        const timeline = await loadLineageTimeline('flare-image', createStore({
+            byArchiveImageId: { 'flare-image': [current] }, byId: { retired: ancestor }, children: {},
+        }));
+        expect(timeline.entries.map(entry => [entry.id, entry.imageModelLabel])).toEqual([
+            ['retired', 'GPT Image 2 (retired)'], ['current', 'GPT Image 2.5 Flare'],
+        ]);
+    });
+
     it('builds readable entries, parent indicator, and descendant count', async () => {
         const step1 = createStep({
             id: 'step-1',
@@ -78,6 +98,7 @@ describe('loadLineageTimeline', () => {
                     costLedger: null,
                     replayImageDataUrl: null,
                     runLabel: null,
+                    imageModelLabel: null,
                 },
                 {
                     id: 'step-1',
@@ -93,6 +114,7 @@ describe('loadLineageTimeline', () => {
                     costLedger: null,
                     replayImageDataUrl: null,
                     runLabel: null,
+                    imageModelLabel: null,
                 },
                 {
                     id: 'step-2',
@@ -108,6 +130,7 @@ describe('loadLineageTimeline', () => {
                     costLedger: null,
                     replayImageDataUrl: null,
                     runLabel: null,
+                    imageModelLabel: null,
                 },
             ],
             parent: {

@@ -35,8 +35,8 @@ import {
     getProviderLabel,
     resolveImageModelConfig,
     resolveReasoningModelConfig,
+    sanitizeReasoningModel,
     type Provider,
-    type ReasoningModelSlug,
 } from '../utils/openaiModels';
 
 interface GenerateViewProps {
@@ -335,7 +335,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const [goal, setGoal] = useLocalStorage('generate_autopilot_goal', '');
     const [maxIterations, setMaxIterations] = useLocalStorage('generate_autopilot_max_iterations', DEFAULT_AUTOPILOT_MAX_ITERATIONS);
     const [satisfactionThreshold, setSatisfactionThreshold] = useLocalStorage('generate_autopilot_threshold', DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD);
-    const [reasoningModel] = useLocalStorage<ReasoningModelSlug>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+    const [storedReasoningModel] = useLocalStorage<string>('generate_reasoning_model', OPENAI_RESPONSES_MODEL);
+    const reasoningModel = sanitizeReasoningModel(storedReasoningModel);
     const [isDragging, setIsDragging] = useState(false);
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);

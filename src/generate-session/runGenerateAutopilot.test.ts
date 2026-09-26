@@ -17,7 +17,7 @@ describe('runGenerateAutopilot', () => {
                 kind: 'reasoning' as const,
                 operation: 'goal-translation',
                 provider: 'openai' as const,
-                model: 'gpt-5.4',
+                model: 'gpt-6-sol',
                 label: 'Goal translation',
                 status: 'calculated' as const,
                 currency: 'USD' as const,
@@ -62,12 +62,12 @@ describe('runGenerateAutopilot', () => {
             reasoningApiKey: 'reasoning-key',
             reasoningModel: 'gemini-2.5-flash',
             draft: {
-                model: 'gpt-image-2',
+                model: 'gpt-image-2.5-flare',
                 prompt: 'prompt 1',
                 style: 'risograph poster',
                 lighting: 'golden hour',
                 palette: 'copper + teal + cream',
-                gptImage2: {
+                gptImage: {
                     quality: 'high',
                     size: '1024x1024',
                     background: 'transparent',
@@ -118,7 +118,7 @@ describe('runGenerateAutopilot', () => {
             references: [],
             draft: expect.objectContaining({
                 prompt: 'refined prompt',
-                gptImage2: expect.objectContaining({ batchSize: 1 }),
+                gptImage: expect.objectContaining({ batchSize: 1 }),
             }),
             lineageSource: { archiveImageId: 'autopilot:run:iteration:1', stepId: 'step-1' },
         });
@@ -181,7 +181,7 @@ describe('runGenerateAutopilot', () => {
                 style: 'risograph poster',
                 lighting: 'golden hour',
                 palette: 'copper + teal + cream',
-                gptImage2: {
+                gptImage: {
                     quality: 'high',
                     size: '1024x1024',
                     background: 'transparent',
@@ -276,7 +276,7 @@ describe('runGenerateAutopilot', () => {
                 kind: 'reasoning',
                 operation: 'evaluation',
                 provider: 'openai',
-                model: 'gpt-5.4',
+                model: 'gpt-6-sol',
                 label: 'Satisfaction evaluation',
                 status: 'calculated',
                 currency: 'USD',
@@ -300,7 +300,7 @@ describe('runGenerateAutopilot', () => {
             goal: 'A paper crane',
             imageCredential: 'http://127.0.0.1:1234',
             reasoningApiKey: 'hosted-reasoning-key',
-            reasoningModel: 'gpt-5.4',
+            reasoningModel: 'gpt-6-sol',
             draft: {
                 ...DEFAULT_GENERATE_DRAFT,
                 model: QWEN_IMAGE_2_1_IMAGE_MODEL,

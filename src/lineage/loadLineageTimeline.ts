@@ -1,20 +1,23 @@
 import type { LineageStore, LineageStep } from './LineageStore';
 import type { ApiCostLedger } from '../db/types';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
-import { readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
+import { readAutopilotLineageImageModel, readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
 import {
     readEditorTimelineMetadata,
+    readEditorLineageImageModel,
     type EditorLineageAdjustment,
     type EditorLineageLayers,
     type EditorTimelineMetadata,
 } from './editorLineageMetadata';
-import { readGenerateLineageReferenceCount } from './generateLineageMetadata';
+import { readGenerateLineageImageModel, readGenerateLineageReferenceCount } from './generateLineageMetadata';
+import { getImageModelLabel, isStoredImageModelSlug } from '../utils/openaiModels';
 
 export interface LineageTimelineEntry {
     id: string;
     archiveImageId: string;
     stepType: LineageStep['stepType'];
     label: string;
+    imageModelLabel: string | null;
     summary: string;
     timestamp: string;
     goalText: string | null;
@@ -110,12 +113,19 @@ async function countDescendants(steps: LineageStep[], store: Pick<LineageStore, 
 
 function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
     const autopilotMetadata = getAutopilotTimelineMetadata(step);
+    const imageModel = step.stepType === 'autopilot-iteration'
+        ? readAutopilotLineageImageModel(step.metadata)
+        : step.stepType === 'generation' || step.stepType === 'reference-generation'
+            ? readGenerateLineageImageModel(step.metadata)
+            : readEditorLineageImageModel(step.metadata);
+    const model = imageModel?.slug ?? (isStoredImageModelSlug(step.metadata.model) ? step.metadata.model : null);
 
     return {
         id: step.id,
         archiveImageId: step.archiveImageId,
         stepType: step.stepType,
         label: getStepLabel(step),
+        imageModelLabel: model ? getImageModelLabel(model) : null,
         summary: getStepSummary(step),
         timestamp: step.timestamp,
         goalText: autopilotMetadata?.goalText ?? null,

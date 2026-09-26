@@ -383,7 +383,7 @@ function createCostItem(id: string, amountUsd: number): ApiCostLineItem {
         kind: id === 'image-generation' ? 'image-generation' : 'reasoning',
         operation: id,
         provider: id === 'image-generation' ? 'openai' : 'openai',
-        model: id === 'image-generation' ? 'gpt-image-2' : 'gpt-5.4',
+        model: id === 'image-generation' ? 'gpt-image-2.5-flare' : 'gpt-6-sol',
         label: id,
         status: 'calculated',
         currency: 'USD',

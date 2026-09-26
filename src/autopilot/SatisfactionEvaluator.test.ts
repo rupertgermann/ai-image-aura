@@ -54,7 +54,7 @@ describe('SatisfactionEvaluator', () => {
     it('attaches reasoning cost metadata when the client returns usage', async () => {
         const evaluator = createSatisfactionEvaluator({
             provider: 'openai',
-            model: 'gpt-5.4',
+            model: 'gpt-6-sol',
             createResponse: vi.fn(async () => ({
                 outputText: JSON.stringify({
                     score: 80,
