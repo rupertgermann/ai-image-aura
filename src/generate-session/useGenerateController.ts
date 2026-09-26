@@ -101,6 +101,7 @@ interface SaveGenerateResultSlotsInput {
     runLineageSource: GenerateLineageSource | null;
     serializeReferences: () => Promise<string[]>;
     saveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    onSaved?: (results: GenerateResultSlot[]) => void | Promise<void>;
     lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
     createArchiveImageId?: () => string;
@@ -219,6 +220,7 @@ export async function saveGenerateResultSlots({
     runLineageSource,
     serializeReferences,
     saveImage,
+    onSaved,
     lineageStore,
     sessionStore,
     createArchiveImageId = () => crypto.randomUUID(),
@@ -245,13 +247,17 @@ export async function saveGenerateResultSlots({
             serializeReferences,
         });
         await saveGeneratedImage(image, {
-            saveImage: async (image) => Promise.resolve(saveImage(image)),
+            saveImage: async (image) => {
+                const savedImage = await saveImage(image);
+                nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, savedImage.id);
+                await onSaved?.(nextResults);
+                return savedImage;
+            },
             lineageStore,
             sessionStore,
             lineageSource: runLineageSource,
             runDraft: runDraft ?? draft,
         });
-        nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, archiveImageId);
     }
 
     return nextResults;
@@ -376,6 +382,9 @@ export function useGenerateController({
     const [currentRunLineageSource, setCurrentRunLineageSource] = useState<GenerateLineageSource | null>(null);
     const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const runningRef = useRef(false);
+    const savingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
         running: false,
@@ -412,6 +421,7 @@ export function useGenerateController({
     }, [replaceReferences, session]);
 
     const generate = useCallback(async () => {
+        if (runningRef.current || savingRef.current) return;
         if (!imageCredential) {
             setError(missingImageCredentialMessage(draft.model));
             return;
@@ -421,6 +431,7 @@ export function useGenerateController({
             return;
         }
 
+        runningRef.current = true;
         setLoading(true);
         setError(null);
         const partialPreviewRun = startGeneratePartialPreviewRun({
@@ -514,6 +525,7 @@ export function useGenerateController({
                     ...completionNotification,
                 });
             }
+            runningRef.current = false;
             setLoading(false);
         }
     }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
@@ -524,6 +536,7 @@ export function useGenerateController({
         satisfactionThreshold?: number;
         initialCostLedger?: ApiCostLedger;
     }) => {
+        if (runningRef.current || savingRef.current) return null;
         if (!imageCredential) {
             setError(missingImageCredentialMessage(draft.model));
             return null;
@@ -539,6 +552,7 @@ export function useGenerateController({
             return null;
         }
 
+        runningRef.current = true;
         setLoading(true);
         setError(null);
         setCurrentPartialResult(null);
@@ -659,6 +673,7 @@ export function useGenerateController({
                 });
             }
             autopilotSessionRef.current = null;
+            runningRef.current = false;
             setLoading(false);
         }
     }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
@@ -674,61 +689,42 @@ export function useGenerateController({
         lineageSource: currentRunLineageSource,
     }), [currentResultReferences, currentRunDraft, currentRunLineageSource, draft, session]);
 
-    const saveResult = useCallback(async (slotIndex: number) => {
-        const slot = currentBatchResults.find((result) => result.slotIndex === slotIndex);
-        if (!slot || slot.status !== 'success' || slot.isSaved) {
-            return;
-        }
-
+    const saveResults = useCallback(async (slotIndexes?: number[]) => {
+        if (savingRef.current || runningRef.current || !hasUnsavedSuccessfulResults(currentBatchResults)) return;
+        savingRef.current = true;
+        setSaving(true);
+        setError(null);
         try {
             const nextResults = await saveGenerateResultSlots({
                 results: currentBatchResults,
-                slotIndexes: [slot.slotIndex],
+                slotIndexes,
                 draft,
                 runDraft: currentRunDraft,
                 usedReferences: currentResultReferences,
                 runLineageSource: currentRunLineageSource,
                 serializeReferences,
                 saveImage: onSaveImage,
+                onSaved: async (results) => {
+                    setCurrentBatchResults(results);
+                    updateDraft({ isSaved: areAllSuccessfulResultsSaved(results) });
+                    await persistCurrentBatch(results);
+                },
                 lineageStore: lineage,
                 sessionStore: session,
             });
             setCurrentBatchResults(nextResults);
-            await persistCurrentBatch(nextResults);
             updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
         } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to save image');
+            setError(err instanceof Error ? err.message : 'Could not save. Your results are still here; try again or download them.');
+        } finally {
+            savingRef.current = false;
+            setSaving(false);
         }
     }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
 
-    const saveAllResults = useCallback(async () => {
-        if (!hasUnsavedSuccessfulResults(currentBatchResults)) {
-            return;
-        }
-
-        try {
-            const nextResults = await saveGenerateResultSlots({
-                results: currentBatchResults,
-                draft,
-                runDraft: currentRunDraft,
-                usedReferences: currentResultReferences,
-                runLineageSource: currentRunLineageSource,
-                serializeReferences,
-                saveImage: onSaveImage,
-                lineageStore: lineage,
-                sessionStore: session,
-            });
-            setCurrentBatchResults(nextResults);
-            await persistCurrentBatch(nextResults);
-            updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : 'Failed to save batch');
-        }
-    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
-
-    const save = useCallback(async () => {
-        await saveResult(0);
-    }, [saveResult]);
+    const saveResult = (slotIndex: number) => saveResults([slotIndex]);
+    const saveAllResults = () => saveResults();
+    const save = () => saveResults([0]);
 
     const download = useCallback(() => {
         if (!currentResult) {
@@ -746,6 +742,8 @@ export function useGenerateController({
     }, [currentBatchResults]);
 
     const clear = useCallback(async () => {
+        if (runningRef.current || savingRef.current) return;
+        setError(null);
         setCurrentResult(null);
         setCurrentPartialResult(null);
         setCurrentBatchResults([]);
@@ -761,6 +759,7 @@ export function useGenerateController({
         currentBatchResults,
         currentRunDraft,
         loading,
+        saving,
         error,
         autopilot,
         updateDraft,

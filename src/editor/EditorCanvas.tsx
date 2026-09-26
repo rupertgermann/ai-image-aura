@@ -1,6 +1,6 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konva';
-import Konva from 'konva';
+import type Konva from 'konva';
 import type { ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from './layers';
 import { buildCanvasFilter, renderLayerStackToBlob, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
@@ -30,11 +30,14 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
     const transformerRef = useRef<Konva.Transformer>(null);
     const contentLayerRef = useRef<Konva.Layer>(null);
     const layerRefs = useRef(new Map<string, Konva.Image>());
-    const scale = useMemo(() => {
-        const maxWidth = 920;
-        const maxHeight = 720;
-        return Math.min(maxWidth / layerStack.canvasWidth, maxHeight / layerStack.canvasHeight, 1);
-    }, [layerStack.canvasHeight, layerStack.canvasWidth]);
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const [viewport, setViewport] = useState({ width: 1, height: 1 });
+    useEffect(() => {
+        const observer = new ResizeObserver(([entry]) => setViewport({ width: entry.contentRect.width, height: entry.contentRect.height }));
+        observer.observe(viewportRef.current!);
+        return () => observer.disconnect();
+    }, []);
+    const scale = Math.max(0.001, Math.min((viewport.width - 32) / layerStack.canvasWidth, (viewport.height - 32) / layerStack.canvasHeight, 1));
     const selectedLayer = layerStack.layers.find((layer) => layer.id === primarySelectedLayerId);
     const canTransform = selectedLayer && !selectedLayer.locked;
 
@@ -62,6 +65,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
     }, [canTransform, primarySelectedLayerId, layerStack]);
 
     return (
+        <div ref={viewportRef} className="editor-canvas-frame">
         <Stage
             width={layerStack.canvasWidth * scale}
             height={layerStack.canvasHeight * scale}
@@ -108,6 +112,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
                 />
             </Layer>
         </Stage>
+        </div>
     );
 });
 

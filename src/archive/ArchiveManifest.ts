@@ -104,6 +104,7 @@ export function createArchiveManifestLayerStack(
     return parseArchiveManifestLayerStack({
         canvasWidth: layerStack.canvasWidth,
         canvasHeight: layerStack.canvasHeight,
+        adjustments: layerStack.adjustments,
         layers: layerStack.layers.map((layer) => ({
             id: layer.id,
             name: layer.name,
@@ -126,6 +127,7 @@ export function createLayerStackMetadata(layerStack: ArchiveManifestLayerStack):
     return {
         canvasWidth: layerStack.canvasWidth,
         canvasHeight: layerStack.canvasHeight,
+        adjustments: layerStack.adjustments,
         layers: layerStack.layers.map((layer) => ({
             id: layer.id,
             name: layer.name,
@@ -219,7 +221,24 @@ function parseArchiveManifestLayerStack(value: unknown): ArchiveManifestLayerSta
     return {
         canvasWidth: requireNumber(value.canvasWidth, 'layer stack canvasWidth'),
         canvasHeight: requireNumber(value.canvasHeight, 'layer stack canvasHeight'),
+        adjustments: parseAdjustments(value.adjustments),
         layers: value.layers.map(parseArchiveManifestLayer),
+    };
+}
+
+function parseAdjustments(value: unknown): ArchiveLayerStack['adjustments'] {
+    if (value == null) return undefined;
+    if (!isRecord(value)) throw new Error('Invalid composition adjustments');
+    const values = [value.brightness, value.contrast, value.saturation];
+    if (!values.every((entry) => typeof entry === 'number' && Number.isFinite(entry) && entry >= 0 && entry <= 200)
+        || !['none', 'grayscale(100%)', 'sepia(100%)', 'blur(5px)'].includes(String(value.filter))) {
+        throw new Error('Invalid composition adjustments');
+    }
+    return {
+        brightness: value.brightness as number,
+        contrast: value.contrast as number,
+        saturation: value.saturation as number,
+        filter: value.filter as string,
     };
 }
 

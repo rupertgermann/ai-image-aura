@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import React from 'react';
+import { LayoutGrid, PlusSquare, Image as ImageIcon, Settings, Sparkles, HardDrive, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 import type { AppView } from '../app/types';
 
 interface SidebarProps {
@@ -8,7 +9,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useLocalStorage('sidebar_collapsed', false);
 
     const navItems: { id: AppView; label: string; icon: React.ReactNode }[] = [
         { id: 'generate', label: 'Generate', icon: <PlusSquare size={20} /> },
@@ -21,6 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
         <aside className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
             <button
                 className="sidebar-collapse-btn"
+                aria-expanded={!isCollapsed}
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
@@ -32,10 +34,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
                 {!isCollapsed && <span>AURA AI</span>}
             </div>
 
-            <nav className="sidebar-nav">
+            <nav className="sidebar-nav" aria-label="Main navigation">
                 {navItems.map((item) => (
                     <button
                         key={item.id}
+                        aria-label={item.label}
+                        title={isCollapsed ? item.label : undefined}
+                        aria-current={currentView === item.id ? 'page' : undefined}
                         className={`nav-item ${currentView === item.id ? 'active' : ''}`}
                         onClick={() => onViewChange(item.id)}
                     >
@@ -47,8 +52,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
 
             <div className="sidebar-footer">
                 <div className="status-indicator">
-                    <div className="status-dot"></div>
-                    {!isCollapsed && <span>API Connected</span>}
+                    <HardDrive size={14} aria-hidden="true" />
+                    {!isCollapsed && <span>Local workspace</span>}
                 </div>
             </div>
         </aside>

@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { filterArchiveImages } from '../hooks/useImageArchive';
 import type { ArchiveImage } from '../db/types';
 
 interface UseArchiveControllerOptions {
@@ -14,6 +16,9 @@ export function useArchiveController({
     onEditImage,
     onCreateSimilar,
 }: UseArchiveControllerOptions) {
+    const [search, setSearch] = useLocalStorage('archive_search', '');
+    const [favoritesOnly, setFavoritesOnly] = useLocalStorage('archive_favorites_only', false);
+    const filteredImages = useMemo(() => filterArchiveImages(images, { search, favoritesOnly }), [images, search, favoritesOnly]);
     const [selectedIdsState, setSelectedIdsState] = useState<Set<string>>(new Set());
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
     const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
@@ -128,9 +133,9 @@ export function useArchiveController({
             return;
         }
 
-        const currentIndex = images.findIndex((image) => image.id === selectedImage.id);
+        const currentIndex = filteredImages.findIndex((image) => image.id === selectedImage.id);
         if (currentIndex > 0) {
-            setSelectedImageId(images[currentIndex - 1].id);
+            setSelectedImageId(filteredImages[currentIndex - 1].id);
         }
     };
 
@@ -139,13 +144,16 @@ export function useArchiveController({
             return;
         }
 
-        const currentIndex = images.findIndex((image) => image.id === selectedImage.id);
-        if (currentIndex >= 0 && currentIndex < images.length - 1) {
-            setSelectedImageId(images[currentIndex + 1].id);
+        const currentIndex = filteredImages.findIndex((image) => image.id === selectedImage.id);
+        if (currentIndex >= 0 && currentIndex < filteredImages.length - 1) {
+            setSelectedImageId(filteredImages[currentIndex + 1].id);
         }
     };
 
     return {
+        hasPreviousImage: !!selectedImage && filteredImages.findIndex((image) => image.id === selectedImage.id) > 0,
+        hasNextImage: !!selectedImage && filteredImages.some((image, index) => image.id === selectedImage.id && index < filteredImages.length - 1),
+        filteredImages, search, setSearch, favoritesOnly, setFavoritesOnly,
         selectedIds,
         selectedImage,
         pendingDeleteIds,

@@ -316,6 +316,8 @@ describe('ArchiveTransfer', () => {
     it('round-trips layered image assets and stable layer ids', async () => {
         const sourceLineage = createStore();
         const sourceImages = [createLayeredImage()];
+        const adjustments = { brightness: 120, contrast: 90, saturation: 150, filter: 'sepia(100%)' };
+        sourceImages[0].layerStack!.adjustments = adjustments;
         const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: sourceLineage });
         const archiveStore = new InMemoryArchiveStore();
 
@@ -326,6 +328,7 @@ describe('ArchiveTransfer', () => {
 
         expect(summary.missingAssetFiles).toEqual([]);
         const imported = archiveStore.images.get('layered-image');
+        expect(imported?.layerStack?.adjustments).toEqual(adjustments);
         expect(imported?.layerStack?.layers.map((layer) => [layer.id, layer.assetUrl])).toEqual([
             ['base', 'data:image/png;base64,aaaa'],
             ['upload', 'data:image/png;base64,bBBB'],

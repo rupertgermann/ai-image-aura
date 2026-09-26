@@ -106,4 +106,12 @@ export interface ArchiveLayerStack {
     canvasWidth: number;
     canvasHeight: number;
     layers: ArchiveLayer[];
+    adjustments?: CompositionAdjustments;
+}
+
+export interface CompositionAdjustments {
+    brightness: number;
+    contrast: number;
+    saturation: number;
+    filter: string;
 }

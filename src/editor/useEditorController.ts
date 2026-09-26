@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { imageWorkflow, type EditImageInput, type EditImageResult } from '../image-workflow/ImageWorkflow';
 import type { ImageModelSlug } from '../utils/openaiModels';
 import {
@@ -45,6 +45,8 @@ export function useEditorController({
     adjustments,
     onSave,
 }: UseEditorControllerOptions) {
+    const operationInProgress = useRef(false);
+    const [saving, setSaving] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
@@ -52,10 +54,13 @@ export function useEditorController({
     const [aiTransformProvenance, setAiTransformProvenance] = useState<AiTransformSaveProvenance | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
-        if (!isCanvasReady) {
+        if (!isCanvasReady || operationInProgress.current) {
             return;
         }
 
+        operationInProgress.current = true;
+        setSaving(true);
+        setAiError(null);
         try {
             const dataUrl = await exportDataUrl();
             const references = await serializeReferences();
@@ -68,6 +73,9 @@ export function useEditorController({
             })));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
+        } finally {
+            operationInProgress.current = false;
+            setSaving(false);
         }
     }, [
         adjustments,
@@ -80,10 +88,11 @@ export function useEditorController({
     ]);
 
     const applyAiEdit = useCallback(async () => {
-        if (!imageCredential || !aiPrompt.trim() || !draft || !isCanvasReady) {
+        if (!imageCredential || !aiPrompt.trim() || !draft || !isCanvasReady || operationInProgress.current) {
             return;
         }
 
+        operationInProgress.current = true;
         setAiLoading(true);
         setAiError(null);
 
@@ -105,6 +114,7 @@ export function useEditorController({
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
         } finally {
+            operationInProgress.current = false;
             setAiLoading(false);
         }
     }, [adjustments, aiPrompt, imageCredential, commitDraft, draft, isCanvasReady, maskImage, model, referenceImages]);
@@ -130,6 +140,7 @@ export function useEditorController({
     }, [addReferenceFiles]);
 
     return {
+        saving,
         aiPrompt,
         setAiPrompt,
         aiLoading,
