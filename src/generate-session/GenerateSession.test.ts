@@ -4,6 +4,26 @@ import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, getActiveGenerateAr
 import type { LineageStep } from '../lineage/LineageStore';
 
 describe('GenerateSession draft migration', () => {
+    it('loads a retired GPT Image draft as Flare without losing its controls', async () => {
+        const blobStorage = new InMemoryStorageProvider();
+        const legacyDraft = {
+            model: 'gpt-image-2', prompt: 'keep my prompt',
+            gptImage2: { quality: 'high', size: '1536x1024', background: 'transparent', batchSize: 3 },
+        };
+        const localStorage = { getItem: () => JSON.stringify(legacyDraft) } as unknown as Storage;
+        const store = createGenerateSessionStore({ blobStorage, localStorage });
+        const expected = {
+            model: 'gpt-image-2.5-flare', prompt: 'keep my prompt',
+            gptImage: legacyDraft.gptImage2,
+        };
+        expect(store.readDraft()).toMatchObject(expected);
+        await blobStorage.save('generate_current_batch', JSON.stringify({
+            results: [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,old' }],
+            draft: legacyDraft,
+        }));
+        expect((await store.loadCurrentBatch())?.draft).toMatchObject(expected);
+    });
+
     it('Create Similar restores the saved Qwen batch size from generation lineage', async () => {
         const store = createGenerateSessionStore({ blobStorage: new InMemoryStorageProvider() });
         const image = {
@@ -113,7 +133,7 @@ describe('GenerateSession draft migration', () => {
         const batch = await createGenerateSessionStore({ blobStorage }).loadCurrentBatch();
         expect(batch?.draft?.qwenImage2_1).toEqual(DEFAULT_GENERATE_DRAFT.qwenImage2_1);
     });
-    it('migrates legacy flat controls into the gpt-image-2 block', () => {
+    it('migrates legacy flat controls into the shared GPT Image block', () => {
         expect(sanitizeGenerateDraft({
             prompt: 'legacy prompt',
             quality: 'high',
@@ -129,7 +149,7 @@ describe('GenerateSession draft migration', () => {
             style: '35mm film still',
             lighting: 'golden hour',
             palette: 'copper + teal + cream',
-            gptImage2: {
+            gptImage: {
                 quality: 'high',
                 size: '1536x1024',
                 background: 'transparent',
@@ -148,7 +168,7 @@ describe('GenerateSession draft migration', () => {
         expect(sanitizeGenerateDraft({
             model: 'nano-banana-pro',
             prompt: 'dual controls',
-            gptImage2: {
+            gptImage: {
                 quality: 'low',
                 size: '1024x1536',
                 background: 'opaque',
@@ -161,7 +181,7 @@ describe('GenerateSession draft migration', () => {
             },
         })).toMatchObject({
             model: 'nano-banana-pro',
-            gptImage2: {
+            gptImage: {
                 quality: 'low',
                 size: '1024x1536',
                 background: 'opaque',
@@ -279,8 +299,8 @@ describe('GenerateSession draft migration', () => {
             draft: {
                 ...DEFAULT_GENERATE_DRAFT,
                 prompt: 'stored run prompt',
-                gptImage2: {
-                    ...DEFAULT_GENERATE_DRAFT.gptImage2,
+                gptImage: {
+                    ...DEFAULT_GENERATE_DRAFT.gptImage,
                     batchSize: 3,
                 },
             },

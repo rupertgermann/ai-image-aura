@@ -107,7 +107,7 @@ describe('LineageNavigator', () => {
             expect(outcome.image).toBe(image);
             expect(outcome.replay).toMatchObject({
                 prompt: 'replace the masked area',
-                model: 'gpt-image-2',
+                model: 'gpt-image-2.5-flare',
             });
             expect(outcome.replay.maskImage).toBeInstanceOf(File);
             await expect(outcome.replay.maskImage?.text()).resolves.toBe('mask');

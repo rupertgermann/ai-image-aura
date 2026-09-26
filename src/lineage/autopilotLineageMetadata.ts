@@ -1,7 +1,7 @@
 import {
     buildImageModelArchiveFields,
     sanitizeImageModelControls,
-    type GptImage2Controls,
+    type GptImageControls,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
     type Flux2Klein4bControls,
@@ -14,10 +14,13 @@ import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    OPENAI_SUNBURST_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
     isImageModelSlug,
+    isStoredImageModelSlug,
+    type StoredImageModelSlug,
     isReasoningModelSlug,
     type ImageModelSlug,
     type ReasoningModelSlug,
@@ -45,7 +48,7 @@ export interface AutopilotLineageRun {
 }
 
 export interface AutopilotLineageReasoningModel {
-    slug: ReasoningModelSlug;
+    slug: ReasoningModelSlug | 'gpt-5.4';
 }
 
 export interface AutopilotLineageDimensions {
@@ -55,8 +58,8 @@ export interface AutopilotLineageDimensions {
 
 export type AutopilotLineageImageModel =
     | {
-        slug: typeof OPENAI_IMAGE_MODEL;
-        controls: GptImage2Controls;
+        slug: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL | 'gpt-image-2';
+        controls: GptImageControls;
     }
     | {
         slug: typeof NANO_BANANA_PRO_IMAGE_MODEL;
@@ -112,7 +115,7 @@ export interface AutopilotTimelineMetadata {
 
 export interface AutopilotGenerateReplayMetadata {
     imageModel: AutopilotLineageImageModel | null;
-    model: ImageModelSlug | null;
+    model: StoredImageModelSlug | null;
     prompt: string | null;
     style: string | null;
     lighting: string | null;
@@ -211,7 +214,7 @@ export function readAutopilotGenerateReplayMetadata(metadata: Record<string, unk
 
     return {
         imageModel,
-        model: imageModel?.slug ?? (isImageModelSlug(metadata.model) ? metadata.model : null),
+        model: imageModel?.slug ?? (isStoredImageModelSlug(metadata.model) ? metadata.model : null),
         prompt: asString(metadata.prompt),
         style: asString(metadata.style),
         lighting: asString(metadata.lighting),
@@ -225,8 +228,12 @@ export function readAutopilotGenerateReplayMetadata(metadata: Record<string, unk
 
 export function readAutopilotLineageImageModel(metadata: Record<string, unknown>): AutopilotLineageImageModel | null {
     const imageModel = asRecord(metadata.imageModel);
-    if (!imageModel || !isImageModelSlug(imageModel.slug)) {
+    if (!imageModel || !isStoredImageModelSlug(imageModel.slug)) {
         return null;
+    }
+
+    if (imageModel.slug === 'gpt-image-2') {
+        return { slug: imageModel.slug, controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, imageModel.controls) };
     }
 
     return buildAutopilotLineageImageModel(
@@ -237,13 +244,13 @@ export function readAutopilotLineageImageModel(metadata: Record<string, unknown>
 
 export function readAutopilotLineageReasoningModel(metadata: Record<string, unknown>): AutopilotLineageReasoningModel | null {
     const reasoningModel = asRecord(metadata.reasoningModel);
-    if (reasoningModel && isReasoningModelSlug(reasoningModel.slug)) {
+    if (reasoningModel && (isReasoningModelSlug(reasoningModel.slug) || reasoningModel.slug === 'gpt-5.4')) {
         return {
             slug: reasoningModel.slug,
         };
     }
 
-    if (isReasoningModelSlug(metadata.reasoningModel)) {
+    if (isReasoningModelSlug(metadata.reasoningModel) || metadata.reasoningModel === 'gpt-5.4') {
         return {
             slug: metadata.reasoningModel,
         };
@@ -257,6 +264,7 @@ function buildAutopilotImageModelControls(
     settings: Omit<GenerateImageInput, 'credential' | 'prompt'>,
 ): ImageModelControls {
     switch (model) {
+        case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL:
             return sanitizeImageModelControls(model, {
                 quality: settings.quality,
@@ -290,6 +298,7 @@ function buildAutopilotLineageImageModel(
     controls: ImageModelControls,
 ): AutopilotLineageImageModel {
     switch (model) {
+        case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case NANO_BANANA_PRO_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case QWEN_IMAGE_2_1_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };

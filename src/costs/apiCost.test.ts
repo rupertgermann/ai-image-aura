@@ -29,10 +29,10 @@ describe('apiCost', () => {
         });
     });
 
-    it('calculates GPT Image cost from image usage tokens', () => {
+    it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('calculates %s cost from image usage tokens', (model) => {
         const ledger = buildImageCostLedger({
             provider: 'openai',
-            model: 'gpt-image-2',
+            model,
             operation: 'image-generation',
             usage: {
                 input_tokens: 120,
@@ -51,6 +51,7 @@ describe('apiCost', () => {
         expect(ledger.items[0]).toMatchObject({
             status: 'calculated',
             amountUsd: 0.04866,
+            model,
             usage: {
                 inputTextTokens: 100,
                 inputImageTokens: 20,
@@ -68,7 +69,7 @@ describe('apiCost', () => {
     it('allocates shared OpenAI image request cost across returned images', () => {
         const ledger = buildImageCostLedger({
             provider: 'openai',
-            model: 'gpt-image-2',
+            model: 'gpt-image-2.5-flare',
             operation: 'image-generation',
             usageScope: 'request',
             usageImageCount: 2,
@@ -123,7 +124,7 @@ describe('apiCost', () => {
         });
         const reasoningLedger = buildReasoningCostLedger({
             provider: 'openai',
-            model: 'gpt-5.4',
+            model: 'gpt-6-sol',
             operation: 'satisfaction-evaluation',
             label: 'Satisfaction evaluation',
             usage: {
@@ -136,6 +137,7 @@ describe('apiCost', () => {
             },
         });
 
+        expect(reasoningLedger.items[0]).toMatchObject({ model: 'gpt-6-sol', status: 'calculated' });
         const totals = calculateApiCostTotals(mergeApiCostLedgers(imageLedger, reasoningLedger));
 
         expect(totals).toMatchObject({
@@ -176,6 +178,11 @@ describe('apiCost', () => {
             items: [expect.objectContaining({
                 id: 'known',
                 amountUsd: 0.01,
+                model: 'gpt-5.4',
+                pricing: {
+                    source: 'https://example.test', snapshotDate: '2026-06-27',
+                    unit: 'per_1m_tokens', ratesUsdPer1M: { input: 1 },
+                },
             })],
         });
     });

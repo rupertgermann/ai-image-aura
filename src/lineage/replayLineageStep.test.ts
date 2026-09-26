@@ -2,9 +2,44 @@ import { describe, expect, it } from 'vitest';
 import type { ArchiveImage } from '../db/types';
 import type { LineageStep } from './LineageStore';
 import { buildEditorReplay, buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from './replayLineageStep';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('replayLineageStep', () => {
+    it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL])('replays %s typed controls for Generate and Autopilot', (model) => {
+        const controls = { quality: 'max', size: '1536x1024', background: 'transparent', batchSize: 2 };
+        for (const stepType of ['generation', 'autopilot-iteration'] as const) {
+            const step = createStep({ id: 'new-model', archiveImageId: 'new-image', stepType,
+                timestamp: '2026-09-26', metadata: { prompt: 'new prompt', imageModel: { slug: model, controls } },
+            });
+            expect(buildGenerateReplay(null, step).draft).toMatchObject({ model, prompt: 'new prompt', gptImage: controls });
+        }
+        expect(buildEditorReplay(createStep({ id: 'new-edit', archiveImageId: 'new-image', stepType: 'ai-edit',
+            timestamp: '2026-09-26', metadata: { aiEdit: { prompt: 'precise edit', imageModel: { slug: model } } },
+        }))).toEqual({ model, prompt: 'precise edit' });
+    });
+
+    it.each(['generation', 'autopilot-iteration'] as const)('replays retired typed %s controls with Flare without rewriting history', (stepType) => {
+        const controls = { quality: 'high', size: '1024x1536', background: 'transparent', batchSize: 3 };
+        const step = createStep({ id: 'retired', archiveImageId: 'old-image', stepType,
+            timestamp: '2026-04-04T10:00:00.000Z', metadata: {
+                prompt: 'historical prompt', imageModel: { slug: 'gpt-image-2', controls },
+            },
+        });
+        expect(buildGenerateReplay(null, step).draft).toMatchObject({
+            model: 'gpt-image-2.5-flare', prompt: 'historical prompt', gptImage: controls,
+        });
+        expect(step.metadata.imageModel).toEqual({ slug: 'gpt-image-2', controls });
+    });
+
+    it('replays a retired Editor model as Flare while retaining its prompt', () => {
+        const step = createStep({ id: 'retired-edit', archiveImageId: 'old-image', stepType: 'ai-edit',
+            timestamp: '2026-04-04T10:00:00.000Z', metadata: {
+                aiEdit: { prompt: 'historical edit', imageModel: { slug: 'gpt-image-2' } },
+            },
+        });
+        expect(buildEditorReplay(step)).toEqual({ model: 'gpt-image-2.5-flare', prompt: 'historical edit' });
+    });
+
     it('hydrates a generate draft from lineage metadata and preserves an exact fork source', () => {
         const image = createImage();
         const step = createStep({
@@ -25,12 +60,12 @@ describe('replayLineageStep', () => {
 
         expect(buildGenerateReplay(image, step)).toEqual({
             draft: {
-                model: 'gpt-image-2',
+                model: OPENAI_IMAGE_MODEL,
                 prompt: 'cathedral-sized jellyfish drifting over a neon harbor',
                 style: 'editorial sci-fi',
                 lighting: 'storm glow',
                 palette: 'violet + amber',
-                gptImage2: {
+                gptImage: {
                     quality: 'high',
                     size: '1536x1024',
                     background: 'transparent',
@@ -120,12 +155,12 @@ describe('replayLineageStep', () => {
 
         expect(buildGenerateReplay(null, step)).toEqual({
             draft: {
-                model: 'gpt-image-2',
+                model: OPENAI_IMAGE_MODEL,
                 prompt: 'editorial portrait, deep blue haze, dramatic rim light',
                 style: '35mm film still',
                 lighting: 'neon rim light',
                 palette: 'cobalt + vermilion + bone',
-                gptImage2: {
+                gptImage: {
                     quality: 'high',
                     size: '1536x1024',
                     background: 'transparent',
@@ -178,7 +213,7 @@ describe('replayLineageStep', () => {
                 style: '35mm film still',
                 lighting: 'neon rim light',
                 palette: 'cobalt + vermilion + bone',
-                gptImage2: {
+                gptImage: {
                     quality: 'high',
                     size: '1536x1024',
                     background: 'transparent',
@@ -216,7 +251,7 @@ describe('replayLineageStep', () => {
         expect(buildGenerateReplay(null, step).draft).toMatchObject({
             model: OPENAI_IMAGE_MODEL,
             prompt: 'legacy autopilot prompt',
-            gptImage2: {
+            gptImage: {
                 quality: 'medium',
                 size: '1024x1024',
                 background: 'auto',
@@ -312,7 +347,7 @@ describe('replayLineageStep', () => {
                 aspectRatio: '21:9',
                 imageSize: '2K',
             },
-            gptImage2: {
+            gptImage: {
                 quality: 'medium',
                 size: '1024x1024',
                 background: 'auto',
@@ -322,9 +357,9 @@ describe('replayLineageStep', () => {
         });
     });
 
-    it('falls back to archive image controls for older sparse Generate metadata', () => {
+    it('falls back to Flare with retired archive controls for older sparse Generate metadata', () => {
         const image = createImage({
-            model: OPENAI_IMAGE_MODEL,
+            model: 'gpt-image-2',
             quality: 'low',
             aspectRatio: '1024x1536',
             background: 'opaque',
@@ -342,7 +377,7 @@ describe('replayLineageStep', () => {
         expect(buildGenerateReplay(image, step).draft).toMatchObject({
             model: OPENAI_IMAGE_MODEL,
             prompt: 'legacy record',
-            gptImage2: {
+            gptImage: {
                 quality: 'low',
                 size: '1024x1536',
                 background: 'opaque',

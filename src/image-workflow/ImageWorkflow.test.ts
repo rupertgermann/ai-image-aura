@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL } from '../utils/openaiModels';
 import { createImageWorkflow, type ImageProvider, type ImageProviderRegistry } from './ImageWorkflow';
 import { createGoogleImageProvider, extractGoogleImageData, extractGoogleUsageMetadata } from './ImageProvider';
 
@@ -278,7 +278,7 @@ describe('ImageWorkflow', () => {
         });
     });
 
-    it('forwards single-slot OpenAI partial images as data URLs', async () => {
+    it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL] as const)('forwards %s single-slot partial images as data URLs', async (model) => {
         const onPartialImage = vi.fn();
         const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
             input.onPartialImage?.({ b64_json: 'partial' });
@@ -293,6 +293,7 @@ describe('ImageWorkflow', () => {
 
         await workflow.generate({
             credential: 'sk-test',
+            model,
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -311,7 +312,7 @@ describe('ImageWorkflow', () => {
         }));
     });
 
-    it('does not forward partial image callbacks for batch generation', async () => {
+    it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL] as const)('does not forward %s partial image callbacks for batch generation', async (model) => {
         const onPartialImage = vi.fn();
         const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
             input.onPartialImage?.({ b64_json: 'partial' });
@@ -329,6 +330,7 @@ describe('ImageWorkflow', () => {
 
         await workflow.generate({
             credential: 'sk-test',
+            model,
             prompt: 'blue hour mountain',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -610,7 +612,7 @@ describe('ImageWorkflow', () => {
         ]);
     });
 
-    it('sends selected-layer edit requests with composition context before user references', async () => {
+    it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL] as const)('sends %s masked edits with composition context before user references', async (model) => {
         let seenReferenceImages: File[] = [];
         let seenMaskImage: File | Blob | null | undefined;
         const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
@@ -632,6 +634,7 @@ describe('ImageWorkflow', () => {
 
         await workflow.edit({
             credential: 'sk-test',
+            model,
             prompt: 'replace the sky',
             sourceImage,
             compositionContextImage: compositionContext,

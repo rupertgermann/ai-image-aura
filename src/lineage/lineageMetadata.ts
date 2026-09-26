@@ -1,4 +1,4 @@
-import { isImageModelSlug, isReasoningModelSlug } from '../utils/openaiModels';
+import { isStoredImageModelSlug, isReasoningModelSlug } from '../utils/openaiModels';
 import type { LineageStepType } from './types';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
 
@@ -61,7 +61,7 @@ function validateImageModel(value: unknown) {
     }
 
     const imageModel = requireRecord(value, 'lineage imageModel');
-    if (!isImageModelSlug(imageModel.slug)) {
+    if (!isStoredImageModelSlug(imageModel.slug)) {
         throw new Error('Invalid lineage imageModel slug');
     }
 
@@ -161,7 +161,7 @@ function validateEditorAiEdit(value: unknown) {
     requireString(aiEdit.prompt, 'lineage aiEdit prompt');
     if (aiEdit.imageModel !== undefined && aiEdit.imageModel !== null) {
         const imageModel = requireRecord(aiEdit.imageModel, 'lineage aiEdit imageModel');
-        if (!isImageModelSlug(imageModel.slug)) {
+        if (!isStoredImageModelSlug(imageModel.slug)) {
             throw new Error('Invalid lineage aiEdit imageModel slug');
         }
     }
@@ -253,12 +253,12 @@ function validateReasoningModel(value: unknown) {
         return;
     }
 
-    if (typeof value === 'string' && isReasoningModelSlug(value)) {
+    if (typeof value === 'string' && (isReasoningModelSlug(value) || value === 'gpt-5.4')) {
         return;
     }
 
     const reasoningModel = requireRecord(value, 'lineage reasoningModel');
-    if (!isReasoningModelSlug(reasoningModel.slug)) {
+    if (!isReasoningModelSlug(reasoningModel.slug) && reasoningModel.slug !== 'gpt-5.4') {
         throw new Error('Invalid lineage reasoningModel slug');
     }
 }

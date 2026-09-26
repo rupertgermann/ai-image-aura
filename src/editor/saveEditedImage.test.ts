@@ -597,7 +597,7 @@ function createCostLedger(id: string, kind: ApiCostKind, amountUsd: number): Api
             kind,
             operation: kind,
             provider: 'openai',
-            model: 'gpt-image-2',
+            model: 'gpt-image-2.5-flare',
             label: kind === 'image-edit' ? 'AI edit' : 'Image generation 1',
             status: 'calculated',
             currency: 'USD',

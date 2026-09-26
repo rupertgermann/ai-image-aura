@@ -36,10 +36,10 @@ describe('Generate controller Image model archive metadata', () => {
             actualParameters: { elapsedMs: 900 },
         });
     });
-    it('builds gpt-image-2 archive metadata from shared Image model controls', () => {
+    it('builds gpt-image-2.5-flare archive metadata from shared Image model controls', () => {
         const draft = createDraft({
             model: OPENAI_IMAGE_MODEL,
-            gptImage2: {
+            gptImage: {
                 quality: 'high',
                 size: '1536x1024',
                 background: 'transparent',
@@ -234,10 +234,10 @@ describe('Generate controller batch result slots', () => {
 });
 
 describe('Generate controller partial preview gating', () => {
-    it('streams partial previews only for single-slot GPT Image 2 runs', () => {
+    it('streams partial previews only for single-slot GPT Image runs', () => {
         expect(shouldStreamGeneratePartials(createDraft({
             model: OPENAI_IMAGE_MODEL,
-            gptImage2: {
+            gptImage: {
                 quality: 'high',
                 size: '1024x1024',
                 background: 'auto',
@@ -247,7 +247,7 @@ describe('Generate controller partial preview gating', () => {
 
         expect(shouldStreamGeneratePartials(createDraft({
             model: OPENAI_IMAGE_MODEL,
-            gptImage2: {
+            gptImage: {
                 quality: 'high',
                 size: '1024x1024',
                 background: 'auto',
@@ -427,7 +427,7 @@ describe('Generate controller result Reference iteration', () => {
     it('runs the result Reference action without mutating the draft prompt or controls', () => {
         const draft = createDraft({
             prompt: 'keep this prompt',
-            gptImage2: {
+            gptImage: {
                 quality: 'high',
                 size: '1536x1024',
                 background: 'transparent',
@@ -711,9 +711,9 @@ function createDraft(overrides: Partial<GenerateDraft>): GenerateDraft {
         lighting: 'none',
         palette: 'none',
         ...overrides,
-        gptImage2: {
-            ...DEFAULT_GENERATE_DRAFT.gptImage2,
-            ...overrides.gptImage2,
+        gptImage: {
+            ...DEFAULT_GENERATE_DRAFT.gptImage,
+            ...overrides.gptImage,
         },
         nanoBananaPro: {
             ...DEFAULT_GENERATE_DRAFT.nanoBananaPro,

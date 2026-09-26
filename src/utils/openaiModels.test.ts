@@ -7,26 +7,34 @@ import {
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     LOCAL_PROVIDER,
     OPENAI_IMAGE_MODEL,
+    OPENAI_SUNBURST_IMAGE_MODEL,
+    getImageModelLabel,
+    isStoredImageModelSlug,
     OPENAI_RESPONSES_MODEL,
     REASONING_MODEL_REGISTRY,
     resolveImageModelConfig,
     isImageModelSlug,
     resolveReasoningModelConfig,
     isReasoningModelSlug,
+    sanitizeReasoningModel,
     getProviderLabel,
 } from './openaiModels';
 
 describe('openaiModels image registry', () => {
-    it('keeps gpt-image-2 as the default image model', () => {
+    it('defaults to GPT Image 2.5 Flare', () => {
+        expect(DEFAULT_IMAGE_MODEL).toBe('gpt-image-2.5-flare');
         expect(DEFAULT_IMAGE_MODEL).toBe(OPENAI_IMAGE_MODEL);
     });
 
-    it('maps gpt-image-2 to the OpenAI provider contract used today', () => {
-        expect(resolveImageModelConfig(OPENAI_IMAGE_MODEL)).toEqual(IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL]);
-        expect(IMAGE_MODEL_REGISTRY[OPENAI_IMAGE_MODEL]).toMatchObject({
-            slug: OPENAI_IMAGE_MODEL,
+    it.each([
+        ['gpt-image-2.5-flare', 'GPT Image 2.5 Flare'],
+        ['gpt-image-2.5-sunburst', 'GPT Image 2.5 Sunburst'],
+    ])('maps %s to the OpenAI image contract', (slug, label) => {
+        expect(resolveImageModelConfig(slug)).toMatchObject({
+            slug,
+            label,
             provider: 'openai',
-            apiModel: OPENAI_IMAGE_MODEL,
+            apiModel: slug,
             endpoints: {
                 generate: 'https://api.openai.com/v1/images/generations',
                 edit: 'https://api.openai.com/v1/images/edits',
@@ -38,8 +46,24 @@ describe('openaiModels image registry', () => {
             },
             capabilities: {
                 transformMask: true,
+                partialImageStreaming: true,
             },
         });
+    });
+
+    it('keeps retired image models readable but unavailable for use', () => {
+        expect(OPENAI_SUNBURST_IMAGE_MODEL).toBe('gpt-image-2.5-sunburst');
+        expect(isImageModelSlug('gpt-image-2')).toBe(false);
+        expect(isStoredImageModelSlug('gpt-image-2')).toBe(true);
+        expect(isStoredImageModelSlug(OPENAI_IMAGE_MODEL)).toBe(true);
+        expect(isStoredImageModelSlug('toString')).toBe(false);
+        expect(isStoredImageModelSlug(null)).toBe(false);
+        expect(isStoredImageModelSlug('unknown-model')).toBe(false);
+        expect(getImageModelLabel('gpt-image-2')).toBe('GPT Image 2 (retired)');
+        expect(getImageModelLabel(OPENAI_IMAGE_MODEL)).toBe('GPT Image 2.5 Flare');
+        expect(getImageModelLabel('unknown-model')).toBe('unknown-model');
+        expect(getImageModelLabel('toString')).toBe('toString');
+        expect(() => resolveImageModelConfig('gpt-image-2')).toThrow('Unknown image model: gpt-image-2');
     });
 
     it('maps nano-banana-pro to the Google image provider contract', () => {
@@ -99,16 +123,28 @@ describe('openaiModels image registry', () => {
     });
 
     it('maps reasoning models to independent providers', () => {
+        expect(OPENAI_RESPONSES_MODEL).toBe('gpt-6-sol');
+        expect(isReasoningModelSlug('gpt-5.4')).toBe(false);
         expect(resolveReasoningModelConfig(OPENAI_RESPONSES_MODEL)).toEqual(REASONING_MODEL_REGISTRY[OPENAI_RESPONSES_MODEL]);
         expect(REASONING_MODEL_REGISTRY[OPENAI_RESPONSES_MODEL]).toMatchObject({
             provider: 'openai',
             apiModel: OPENAI_RESPONSES_MODEL,
+            label: 'GPT 6 Sol',
+            endpoint: 'https://api.openai.com/v1/responses',
         });
         expect(REASONING_MODEL_REGISTRY[GEMINI_FLASH_REASONING_MODEL]).toMatchObject({
             provider: 'google',
             apiModel: GEMINI_FLASH_REASONING_MODEL,
             endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         });
+    });
+
+    it('sanitizes retired or invalid reasoning preferences without changing active choices', () => {
+        expect(sanitizeReasoningModel('gpt-5.4')).toBe('gpt-6-sol');
+        expect(sanitizeReasoningModel('unknown-model')).toBe('gpt-6-sol');
+        expect(sanitizeReasoningModel(null)).toBe('gpt-6-sol');
+        expect(sanitizeReasoningModel(GEMINI_FLASH_REASONING_MODEL)).toBe(GEMINI_FLASH_REASONING_MODEL);
+        expect(sanitizeReasoningModel(OPENAI_RESPONSES_MODEL)).toBe(OPENAI_RESPONSES_MODEL);
     });
 
     it('defaults reasoning model config to OpenAI response model when no slug is provided', () => {

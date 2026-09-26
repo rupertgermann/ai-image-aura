@@ -5,6 +5,7 @@ import {
     buildImageModelArchiveFields,
     coerceImageModelControlValue,
     getDefaultImageModelControls,
+    getImageModelDraftKey,
     getImageModelGenerateControls,
     getImageModelReferenceCapacityMessage,
     getImageModelReferenceLimitMessage,
@@ -15,9 +16,35 @@ import {
     mapImageModelGenerateProviderRequest,
     sanitizeImageModelControls,
 } from './ImageModelControls';
-import { IMAGE_MODEL_REGISTRY, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { IMAGE_MODEL_REGISTRY, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('Image model controls', () => {
+    it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL] as const)('uses shared GPT Image controls for %s', (model) => {
+        expect(getImageModelDraftKey(model)).toBe('gptImage');
+        expect(getDefaultImageModelControls(model)).toEqual({
+            quality: 'medium', size: '1024x1024', background: 'auto', batchSize: 1,
+        });
+        expect(getImageModelGenerateControls(model)).toEqual(getImageModelGenerateControls(OPENAI_IMAGE_MODEL));
+        expect(getImageModelGenerateControls(model).find((control) => control.id === 'quality')?.options.map((option) => option.value))
+            .toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'auto']);
+        expect(sanitizeImageModelControls(model, { quality: 'invalid' }).quality).toBe('medium');
+        expect(imageModelSupportsTransformMask(model)).toBe(true);
+        for (const quality of ['low', 'medium', 'high', 'xhigh', 'max', 'auto'] as const) {
+            const controls = { quality, size: '1536x1024', background: 'transparent' as const, batchSize: 4 };
+            expect(sanitizeImageModelControls(model, controls)).toEqual(controls);
+            expect(coerceImageModelControlValue(model, 'quality', quality)).toBe(quality);
+            expect(buildImageModelArchiveFields(model, controls)).toEqual({
+                quality, aspectRatio: '1536x1024', background: 'transparent', width: 1536, height: 1024,
+            });
+            expect(mapImageModelGenerateProviderRequest(model, {
+                ...controls, aspectRatio: controls.size, referenceImages: [],
+            })).toEqual({ ...controls, referenceImages: [] });
+            expect(mapImageModelEditProviderRequest(model, {
+                quality, sourceImage: new File(['source'], 'source.png'), referenceImages: [],
+            }).quality).toBe(quality);
+        }
+    });
+
     it('keeps a snapped Qwen edit request within the one-megapixel budget', () => {
         const request = mapImageModelEditProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
             sourceImage: new File(['source'], 'source.png'), referenceImages: [],
@@ -121,6 +148,9 @@ describe('Image model controls', () => {
                     { value: 'low', label: 'Low' },
                     { value: 'medium', label: 'Medium' },
                     { value: 'high', label: 'High' },
+                    { value: 'xhigh', label: 'Extra high' },
+                    { value: 'max', label: 'Max' },
+                    { value: 'auto', label: 'Auto' },
                 ],
             },
             {
@@ -334,7 +364,7 @@ describe('Image model controls', () => {
         );
     });
 
-    it('applies future gpt-image-2 Reference limits from Image model facts consistently', () => {
+    it('applies future GPT Image Reference limits from Image model facts consistently', () => {
         const references = Array.from({ length: 3 }, (_, index) =>
             new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
         );
@@ -354,7 +384,7 @@ describe('Image model controls', () => {
             });
 
             expect(runPlan.referenceLimitMessage).toBe(
-                'GPT Image 2 uses the first 2 reference images for generation.',
+                'GPT Image 2.5 Flare uses the first 2 reference images for generation.',
             );
             expect(providerRequest.referenceImages).toEqual(runPlan.providerReferenceImages);
             expect(providerRequest.referenceImages.map((file) => file.name)).toEqual(['ref-0.png', 'ref-1.png']);

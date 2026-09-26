@@ -4,7 +4,7 @@ import {
     buildImageModelArchiveFields,
     sanitizeArchiveImageModelControls,
     sanitizeImageModelControls,
-    type GptImage2Controls,
+    type GptImageControls,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
     type Flux2Klein4bControls,
@@ -14,10 +14,12 @@ import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    OPENAI_SUNBURST_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
     isImageModelSlug,
+    isStoredImageModelSlug,
     type ImageModelSlug,
 } from '../utils/openaiModels';
 
@@ -33,8 +35,8 @@ export interface GenerateLineageReferenceImages {
 
 export type GenerateLineageImageModel =
     | {
-        slug: typeof OPENAI_IMAGE_MODEL;
-        controls: GptImage2Controls;
+        slug: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL | 'gpt-image-2';
+        controls: GptImageControls;
     }
     | {
         slug: typeof NANO_BANANA_PRO_IMAGE_MODEL;
@@ -118,6 +120,7 @@ function getGenerateLineageControls(
     runDraft: GenerateDraft | null | undefined,
 ): ImageModelControls {
     switch (model) {
+        case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
         case NANO_BANANA_PRO_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
         case FLUX_2_KLEIN_4B_IMAGE_MODEL: return sanitizeArchiveImageModelControls(model, image);
@@ -131,8 +134,12 @@ function getGenerateLineageControls(
 
 export function readGenerateLineageImageModel(metadata: Record<string, unknown>): GenerateLineageImageModel | null {
     const imageModel = asRecord(metadata.imageModel);
-    if (!imageModel || !isImageModelSlug(imageModel.slug)) {
+    if (!imageModel || !isStoredImageModelSlug(imageModel.slug)) {
         return null;
+    }
+
+    if (imageModel.slug === 'gpt-image-2') {
+        return { slug: imageModel.slug, controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, imageModel.controls) };
     }
 
     return buildGenerateLineageImageModel(
@@ -156,6 +163,7 @@ function buildGenerateLineageImageModel(
     controls: ImageModelControls,
 ): GenerateLineageImageModel {
     switch (model) {
+        case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case NANO_BANANA_PRO_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
         case QWEN_IMAGE_2_1_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
@@ -166,6 +174,7 @@ function buildGenerateLineageImageModel(
 
 export function getLineageImageSize(model: ImageModelSlug, quality: string): string | null {
     switch (model) {
+        case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL: return null;
         case NANO_BANANA_PRO_IMAGE_MODEL:
         case QWEN_IMAGE_2_1_IMAGE_MODEL:

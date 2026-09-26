@@ -1,6 +1,6 @@
 import type { ApiCostLedger, ArchiveImage, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from '../editor/layers';
-import { isImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
+import { isStoredImageModelSlug, type StoredImageModelSlug } from '../utils/openaiModels';
 
 export type EditorLineageTargetMode = 'whole-composition' | 'selected-layers';
 
@@ -21,7 +21,7 @@ export interface EditorLineageAdjustment {
 }
 
 export interface EditorLineageImageModel {
-    slug: ImageModelSlug;
+    slug: StoredImageModelSlug;
 }
 
 export interface EditorLineageReferenceImages {
@@ -193,13 +193,13 @@ export function readEditorLineageAdjustment(metadata: Record<string, unknown>): 
 export function readEditorLineageImageModel(metadata: Record<string, unknown>): EditorLineageImageModel | null {
     const aiEdit = asRecord(metadata.aiEdit);
     const imageModel = asRecord(aiEdit?.imageModel);
-    if (imageModel && isImageModelSlug(imageModel.slug)) {
+    if (imageModel && isStoredImageModelSlug(imageModel.slug)) {
         return {
             slug: imageModel.slug,
         };
     }
 
-    return isImageModelSlug(metadata.model)
+    return isStoredImageModelSlug(metadata.model)
         ? { slug: metadata.model }
         : null;
 }
@@ -265,7 +265,7 @@ function buildEditorLayers(input: {
 }
 
 function buildEditorLineageImageModel(model: string | null): EditorLineageImageModel | null {
-    return isImageModelSlug(model)
+    return isStoredImageModelSlug(model)
         ? { slug: model }
         : null;
 }

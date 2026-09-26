@@ -1,9 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import type { LineageStep } from '../lineage/types';
-import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
 import { recoverArchiveMetadataFromManifests } from './recoverArchiveMetadata';
 
 describe('recoverArchiveMetadataFromManifests', () => {
+    it.each(['gpt-image-2', OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL])('recovers stored %s and historical reasoning metadata unchanged', async (model) => {
+        const metadata = new InMemoryMetadata();
+        const blobs = new InMemoryBlobs([['img_stored', 'data:image/png;base64,AA']]);
+        const lineage = new InMemoryLineage();
+        const image = { id: 'stored', prompt: 'saved prompt', model, quality: 'high',
+            aspectRatio: '1024x1536', background: 'transparent', timestamp: '2026-04-04',
+            imageFileName: 'stored.png', references: [],
+        };
+        const step = { id: 'stored-step', archiveImageId: 'stored', parentStepId: null,
+            stepType: 'autopilot-iteration', timestamp: image.timestamp, metadata: {
+                imageModel: { slug: model, controls: { quality: 'high', size: '1024x1536', background: 'transparent' } },
+                reasoningModel: { slug: 'gpt-5.4' },
+            },
+        };
+        await expect(recoverArchiveMetadataFromManifests({ version: 1, images: [image] }, {
+            version: 1, steps: [step],
+        }, { metadata, blobs, lineage })).resolves.toEqual({
+            restoredImages: 1, skippedMissingImageBlobs: [], restoredLineageSteps: 1,
+        });
+        expect(metadata.records.get('stored')).toMatchObject({ model, quality: 'high', aspectRatio: '1024x1536', background: 'transparent' });
+        expect(lineage.steps.get('stored-step')?.metadata).toEqual(step.metadata);
+    });
+
     it('recreates archive and lineage metadata from manifests when image blobs still exist', async () => {
         const metadata = new InMemoryMetadata();
         const blobs = new InMemoryBlobs([

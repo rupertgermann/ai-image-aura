@@ -10,7 +10,7 @@ import {
     getImageModelDraftKey as resolveImageModelDraftKey,
     sanitizeArchiveImageModelControls,
     sanitizeImageModelControls,
-    type GptImage2Controls,
+    type GptImageControls,
     type ImageModelArchiveFields,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
@@ -21,6 +21,7 @@ import {
     DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
+    OPENAI_SUNBURST_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
@@ -52,14 +53,14 @@ export interface GenerateDraft {
     style: string;
     lighting: string;
     palette: string;
-    gptImage2: GptImage2DraftControls;
+    gptImage: GptImageDraftControls;
     nanoBananaPro: NanoBananaProDraftControls;
     qwenImage2_1: QwenImage2_1DraftControls;
     flux2Klein4b: Flux2Klein4bDraftControls;
     isSaved: boolean;
 }
 
-export type GptImage2DraftControls = GptImage2Controls;
+export type GptImageDraftControls = GptImageControls;
 
 export type NanoBananaProDraftControls = NanoBananaProControls;
 export type QwenImage2_1DraftControls = QwenImage2_1Controls;
@@ -120,7 +121,7 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
     style: 'none',
     lighting: 'none',
     palette: 'none',
-    gptImage2: getDefaultImageModelControls(OPENAI_IMAGE_MODEL),
+    gptImage: getDefaultImageModelControls(OPENAI_IMAGE_MODEL),
     nanoBananaPro: getDefaultImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL),
     qwenImage2_1: getDefaultImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL),
     flux2Klein4b: getDefaultImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL),
@@ -144,9 +145,9 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
 
         return sanitizeGenerateDraft({
             prompt: this.readLegacyValue(LEGACY_KEYS.prompt, DEFAULT_GENERATE_DRAFT.prompt),
-            quality: this.readLegacyValue(LEGACY_KEYS.quality, DEFAULT_GENERATE_DRAFT.gptImage2.quality),
-            aspectRatio: this.readLegacyValue(LEGACY_KEYS.aspectRatio, DEFAULT_GENERATE_DRAFT.gptImage2.size),
-            background: this.readLegacyValue(LEGACY_KEYS.background, DEFAULT_GENERATE_DRAFT.gptImage2.background),
+            quality: this.readLegacyValue(LEGACY_KEYS.quality, DEFAULT_GENERATE_DRAFT.gptImage.quality),
+            aspectRatio: this.readLegacyValue(LEGACY_KEYS.aspectRatio, DEFAULT_GENERATE_DRAFT.gptImage.size),
+            background: this.readLegacyValue(LEGACY_KEYS.background, DEFAULT_GENERATE_DRAFT.gptImage.background),
             style: this.readLegacyValue(LEGACY_KEYS.style, DEFAULT_GENERATE_DRAFT.style),
             lighting: this.readLegacyValue(LEGACY_KEYS.lighting, DEFAULT_GENERATE_DRAFT.lighting),
             palette: this.readLegacyValue(LEGACY_KEYS.palette, DEFAULT_GENERATE_DRAFT.palette),
@@ -170,7 +171,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             style: image.style || 'none',
             lighting: image.lighting || 'none',
             palette: image.palette || 'none',
-            gptImage2: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
+            gptImage: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
             nanoBananaPro: sanitizeArchiveImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, image),
             qwenImage2_1: sanitizeArchiveImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, image),
             flux2Klein4b: sanitizeArchiveImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, image),
@@ -432,14 +433,16 @@ export function useGenerateDraft(store: GenerateSessionStore = generateSessionSt
     return [draft, setDraft] as const;
 }
 
-type DraftLike = Partial<GenerateDraft> & {
+type DraftLike = Omit<Partial<GenerateDraft>, 'model'> & {
+    model?: unknown;
+    gptImage2?: unknown;
     quality?: unknown;
     aspectRatio?: unknown;
     background?: unknown;
 };
 
 export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
-    const legacyGptImage2Controls = sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
+    const legacyGptImageControls = sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
         quality: draft.quality,
         size: draft.aspectRatio,
         background: draft.background,
@@ -455,7 +458,7 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
         style: typeof draft.style === 'string' ? draft.style : DEFAULT_GENERATE_DRAFT.style,
         lighting: typeof draft.lighting === 'string' ? draft.lighting : DEFAULT_GENERATE_DRAFT.lighting,
         palette: typeof draft.palette === 'string' ? draft.palette : DEFAULT_GENERATE_DRAFT.palette,
-        gptImage2: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, draft.gptImage2, legacyGptImage2Controls),
+        gptImage: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, draft.gptImage ?? draft.gptImage2, legacyGptImageControls),
         nanoBananaPro: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, draft.nanoBananaPro, legacyNanoBananaProControls),
         qwenImage2_1: sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, draft.qwenImage2_1),
         flux2Klein4b: sanitizeImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, draft.flux2Klein4b),
@@ -466,7 +469,8 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
 export function getActiveGenerateControls(draft: GenerateDraft) {
     switch (draft.model) {
         case OPENAI_IMAGE_MODEL:
-            return buildActiveImageModelControls(draft.model, draft.gptImage2);
+        case OPENAI_SUNBURST_IMAGE_MODEL:
+            return buildActiveImageModelControls(draft.model, draft.gptImage);
         case NANO_BANANA_PRO_IMAGE_MODEL:
             return buildActiveImageModelControls(draft.model, draft.nanoBananaPro);
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
@@ -480,7 +484,8 @@ export function getActiveGenerateControls(draft: GenerateDraft) {
 export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModelArchiveFields {
     switch (draft.model) {
         case OPENAI_IMAGE_MODEL:
-            return buildImageModelArchiveFields(draft.model, draft.gptImage2);
+        case OPENAI_SUNBURST_IMAGE_MODEL:
+            return buildImageModelArchiveFields(draft.model, draft.gptImage);
         case NANO_BANANA_PRO_IMAGE_MODEL:
             return buildImageModelArchiveFields(draft.model, draft.nanoBananaPro);
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
