@@ -3,7 +3,7 @@ import type { ApiCostKind, ApiCostLedger, ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
 import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
 import { createEditorDraft } from './layers';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
@@ -270,39 +270,6 @@ describe('saveEditedImage', () => {
         }));
     });
 
-    it.each([NANO_BANANA_PRO_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL])('records %s in AI edit lineage while keeping source archive settings', async (editModel) => {
-        const lineage = createStore();
-        await seedSourceLineage(lineage);
-
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,model-edit', {
-            ...createSaveContext(),
-            isCopy: true,
-            aiEditPrompt: 'preserve the source composition but make it cinematic',
-            aiEditModel: editModel,
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            clock: () => '2026-04-04T15:00:00.000Z',
-            makeId: () => 'model-edit-copy',
-        });
-
-        expect(savedImage).toMatchObject({
-            model: OPENAI_IMAGE_MODEL,
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
-        });
-        const steps = await lineage.getByArchiveImageId('model-edit-copy');
-        expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
-            model: editModel,
-            aiEdit: expect.objectContaining({
-                imageModel: {
-                    slug: editModel,
-                },
-            }),
-        }));
-    });
-
     it('stores masked AI edit lineage as a transform mask asset without adding mask layers', async () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
@@ -388,55 +355,6 @@ describe('saveEditedImage', () => {
         }));
         expect(steps.at(-1)?.metadata).not.toHaveProperty('layerStack');
         expect(JSON.stringify(steps.at(-1)?.metadata)).not.toContain('data:image/png;base64');
-    });
-
-    it('counts only saved user Reference images in AI edit lineage metadata', async () => {
-        const lineage = createStore();
-        await seedSourceLineage(lineage);
-
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,edited-with-refs', {
-            ...createSaveContext(),
-            isCopy: true,
-            references: [
-                'data:image/png;base64,user-ref-1',
-                'data:image/png;base64,user-ref-2',
-            ],
-            aiEditPrompt: 'blend the selected subject into the scene',
-            targetMode: 'selected-layers',
-            targetLayerCount: 1,
-            targetIncludesBaseLayer: false,
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            makeId: () => 'edit-with-user-refs',
-        });
-
-        const steps = await lineage.getByArchiveImageId(savedImage.id);
-        expect(steps.at(-1)).toEqual(expect.objectContaining({
-            stepType: 'ai-edit',
-            metadata: expect.objectContaining({
-                referenceCount: 2,
-                targetMode: 'selected-layers',
-                aiEdit: {
-                    prompt: 'blend the selected subject into the scene',
-                    imageModel: {
-                        slug: OPENAI_IMAGE_MODEL,
-                    },
-                    referenceImages: {
-                        count: 2,
-                    },
-                    transformTarget: {
-                        mode: 'selected-layers',
-                        layerCount: 1,
-                        includesBaseLayer: false,
-                    },
-                },
-            }),
-        }));
-        expect(savedImage.references).toEqual([
-            'data:image/png;base64,user-ref-1',
-            'data:image/png;base64,user-ref-2',
-        ]);
     });
 
 

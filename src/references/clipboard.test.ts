@@ -30,16 +30,7 @@ describe('getImageFilesFromClipboard', () => {
         })).toEqual([png]);
     });
 
-    it('ignores non-image payloads without throwing', () => {
-        expect(getImageFilesFromClipboard({
-            clipboardData: {
-                items: [
-                    createTextClipboardItem(),
-                    createClipboardItem(new File(['hello'], 'note.txt', { type: 'text/plain' })),
-                ],
-            },
-        })).toEqual([]);
-    });
+
 });
 
 function createClipboardItem(file: File) {

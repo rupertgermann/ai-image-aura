@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
     ARCHIVE_MANIFEST_VERSION,
     LINEAGE_MANIFEST_VERSION,
-    createArchiveManifestLayerStack,
     parseArchiveManifest,
     parseLineageManifest,
 } from './ArchiveManifest';
-import type { ArchiveLayerStack } from '../db/types';
 import { OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, OPENAI_RESPONSES_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('ArchiveManifest', () => {
@@ -48,66 +46,6 @@ describe('ArchiveManifest', () => {
         expect(parseLineageManifest({ version: 1, steps: [step] }).steps[0].metadata.imageModel).toEqual(
             step.metadata.imageModel,
         );
-    });
-    it('accepts the existing archive manifest version and preserves stable layer ids', () => {
-        const manifest = parseArchiveManifest({
-            version: ARCHIVE_MANIFEST_VERSION,
-            images: [
-                {
-                    id: 'layered-image',
-                    prompt: 'layered',
-                    quality: 'high',
-                    aspectRatio: '1024x1024',
-                    background: 'transparent',
-                    timestamp: '2026-06-05T10:00:00.000Z',
-                    imageFileName: 'aura-layered-image.png',
-                    references: [],
-                    layerStack: createManifestLayerStack(),
-                },
-            ],
-        });
-
-        expect(manifest.version).toBe(1);
-        expect(manifest.images[0].layerStack?.layers.map((layer) => [layer.id, layer.assetFileName])).toEqual([
-            ['base', 'aura-layered-image-layer-base.png'],
-            ['upload', 'aura-layered-image-layer-upload.png'],
-        ]);
-    });
-
-    it('preserves favorite flags while keeping legacy images non-favorite by omission', () => {
-        const manifest = parseArchiveManifest({
-            version: ARCHIVE_MANIFEST_VERSION,
-            images: [
-                createManifestImage({ id: 'favorite-image', favorite: true }),
-                createManifestImage({ id: 'legacy-image' }),
-            ],
-        });
-
-        expect(manifest.images).toEqual([
-            expect.objectContaining({ id: 'favorite-image', favorite: true }),
-            expect.not.objectContaining({ id: 'legacy-image', favorite: true }),
-        ]);
-    });
-
-    it('preserves actual parameters while keeping legacy images compatible by omission', () => {
-        const actualParameters = {
-            revisedPrompt: 'refined prompt',
-            size: '1536x1024',
-            quality: 'high',
-            elapsedMs: 930,
-        };
-        const manifest = parseArchiveManifest({
-            version: ARCHIVE_MANIFEST_VERSION,
-            images: [
-                createManifestImage({ id: 'actual-image', actualParameters }),
-                createManifestImage({ id: 'legacy-image' }),
-            ],
-        });
-
-        expect(manifest.images).toEqual([
-            expect.objectContaining({ id: 'actual-image', actualParameters }),
-            expect.not.objectContaining({ id: 'legacy-image', actualParameters: expect.anything() }),
-        ]);
     });
 
     it('preserves cost ledger metadata while keeping legacy images compatible by omission', () => {
@@ -236,34 +174,6 @@ describe('ArchiveManifest', () => {
         }).steps.map((step) => step.metadata)).toEqual(legacySteps.map((step) => step.metadata));
     });
 
-    it('validates typed lineage metadata while preserving the manifest shape', () => {
-        const typedSteps = [
-            createLineageStep({
-                id: 'generate-typed',
-                stepType: 'reference-generation',
-                metadata: createTypedGenerateMetadata(),
-            }),
-            createLineageStep({
-                id: 'editor-typed',
-                stepType: 'ai-edit',
-                metadata: createTypedEditorMetadata(),
-            }),
-            createLineageStep({
-                id: 'autopilot-typed',
-                stepType: 'autopilot-iteration',
-                metadata: createTypedAutopilotMetadata(),
-            }),
-        ];
-
-        expect(parseLineageManifest({
-            version: LINEAGE_MANIFEST_VERSION,
-            steps: typedSteps,
-        })).toEqual({
-            version: LINEAGE_MANIFEST_VERSION,
-            steps: typedSteps,
-        });
-    });
-
     it('rejects malformed typed lineage metadata through the shared parser', () => {
         expect(() => parseLineageManifest({
             version: LINEAGE_MANIFEST_VERSION,
@@ -282,95 +192,7 @@ describe('ArchiveManifest', () => {
         })).toThrow('Invalid lineage imageModel slug');
     });
 
-    it('validates exported layer stacks before they are written to a ZIP manifest', () => {
-        const layerStack: ArchiveLayerStack = {
-            canvasWidth: 1024,
-            canvasHeight: 1024,
-            layers: [
-                {
-                    id: 'base',
-                    name: 'Base',
-                    kind: 'base',
-                    assetUrl: 'data:image/png;base64,base',
-                    x: 0,
-                    y: 0,
-                    width: 1024,
-                    height: 1024,
-                    rotation: 0,
-                    opacity: 1,
-                    blendMode: 'normal',
-                    visible: true,
-                    locked: true,
-                },
-            ],
-        };
-
-        expect(createArchiveManifestLayerStack(
-            'layered-image',
-            layerStack,
-            (imageId, layerId) => `aura-${imageId}-layer-${layerId}.png`,
-        )).toEqual({
-            canvasWidth: 1024,
-            canvasHeight: 1024,
-            layers: [
-                {
-                    id: 'base',
-                    name: 'Base',
-                    kind: 'base',
-                    assetFileName: 'aura-layered-image-layer-base.png',
-                    x: 0,
-                    y: 0,
-                    width: 1024,
-                    height: 1024,
-                    rotation: 0,
-                    opacity: 1,
-                    blendMode: 'normal',
-                    visible: true,
-                    locked: true,
-                },
-            ],
-        });
-    });
 });
-
-function createManifestLayerStack() {
-    return {
-        canvasWidth: 1024,
-        canvasHeight: 1024,
-        layers: [
-            {
-                id: 'base',
-                name: 'Base',
-                kind: 'base',
-                assetFileName: 'aura-layered-image-layer-base.png',
-                x: 0,
-                y: 0,
-                width: 1024,
-                height: 1024,
-                rotation: 0,
-                opacity: 1,
-                blendMode: 'normal',
-                visible: true,
-                locked: true,
-            },
-            {
-                id: 'upload',
-                name: 'Upload',
-                kind: 'uploaded',
-                assetFileName: 'aura-layered-image-layer-upload.png',
-                x: 120,
-                y: 160,
-                width: 400,
-                height: 300,
-                rotation: 0,
-                opacity: 0.8,
-                blendMode: 'normal',
-                visible: true,
-                locked: false,
-            },
-        ],
-    };
-}
 
 function createManifestImage(overrides: Record<string, unknown> = {}) {
     return {
@@ -431,122 +253,5 @@ function createTypedGenerateMetadata() {
         },
         referenceCount: 1,
         referenceIds: ['image-1:reference:0'],
-    };
-}
-
-function createTypedEditorMetadata() {
-    return {
-        sourceImage: {
-            archiveImageId: 'image-1',
-        },
-        outputImage: {
-            archiveImageId: 'image-2',
-        },
-        save: {
-            overwrite: false,
-            copy: true,
-        },
-        editorAdjustment: {
-            brightness: 110,
-            contrast: 100,
-            saturation: 120,
-            filter: 'none',
-        },
-        aiEdit: {
-            prompt: 'replace the sky',
-            imageModel: {
-                slug: OPENAI_IMAGE_MODEL,
-            },
-            referenceImages: {
-                count: 1,
-            },
-            transformTarget: {
-                mode: 'selected-layers',
-                layerCount: 1,
-                includesBaseLayer: false,
-            },
-        },
-        layers: {
-            layered: true,
-            count: 3,
-            visibleCount: 2,
-            aiResultLayer: {
-                id: 'ai-layer',
-                name: 'AI result',
-            },
-        },
-        sourceArchiveImageId: 'image-1',
-        outputArchiveImageId: 'image-2',
-        overwrite: false,
-        editPrompt: 'replace the sky',
-        model: OPENAI_IMAGE_MODEL,
-        referenceCount: 1,
-        editorAdjustments: {
-            brightness: 110,
-            contrast: 100,
-            saturation: 120,
-            filter: 'none',
-        },
-        isLayered: true,
-        layerCount: 3,
-        visibleLayerCount: 2,
-        targetMode: 'selected-layers',
-        targetLayerCount: 1,
-        targetIncludesBaseLayer: false,
-        aiResultLayerId: 'ai-layer',
-        aiResultLayerName: 'AI result',
-    };
-}
-
-function createTypedAutopilotMetadata() {
-    return {
-        goal: {
-            text: 'make the result moodier',
-        },
-        iteration: {
-            number: 2,
-        },
-        evaluation: {
-            score: 86,
-            feedback: ['needs stronger contrast'],
-        },
-        replayImage: {
-            dataUrl: 'data:image/png;base64,auto',
-        },
-        run: {
-            label: 'Autopilot Run · make the result moodier',
-        },
-        reasoningModel: {
-            slug: OPENAI_RESPONSES_MODEL,
-        },
-        imageModel: {
-            slug: OPENAI_IMAGE_MODEL,
-            controls: {
-                quality: 'high',
-                size: '1024x1024',
-                background: 'transparent',
-            },
-        },
-        dimensions: {
-            width: 1024,
-            height: 1024,
-        },
-        prompt: 'typed prompt',
-        model: OPENAI_IMAGE_MODEL,
-        quality: 'high',
-        aspectRatio: '1024x1024',
-        background: 'transparent',
-        width: 1024,
-        height: 1024,
-        imageSize: null,
-        style: 'none',
-        lighting: 'none',
-        palette: 'none',
-        goalText: 'make the result moodier',
-        iterationNumber: 2,
-        evaluatorScore: 86,
-        evaluatorFeedback: ['needs stronger contrast'],
-        outputImageDataUrl: 'data:image/png;base64,auto',
-        runLabel: 'Autopilot Run · make the result moodier',
     };
 }

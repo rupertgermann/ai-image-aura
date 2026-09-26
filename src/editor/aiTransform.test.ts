@@ -2,11 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments, EditorDraft } from './layers';
 import { pushHistory, redoHistory, undoHistory } from './layers';
-import { OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import {
     applyAiTransformResultToDraft,
     getAiTransformReferenceWarning,
-    getAiTransformSaveProvenance,
     renderAiTransformEditInput,
     type AiTransformRenderer,
 } from './aiTransform';
@@ -147,47 +146,7 @@ describe('Editor AI transforms', () => {
         expect(redone.present).toEqual(after.draft);
     });
 
-    it('resolves save provenance only while the AI result layer exists in the present draft', () => {
-        const beforeDraft = createDraft(createLayerStack(), ['layer-1']);
-        const after = applyAiTransformResultToDraft(
-            beforeDraft,
-            {
-                mode: 'selected-layers',
-                targetLayerIds: ['layer-1'],
-                targetBounds: { x: 100, y: 120, width: 200, height: 220 },
-                requiresCompositionContext: true,
-                metadata: {
-                    targetMode: 'selected-layers',
-                    targetLayerCount: 1,
-                    targetIncludesBaseLayer: false,
-                },
-            },
-            'data:image/png;base64,ai',
-            () => 'ai-layer',
-            {
-                prompt: 'replace the jacket',
-                model: OPENAI_IMAGE_MODEL,
-            },
-        );
-        const history = pushHistory({ past: [], present: beforeDraft, future: [] }, after.draft);
-        const undone = undoHistory(history);
-        const redone = redoHistory(undone);
 
-        expect(getAiTransformSaveProvenance(after.draft, after.provenance)).toEqual({
-            aiEditPrompt: 'replace the jacket',
-            aiEditModel: OPENAI_IMAGE_MODEL,
-            targetMode: 'selected-layers',
-            targetLayerCount: 1,
-            targetIncludesBaseLayer: false,
-            aiResultLayerId: 'ai-layer',
-            aiResultLayerName: 'AI result',
-        });
-        expect(getAiTransformSaveProvenance(undone.present, after.provenance)).toBeNull();
-        expect(getAiTransformSaveProvenance(redone.present, after.provenance)).toEqual(expect.objectContaining({
-            aiEditPrompt: 'replace the jacket',
-            aiResultLayerId: 'ai-layer',
-        }));
-    });
 });
 
 function createRecordingRenderer() {

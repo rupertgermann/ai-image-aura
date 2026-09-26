@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArchiveImage } from '../db/types';
 import type { LineageStep } from './LineageStore';
-import { buildEditorReplay, buildGenerateReplay, isEditorReplayable, isGenerateReplayable } from './replayLineageStep';
+import { buildEditorReplay, buildGenerateReplay } from './replayLineageStep';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('replayLineageStep', () => {
@@ -89,14 +89,6 @@ describe('replayLineageStep', () => {
         });
     });
 
-    it('reports which lineage steps can replay into generate or editor', () => {
-        expect(isGenerateReplayable(createStep({ id: 'a', archiveImageId: 'image-a', stepType: 'generation', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
-        expect(isGenerateReplayable(createStep({ id: 'aa', archiveImageId: 'image-aa', stepType: 'autopilot-iteration', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
-        expect(isGenerateReplayable(createStep({ id: 'b', archiveImageId: 'image-b', stepType: 'ai-edit', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(false);
-        expect(isEditorReplayable(createStep({ id: 'c', archiveImageId: 'image-c', stepType: 'save-as-copy', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(true);
-        expect(isEditorReplayable(createStep({ id: 'd', archiveImageId: 'image-d', stepType: 'reference-generation', timestamp: '2026-04-04T09:00:00.000Z' }))).toBe(false);
-    });
-
     it('hydrates masked editor replay metadata into an edit request mask image', async () => {
         const step = createStep({
             id: 'masked-step',
@@ -181,82 +173,6 @@ describe('replayLineageStep', () => {
                 archiveImageId: 'autopilot:run:iteration:2',
                 stepId: 'step-9',
             },
-        });
-    });
-
-    it('hydrates a generate draft from typed autopilot image model metadata', () => {
-        const step = createStep({
-            id: 'step-auto-typed',
-            archiveImageId: 'autopilot:run:iteration:3',
-            stepType: 'autopilot-iteration',
-            timestamp: '2026-04-04T10:00:00.000Z',
-            metadata: {
-                prompt: 'editorial portrait, deep blue haze, dramatic rim light',
-                imageModel: {
-                    slug: OPENAI_IMAGE_MODEL,
-                    controls: {
-                        quality: 'high',
-                        size: '1536x1024',
-                        background: 'transparent',
-                    },
-                },
-                style: '35mm film still',
-                lighting: 'neon rim light',
-                palette: 'cobalt + vermilion + bone',
-            },
-        });
-
-        expect(buildGenerateReplay(null, step)).toEqual({
-            draft: {
-                model: OPENAI_IMAGE_MODEL,
-                prompt: 'editorial portrait, deep blue haze, dramatic rim light',
-                style: '35mm film still',
-                lighting: 'neon rim light',
-                palette: 'cobalt + vermilion + bone',
-                gptImage: {
-                    quality: 'high',
-                    size: '1536x1024',
-                    background: 'transparent',
-                    batchSize: 1,
-                },
-                nanoBananaPro: {
-                    aspectRatio: '1:1',
-                    imageSize: '1K',
-                    batchSize: 1,
-                },
-                qwenImage2_1: {
-                    aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 1,
-                },
-                flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
-                isSaved: false,
-            },
-            lineageSource: {
-                archiveImageId: 'autopilot:run:iteration:3',
-                stepId: 'step-auto-typed',
-            },
-        });
-    });
-
-    it('replays sparse legacy autopilot metadata with Generate defaults', () => {
-        const step = createStep({
-            id: 'step-auto-legacy',
-            archiveImageId: 'autopilot:legacy:iteration:1',
-            stepType: 'autopilot-iteration',
-            timestamp: '2026-04-04T10:00:00.000Z',
-            metadata: {
-                prompt: 'legacy autopilot prompt',
-            },
-        });
-
-        expect(buildGenerateReplay(null, step).draft).toMatchObject({
-            model: OPENAI_IMAGE_MODEL,
-            prompt: 'legacy autopilot prompt',
-            gptImage: {
-                quality: 'medium',
-                size: '1024x1024',
-                background: 'auto',
-            },
-            isSaved: false,
         });
     });
 

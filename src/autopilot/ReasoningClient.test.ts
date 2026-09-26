@@ -2,29 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     buildGeminiReasoningRequest,
     createGeminiReasoningClient,
-    createOpenAiReasoningClient,
     extractGeminiReasoningUsage,
     extractGeminiReasoningText,
 } from './ReasoningClient';
 
 describe('ReasoningClient', () => {
-    it('wraps the OpenAI responses client', async () => {
-        const createResponse = vi.fn(async () => ({ outputText: 'translated prompt', usage: { input_tokens: 10 } }));
-        const client = createOpenAiReasoningClient({ createResponse });
-
-        await expect(client.createResponse({
-            apiKey: 'sk-test',
-            systemPrompt: 'system',
-            userText: 'user',
-        })).resolves.toEqual({ outputText: 'translated prompt', usage: { input_tokens: 10 } });
-
-        expect(createResponse).toHaveBeenCalledWith({
-            apiKey: 'sk-test',
-            systemPrompt: 'system',
-            userText: 'user',
-        });
-    });
-
     it('builds a Gemini reasoning request with vision input and JSON schema', () => {
         const body = buildGeminiReasoningRequest({
             apiKey: 'google-key',

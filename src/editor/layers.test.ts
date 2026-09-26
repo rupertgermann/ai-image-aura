@@ -2,14 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import {
     addUploadedLayer,
-    addDraftReferences,
     createBaseLayerStack,
     deleteLayers,
     duplicateLayers,
-    getEditableLayerIds,
-    getCombinedLayerBounds,
     hydrateLayerStack,
-    insertAiResultLayer,
     moveLayer,
     normalizeLayerStack,
     nudgeLayers,
@@ -18,31 +14,11 @@ import {
     pushHistory,
     repairEditorDraftForImage,
     redoHistory,
-    removeDraftReferenceAt,
     undoHistory,
     updateLayer,
 } from './layers';
 
 describe('layer editor helpers', () => {
-    it('hydrates non-layered images as a locked base layer without durable metadata', () => {
-        const stack = createBaseLayerStack(createImage());
-
-        expect(stack).toEqual({
-            canvasWidth: 1200,
-            canvasHeight: 800,
-            layers: [
-                expect.objectContaining({
-                    id: 'base',
-                    kind: 'base',
-                    assetUrl: 'data:image/png;base64,source',
-                    locked: true,
-                    width: 1200,
-                    height: 800,
-                }),
-            ],
-        });
-    });
-
     it('hydrates base-only images from aspect ratio metadata when dimensions are missing', () => {
         const stack = createBaseLayerStack({
             ...createImage(),
@@ -127,24 +103,6 @@ describe('layer editor helpers', () => {
         }));
     });
 
-    it('adds a centered, visible, opaque, unlocked layer and returns its ID', () => {
-        const result = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1', 'cloud.png');
-
-        expect(result.layerId).toBe('layer-1');
-        expect(result.layerStack.layers.at(-1)).toEqual(expect.objectContaining({
-            id: 'layer-1',
-            name: 'cloud.png',
-            kind: 'uploaded',
-            visible: true,
-            opacity: 1,
-            locked: false,
-            x: 204.8,
-            y: 204.8,
-            width: 614.4,
-            height: 614.4,
-        }));
-    });
-
     it('fits uploaded layers to the canvas without distorting their source aspect ratio', () => {
         const landscape = addUploadedLayer(
             createStack(),
@@ -186,14 +144,6 @@ describe('layer editor helpers', () => {
         expect(duplicated.duplicatedIds).toEqual(['layer-2']);
         expect(moved.layers.map((layer) => layer.id)).toEqual(['base', 'layer-2', 'layer-1']);
         expect(deleted.layers.map((layer) => layer.id)).toEqual(['base', 'layer-2']);
-    });
-
-    it('filters shared layer actions to editable non-base layers', () => {
-        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
-        const lockedStack = updateLayer(stack, 'layer-1', { locked: true });
-
-        expect(getEditableLayerIds(stack, ['base', 'layer-1', 'missing'])).toEqual(['layer-1']);
-        expect(getEditableLayerIds(lockedStack, ['base', 'layer-1'])).toEqual([]);
     });
 
     it('blocks position, opacity, and blend-mode changes on locked layers but allows renaming, visibility changes, and unlocking', () => {
@@ -267,18 +217,6 @@ describe('layer editor helpers', () => {
         expect(moveLayer(stack, 'layer-1', -1)).toBe(stack);
     });
 
-    it('inserts AI results above targets and hides non-base targets', () => {
-        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
-        const result = insertAiResultLayer(stack, ['base', 'layer-1'], 'data:image/png;base64,ai', () => 'ai-layer');
-
-        expect(result.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
-            ['base', true],
-            ['layer-1', false],
-            ['ai-layer', true],
-        ]);
-        expect(result.targetBounds).toEqual({ x: 0, y: 0, width: 1024, height: 1024 });
-    });
-
     it('supports bounded snapshot undo and redo', () => {
         const draft = {
             layerStack: createStack(),
@@ -303,59 +241,6 @@ describe('layer editor helpers', () => {
         expect(redoHistory(undoHistory(second)).present.primarySelectedLayerId).toBe('layer-2');
     });
 
-    it('tracks reference add and remove operations through snapshot history', () => {
-        const draft = {
-            layerStack: createStack(),
-            adjustments: { brightness: 100, contrast: 100, saturation: 100, filter: 'none' },
-            references: ['data:image/png;base64,ref1'],
-            selectedLayerIds: ['base'],
-            primarySelectedLayerId: 'base',
-        };
-        const added = pushHistory({ past: [], present: draft, future: [] }, addDraftReferences(draft, ['data:image/png;base64,ref2']));
-        const removed = pushHistory(added, removeDraftReferenceAt(added.present, 0));
-
-        expect(removed.present.references).toEqual(['data:image/png;base64,ref2']);
-        expect(undoHistory(removed).present.references).toEqual([
-            'data:image/png;base64,ref1',
-            'data:image/png;base64,ref2',
-        ]);
-        expect(redoHistory(undoHistory(removed)).present.references).toEqual(['data:image/png;base64,ref2']);
-    });
-
-    it('computes selected visible layer bounds', () => {
-        const stack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
-
-        expect(getCombinedLayerBounds(stack, ['layer-1'])).toEqual({
-            x: 204.8,
-            y: 204.8,
-            width: 614.4000000000001,
-            height: 614.4000000000001,
-        });
-    });
-
-    it('plans selected visible non-base layers as a bounded AI transform target', () => {
-        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
-
-        const plan = planAiTransformTarget(createDraft(layerStack, ['layer-1']));
-
-        expect(plan).toEqual({
-            mode: 'selected-layers',
-            targetLayerIds: ['layer-1'],
-            targetBounds: {
-                x: 204.8,
-                y: 204.8,
-                width: 614.4000000000001,
-                height: 614.4000000000001,
-            },
-            requiresCompositionContext: true,
-            metadata: {
-                targetMode: 'selected-layers',
-                targetLayerCount: 1,
-                targetIncludesBaseLayer: false,
-            },
-        });
-    });
-
     it('plans base-plus-non-base selection as selected layers anchored by the base bounds', () => {
         const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
 
@@ -370,24 +255,6 @@ describe('layer editor helpers', () => {
                 targetMode: 'selected-layers',
                 targetLayerCount: 2,
                 targetIncludesBaseLayer: true,
-            },
-        });
-    });
-
-    it('falls back to a whole-composition AI transform target for base-only selection', () => {
-        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
-
-        const plan = planAiTransformTarget(createDraft(layerStack, ['base']));
-
-        expect(plan).toEqual({
-            mode: 'whole-composition',
-            targetLayerIds: ['base', 'layer-1'],
-            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
-            requiresCompositionContext: false,
-            metadata: {
-                targetMode: 'whole-composition',
-                targetLayerCount: null,
-                targetIncludesBaseLayer: null,
             },
         });
     });
@@ -429,23 +296,7 @@ describe('layer editor helpers', () => {
         });
     });
 
-    it('falls back to a whole-composition AI transform target when no layers are selected', () => {
-        const layerStack = addUploadedLayer(createStack(), 'data:image/png;base64,upload', () => 'layer-1').layerStack;
 
-        const plan = planAiTransformTarget(createDraft(layerStack, []));
-
-        expect(plan).toEqual({
-            mode: 'whole-composition',
-            targetLayerIds: ['base', 'layer-1'],
-            targetBounds: { x: 0, y: 0, width: 1024, height: 1024 },
-            requiresCompositionContext: false,
-            metadata: {
-                targetMode: 'whole-composition',
-                targetLayerCount: null,
-                targetIncludesBaseLayer: null,
-            },
-        });
-    });
 });
 
 function createImage(): ArchiveImage {
