@@ -2340,6 +2340,49 @@ select {
 
 summary { cursor: pointer; font-size: 13px; line-height: 1.6; }
 .style-options[open] > .option-group { margin-top: 16px; }
+
+.palette-select { position: relative; }
+
+.palette-trigger,
+.palette-options button {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 0;
+    background: var(--color-snow);
+    color: var(--color-charcoal);
+    font: inherit;
+    font-family: var(--font-suisse-intl-mono);
+    font-size: 13px;
+    text-align: left;
+}
+
+.palette-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--color-steel);
+}
+
+.palette-trigger > svg { flex-shrink: 0; }
+.palette-preview { display: grid; gap: 5px; overflow-wrap: anywhere; }
+.palette-swatches { display: flex; gap: 3px; }
+.palette-swatches > span { width: 14px; height: 14px; border: 1px solid #0003; border-radius: 3px; }
+
+.palette-options {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 4px);
+    width: 100%;
+    max-height: min(300px, 50vh);
+    overflow-y: auto;
+    border: 1px solid var(--color-steel);
+    background: var(--color-snow);
+}
+
+.palette-options button[aria-selected="true"] { background: var(--color-amber-glow); }
 .inline-link { text-decoration: underline; text-underline-offset: 3px; }
 .view-header .btn-text-link { margin-top: 12px; padding: 0; font-size: 14px; }
 .empty-state { padding: 40px 24px; max-width: 480px; }

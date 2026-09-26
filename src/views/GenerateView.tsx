@@ -7,6 +7,7 @@ import { getImageFilesFromClipboard } from '../references/clipboard';
 import { useReferenceImageCollection } from '../references/useReferenceImageCollection';
 import ConfirmModal from '../components/ConfirmModal';
 import ReferenceImageModal from '../components/ReferenceImageModal';
+import PaletteSelect from '../components/PaletteSelect';
 import ActualParametersPanel from '../components/ActualParametersPanel';
 import CostSummaryPanel from '../components/CostSummaryPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -90,16 +91,6 @@ const LIGHTING_OPTIONS = [
     "overcast diffuse light",
     "candlelight with deep shadows",
     "dramatic chiaroscuro",
-];
-
-const PALETTES = [
-    "copper + teal + cream",
-    "cobalt + vermilion + bone",
-    "sage + sand + charcoal",
-    "magenta + midnight blue + silver",
-    "emerald + burgundy + gold",
-    "dusty rose + slate + ivory",
-    "burnt orange + navy + warm white",
 ];
 
 const Select = ({ label, value, options, onChange, className }: {
@@ -546,14 +537,9 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                         <div className="option-group">
                             <label>PALETTE</label>
-                            <Select
-                                label="Palette"
+                            <PaletteSelect
                                 value={palette}
                                 onChange={(v) => updateDraft({ palette: v })}
-                                options={[
-                                    { value: 'none', label: 'None' },
-                                    ...PALETTES.map((p) => ({ value: p, label: p })),
-                                ]}
                             />
                         </div>
                         </details>
