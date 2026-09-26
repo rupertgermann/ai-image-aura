@@ -42,7 +42,7 @@ describe('replayLineageStep', () => {
                     batchSize: 1,
                 },
                 qwenImage2_1: {
-                    aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+                    aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 1,
                 },
                 flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
@@ -137,7 +137,7 @@ describe('replayLineageStep', () => {
                     batchSize: 1,
                 },
                 qwenImage2_1: {
-                    aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+                    aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 1,
                 },
                 flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
@@ -190,7 +190,7 @@ describe('replayLineageStep', () => {
                     batchSize: 1,
                 },
                 qwenImage2_1: {
-                    aspectRatio: '1:1', imageSize: '1K', background: 'auto', batchSize: 1,
+                    aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 1,
                 },
                 flux2Klein4b: { aspectRatio: '1:1', imageSize: '1K', batchSize: 1 },
                 isSaved: false,
