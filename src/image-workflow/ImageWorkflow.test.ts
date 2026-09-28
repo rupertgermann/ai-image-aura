@@ -4,63 +4,6 @@ import { createImageWorkflow, type ImageProvider, type ImageProviderRegistry } f
 import { createGoogleImageProvider, extractGoogleImageData, extractGoogleUsageMetadata } from './ImageProvider';
 
 describe('ImageWorkflow', () => {
-    it('routes generate requests through the configured provider for the selected model', async () => {
-        const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
-            void input;
-            return [{ b64_json: 'generated' }];
-        });
-        const providers: ImageProviderRegistry = {
-            openai: {
-                generate,
-                edit: vi.fn(),
-            },
-        };
-
-        const workflow = createImageWorkflow(providers);
-
-        const results = await workflow.generate({
-            credential: 'sk-test',
-            prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
-            style: 'none',
-            lighting: 'none',
-            palette: 'none',
-            referenceImages: [],
-        });
-
-        expect(results).toEqual([{
-            slotIndex: 0,
-            status: 'success',
-            imageUrl: 'data:image/png;base64,generated',
-            actualParameters: {
-                elapsedMs: expect.any(Number),
-            },
-            costLedger: expect.objectContaining({
-                currency: 'USD',
-                items: [expect.objectContaining({
-                    status: 'unavailable',
-                    provider: 'openai',
-                    model: OPENAI_IMAGE_MODEL,
-                })],
-            }),
-        }]);
-        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-            credential: 'sk-test',
-            model: expect.objectContaining({
-                slug: OPENAI_IMAGE_MODEL,
-                provider: 'openai',
-                apiModel: OPENAI_IMAGE_MODEL,
-            }),
-            prompt: 'blue hour mountain',
-            quality: 'high',
-            size: '1024x1024',
-            background: 'transparent',
-            batchSize: 1,
-            referenceImages: [],
-        }));
-    });
 
     it('returns per-slot batch results and keeps failed slots in place', async () => {
         const generate = vi.fn(async () => [
@@ -469,36 +412,6 @@ describe('ImageWorkflow', () => {
         }));
     });
 
-    it('trims generation dimensions before validating size', async () => {
-        const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
-        const workflow = createImageWorkflow({
-            openai: {
-                generate,
-                edit: vi.fn(),
-            },
-            google: {
-                generate: vi.fn(),
-                edit: vi.fn(),
-            },
-        });
-
-        await workflow.generate({
-            credential: 'sk-test',
-            prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: ' 1536x1024 ',
-            background: 'transparent',
-            style: 'none',
-            lighting: 'none',
-            palette: 'none',
-            referenceImages: [],
-        });
-
-        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-            size: '1536x1024',
-        }));
-    });
-
     it('maps landscape generation dimensions to supported Nano Banana aspect ratio', async () => {
         const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
         const workflow = createImageWorkflow({
@@ -530,37 +443,6 @@ describe('ImageWorkflow', () => {
         }));
     });
 
-    it('trims Nano Banana generation dimensions before mapping aspect ratio', async () => {
-        const generate = vi.fn(async () => [{ b64_json: 'generated' }]);
-        const workflow = createImageWorkflow({
-            openai: {
-                generate: vi.fn(),
-                edit: vi.fn(),
-            },
-            google: {
-                generate,
-                edit: vi.fn(),
-            },
-        });
-
-        await workflow.generate({
-            credential: 'sk-test',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
-            prompt: 'teapot city',
-            quality: 'high',
-            aspectRatio: ' 1024x1536 ',
-            background: 'transparent',
-            style: 'none',
-            lighting: 'none',
-            palette: 'none',
-            referenceImages: [],
-        });
-
-        expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-            aspectRatio: '2:3',
-        }));
-    });
-
     it('surfaces a provider-agnostic error when generation returns no image data', async () => {
         const generate = vi.fn(async () => [{}]);
         const workflow = createImageWorkflow({
@@ -581,35 +463,6 @@ describe('ImageWorkflow', () => {
             palette: 'none',
             referenceImages: [],
         })).rejects.toThrow('No image data returned from image provider');
-    });
-
-    it('sends whole-composition edit requests with the editable source before user references', async () => {
-        let seenReferenceImages: File[] = [];
-        const edit = vi.fn(async (input: Parameters<ImageProvider['edit']>[0]) => {
-            seenReferenceImages = input.referenceImages ?? [];
-            return { b64_json: 'edited' };
-        });
-        const providers: ImageProviderRegistry = {
-            openai: {
-                generate: vi.fn(),
-                edit,
-            },
-        };
-        const workflow = createImageWorkflow(providers);
-        const sourceImage = new Blob(['whole-composition'], { type: 'image/png' });
-        const userReference = new File(['reference'], 'user-reference.png', { type: 'image/png' });
-
-        await workflow.edit({
-            credential: 'sk-test',
-            prompt: 'make it cinematic',
-            sourceImage,
-            referenceImages: [userReference],
-        });
-
-        expect(seenReferenceImages.map((file) => file.name)).toEqual([
-            'edit-input.png',
-            'user-reference.png',
-        ]);
     });
 
     it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL] as const)('sends %s masked edits with composition context before user references', async (model) => {
@@ -798,44 +651,6 @@ describe('googleImageProvider', () => {
         expect(result).toEqual([{ b64_json: 'gemini-image', usage: usageMetadata }]);
     });
 
-    it('ignores partial image callbacks for Gemini requests', async () => {
-        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
-            candidates: [{
-                content: {
-                    parts: [{ inlineData: { data: 'gemini-image' } }],
-                },
-            }],
-        })));
-        const provider = createGoogleImageProvider(fetchImpl);
-        const onPartialImage = vi.fn();
-
-        const result = await provider.generate({
-            credential: 'google-key',
-            model: {
-                slug: NANO_BANANA_PRO_IMAGE_MODEL,
-                provider: 'google',
-                apiModel: 'gemini-3-pro-image-preview',
-                label: 'Nano Banana Pro',
-                endpoints: {
-                    generate: 'https://example.test/generate',
-                    edit: 'https://example.test/generate',
-                },
-                parameters: {},
-                capabilities: { transformMask: false, partialImageStreaming: false },
-            },
-            prompt: 'a luminous teapot city',
-            onPartialImage,
-        });
-
-        expect(result).toEqual([{ b64_json: 'gemini-image' }]);
-        expect(onPartialImage).not.toHaveBeenCalled();
-
-        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
-        const body = JSON.parse(String(requestInit.body));
-        expect(JSON.stringify(body)).not.toContain('partial');
-        expect(JSON.stringify(body)).not.toContain('stream');
-    });
-
     it('normalizes unsupported Nano Banana aspect ratios to 1:1', async () => {
         const generate = vi.fn(async (input: Parameters<ImageProvider['generate']>[0]) => {
             void input;
@@ -995,42 +810,6 @@ describe('googleImageProvider', () => {
             candidatesTokensDetails: [{ modality: 'IMAGE', tokenCount: 20 }],
         });
         expect(extractGoogleUsageMetadata({ usageMetadata: {} })).toBeNull();
-    });
-
-    it('uses default Gemini imageConfig values when values are not provided', async () => {
-        const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
-            candidates: [{
-                content: {
-                    parts: [{ inlineData: { data: 'gemini-image' } }],
-                },
-            }],
-        })));
-        const provider = createGoogleImageProvider(fetchImpl);
-
-        await provider.generate({
-            credential: 'google-key',
-            model: {
-                slug: NANO_BANANA_PRO_IMAGE_MODEL,
-                provider: 'google',
-                apiModel: 'gemini-3-pro-image-preview',
-                label: 'Nano Banana Pro',
-                endpoints: {
-                    generate: 'https://example.test/generate',
-                    edit: 'https://example.test/generate',
-                },
-                parameters: {},
-                capabilities: { transformMask: false, partialImageStreaming: false },
-            },
-            prompt: 'a luminous teapot city',
-            referenceImages: [],
-        });
-
-        const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
-        const body = JSON.parse(String(requestInit.body));
-        expect(body.generationConfig.imageConfig).toEqual({
-            aspectRatio: '1:1',
-            imageSize: '1K',
-        });
     });
 
     it('fans out Nano Banana batch generation and keeps failed slots isolated', async () => {

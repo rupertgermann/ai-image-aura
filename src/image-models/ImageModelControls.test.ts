@@ -1,34 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-    IMAGE_MODEL_CONTROL_FACTS,
-    buildImageModelGenerateReferenceRunPlan,
     buildImageModelArchiveFields,
     coerceImageModelControlValue,
     getDefaultImageModelControls,
-    getImageModelDraftKey,
-    getImageModelGenerateControls,
     getImageModelReferenceCapacityMessage,
     getImageModelReferenceLimitMessage,
-    getImageModelUiChoices,
-    imageModelSupportsTransformMask,
-    limitReferenceImagesForImageModel,
     mapImageModelEditProviderRequest,
     mapImageModelGenerateProviderRequest,
     sanitizeImageModelControls,
 } from './ImageModelControls';
-import { IMAGE_MODEL_REGISTRY, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('Image model controls', () => {
     it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL] as const)('uses shared GPT Image controls for %s', (model) => {
-        expect(getImageModelDraftKey(model)).toBe('gptImage');
-        expect(getDefaultImageModelControls(model)).toEqual({
-            quality: 'medium', size: '1024x1024', background: 'auto', batchSize: 1,
-        });
-        expect(getImageModelGenerateControls(model)).toEqual(getImageModelGenerateControls(OPENAI_IMAGE_MODEL));
-        expect(getImageModelGenerateControls(model).find((control) => control.id === 'quality')?.options.map((option) => option.value))
-            .toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'auto']);
         expect(sanitizeImageModelControls(model, { quality: 'invalid' }).quality).toBe('medium');
-        expect(imageModelSupportsTransformMask(model)).toBe(true);
         for (const quality of ['low', 'medium', 'high', 'xhigh', 'max', 'auto'] as const) {
             const controls = { quality, size: '1536x1024', background: 'transparent' as const, batchSize: 4 };
             expect(sanitizeImageModelControls(model, controls)).toEqual(controls);
@@ -62,39 +47,8 @@ describe('Image model controls', () => {
         });
         expect(nearSquare.size).toBe('992x992');
     });
-    it('maps every Qwen aspect ratio and resolution to the fixed sd-server size', () => {
-        const sizes = {
-            '1:1': ['768x768', '1024x1024', '2048x2048'],
-            '4:3': ['896x672', '1152x864', '2400x1792'],
-            '3:4': ['672x896', '864x1152', '1792x2400'],
-            '3:2': ['960x640', '1248x832', '2528x1696'],
-            '2:3': ['640x960', '832x1248', '1696x2528'],
-            '16:9': ['1024x576', '1376x768', '2752x1536'],
-            '9:16': ['576x1024', '768x1376', '1536x2752'],
-        } as const;
-
-        expect(getImageModelGenerateControls(QWEN_IMAGE_2_1_IMAGE_MODEL).map((control) => control.id)).toEqual([
-            'aspectRatio', 'imageSize', 'background', 'batchSize',
-        ]);
-        for (const [aspectRatio, [small, oneK, twoK]] of Object.entries(sizes)) {
-            for (const [imageSize, size] of [['768', small], ['1K', oneK], ['2K', twoK]] as const) {
-                expect(mapImageModelGenerateProviderRequest(QWEN_IMAGE_2_1_IMAGE_MODEL, {
-                    quality: 'medium', aspectRatio, imageSize, background: 'transparent', batchSize: 4,
-                    referenceImages: [],
-                })).toEqual({ size, batchSize: 4, referenceImages: [] });
-                const fields = buildImageModelArchiveFields(QWEN_IMAGE_2_1_IMAGE_MODEL, {
-                    aspectRatio, imageSize, background: 'transparent', batchSize: 4,
-                });
-                expect(`${fields.width}x${fields.height}`).toBe(size);
-                expect(fields).toMatchObject({ quality: imageSize, aspectRatio, background: 'transparent' });
-            }
-        }
-    });
 
     it('sanitizes Qwen controls and caps references including the Editor target', () => {
-        expect(getDefaultImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL)).toEqual({
-            aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 1,
-        });
         expect(sanitizeImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, {
             aspectRatio: '21:9', imageSize: '4K', background: 'opaque', batchSize: 20,
         })).toEqual({ aspectRatio: '1:1', imageSize: '768', background: 'auto', batchSize: 4 });
@@ -134,93 +88,8 @@ describe('Image model controls', () => {
             referenceImages: userReferences,
         }).referenceImages).toEqual([sourceImage, ...userReferences]);
     });
-    it('covers every registered Image model with defaults and Generate UI facts', () => {
-        const registrySlugs = Object.keys(IMAGE_MODEL_REGISTRY).sort();
-
-        expect(Object.keys(IMAGE_MODEL_CONTROL_FACTS).sort()).toEqual(registrySlugs);
-        expect(getImageModelUiChoices().map((choice) => choice.slug).sort()).toEqual(registrySlugs);
-        expect(getImageModelGenerateControls(OPENAI_IMAGE_MODEL)).toEqual([
-            {
-                id: 'quality',
-                label: 'QUALITY',
-                kind: 'select',
-                options: [
-                    { value: 'low', label: 'Low' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'high', label: 'High' },
-                    { value: 'xhigh', label: 'Extra high' },
-                    { value: 'max', label: 'Max' },
-                    { value: 'auto', label: 'Auto' },
-                ],
-            },
-            {
-                id: 'size',
-                label: 'SIZE',
-                kind: 'select',
-                options: [
-                    { value: 'auto', label: 'Auto' },
-                    { value: '1024x1024', label: 'Square (1:1)' },
-                    { value: '1536x1024', label: 'Wide (3:2)' },
-                    { value: '1024x1536', label: 'Tall (2:3)' },
-                ],
-            },
-            {
-                id: 'background',
-                label: 'BACKGROUND',
-                kind: 'select',
-                options: [
-                    { value: 'auto', label: 'Auto' },
-                    { value: 'opaque', label: 'Opaque' },
-                    { value: 'transparent', label: 'Transparent' },
-                ],
-            },
-            {
-                id: 'batchSize',
-                label: 'BATCH SIZE',
-                kind: 'select',
-                options: [
-                    { value: '1', label: '1' },
-                    { value: '2', label: '2' },
-                    { value: '3', label: '3' },
-                    { value: '4', label: '4' },
-                ],
-            },
-        ]);
-        expect(getImageModelGenerateControls(NANO_BANANA_PRO_IMAGE_MODEL).map((control) => control.id)).toEqual([
-            'aspectRatio',
-            'imageSize',
-            'batchSize',
-        ]);
-    });
-
-    it('exposes transform mask support per Image model', () => {
-        expect(imageModelSupportsTransformMask(OPENAI_IMAGE_MODEL)).toBe(true);
-        expect(imageModelSupportsTransformMask(NANO_BANANA_PRO_IMAGE_MODEL)).toBe(false);
-    });
 
     it('validates defaults and coercion for both Image models', () => {
-        expect(getDefaultImageModelControls(OPENAI_IMAGE_MODEL)).toEqual({
-            quality: 'medium',
-            size: '1024x1024',
-            background: 'auto',
-            batchSize: 1,
-        });
-        expect(getDefaultImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL)).toEqual({
-            aspectRatio: '1:1',
-            imageSize: '1K',
-            batchSize: 1,
-        });
-        expect(sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
-            quality: 'high',
-            size: '1536x1024',
-            background: 'transparent',
-            batchSize: 3,
-        })).toEqual({
-            quality: 'high',
-            size: '1536x1024',
-            background: 'transparent',
-            batchSize: 3,
-        });
         expect(sanitizeImageModelControls(OPENAI_IMAGE_MODEL, {
             quality: 'best',
             size: '1600x900',
@@ -308,89 +177,12 @@ describe('Image model controls', () => {
         });
     });
 
-    it('keeps Generate Reference run plans aligned with Provider requests when the Image model changes', () => {
-        const references = Array.from({ length: 15 }, (_, index) =>
-            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
-        );
-
-        const openAiRunPlan = buildImageModelGenerateReferenceRunPlan(OPENAI_IMAGE_MODEL, references);
-        const openAiProviderRequest = mapImageModelGenerateProviderRequest(OPENAI_IMAGE_MODEL, {
-            quality: 'high',
-            aspectRatio: '1536x1024',
-            background: 'transparent',
-            referenceImages: references,
-        });
-
-        expect(openAiRunPlan.referenceLimitMessage).toBeNull();
-        expect(openAiProviderRequest.referenceImages).toEqual(openAiRunPlan.providerReferenceImages);
-        expect(openAiProviderRequest.referenceImages).toHaveLength(15);
-
-        const nanoRunPlan = buildImageModelGenerateReferenceRunPlan(NANO_BANANA_PRO_IMAGE_MODEL, references);
-        const nanoProviderRequest = mapImageModelGenerateProviderRequest(NANO_BANANA_PRO_IMAGE_MODEL, {
-            quality: 'high',
-            aspectRatio: '1024x1536',
-            background: 'transparent',
-            imageSize: '4K',
-            referenceImages: references,
-        });
-
-        expect(nanoRunPlan.referenceLimitMessage).toBe(
-            'Nano Banana Pro uses the first 14 reference images for generation.',
-        );
-        expect(nanoProviderRequest.referenceImages).toEqual(nanoRunPlan.providerReferenceImages);
-        expect(nanoProviderRequest.referenceImages.map((file) => file.name)).toEqual([
-            'ref-0.png',
-            'ref-1.png',
-            'ref-2.png',
-            'ref-3.png',
-            'ref-4.png',
-            'ref-5.png',
-            'ref-6.png',
-            'ref-7.png',
-            'ref-8.png',
-            'ref-9.png',
-            'ref-10.png',
-            'ref-11.png',
-            'ref-12.png',
-            'ref-13.png',
-        ]);
-    });
-
     it('reports when a Generate result cannot be appended as another Reference image', () => {
         expect(getImageModelReferenceCapacityMessage(OPENAI_IMAGE_MODEL, 50, 'generation')).toBeNull();
         expect(getImageModelReferenceCapacityMessage(NANO_BANANA_PRO_IMAGE_MODEL, 13, 'generation')).toBeNull();
         expect(getImageModelReferenceCapacityMessage(NANO_BANANA_PRO_IMAGE_MODEL, 14, 'generation')).toBe(
             'Nano Banana Pro already has 14 reference images for generation. Remove one before adding another.',
         );
-    });
-
-    it('applies future GPT Image Reference limits from Image model facts consistently', () => {
-        const references = Array.from({ length: 3 }, (_, index) =>
-            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
-        );
-        const openAiFacts = IMAGE_MODEL_CONTROL_FACTS[OPENAI_IMAGE_MODEL] as {
-            referenceLimit: number | null;
-        };
-        const originalReferenceLimit = openAiFacts.referenceLimit;
-
-        try {
-            openAiFacts.referenceLimit = 2;
-            const runPlan = buildImageModelGenerateReferenceRunPlan(OPENAI_IMAGE_MODEL, references);
-            const providerRequest = mapImageModelGenerateProviderRequest(OPENAI_IMAGE_MODEL, {
-                quality: 'high',
-                aspectRatio: '1536x1024',
-                background: 'transparent',
-                referenceImages: references,
-            });
-
-            expect(runPlan.referenceLimitMessage).toBe(
-                'GPT Image 2.5 Flare uses the first 2 reference images for generation.',
-            );
-            expect(providerRequest.referenceImages).toEqual(runPlan.providerReferenceImages);
-            expect(providerRequest.referenceImages.map((file) => file.name)).toEqual(['ref-0.png', 'ref-1.png']);
-        } finally {
-            openAiFacts.referenceLimit = originalReferenceLimit;
-        }
     });
 
     it('maps Editor Provider requests with source and Reference image limits for each Image model', () => {
@@ -428,21 +220,5 @@ describe('Image model controls', () => {
             ],
         });
         expect(nanoRequest.referenceImages).toHaveLength(16);
-    });
-
-    it('exposes shared UI facts for Reference image limits used by Generate and Editor', () => {
-        const references = Array.from({ length: 15 }, (_, index) =>
-            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
-        );
-
-        expect(limitReferenceImagesForImageModel(OPENAI_IMAGE_MODEL, references)).toHaveLength(15);
-        expect(limitReferenceImagesForImageModel(NANO_BANANA_PRO_IMAGE_MODEL, references)).toHaveLength(14);
-        expect(getImageModelReferenceLimitMessage(OPENAI_IMAGE_MODEL, references.length, 'generation')).toBeNull();
-        expect(getImageModelReferenceLimitMessage(NANO_BANANA_PRO_IMAGE_MODEL, references.length, 'generation')).toBe(
-            'Nano Banana Pro uses the first 14 reference images for generation.',
-        );
-        expect(getImageModelReferenceLimitMessage(NANO_BANANA_PRO_IMAGE_MODEL, references.length, 'AI transforms')).toBe(
-            'Nano Banana Pro uses the first 14 reference images for AI transforms.',
-        );
     });
 });

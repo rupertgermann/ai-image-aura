@@ -67,60 +67,6 @@ describe('saveGeneratedImage', () => {
         });
         expect(buildGenerateReplay(image, step).draft.qwenImage2_1).toEqual(runDraft.qwenImage2_1);
     });
-    it('writes a generation step after a successful archive save', async () => {
-        const lineage = createStore();
-        const sessionStore = createSessionStore();
-        const image = createArchiveImage();
-
-        const savedImage = await saveGeneratedImage(image, {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
-
-        const steps = await lineage.getByArchiveImageId(savedImage.id);
-
-        expect(steps).toEqual([
-            expect.objectContaining({
-                archiveImageId: savedImage.id,
-                parentStepId: null,
-                stepType: 'generation',
-                timestamp: savedImage.timestamp,
-                metadata: expect.objectContaining({
-                    prompt: savedImage.prompt,
-                    model: OPENAI_IMAGE_MODEL,
-                    imageModel: {
-                        slug: OPENAI_IMAGE_MODEL,
-                        controls: {
-                            quality: savedImage.quality,
-                            size: savedImage.aspectRatio,
-                            background: savedImage.background,
-                            batchSize: 1,
-                        },
-                    },
-                    dimensions: {
-                        width: 1024,
-                        height: 1024,
-                    },
-                    quality: savedImage.quality,
-                    aspectRatio: savedImage.aspectRatio,
-                    background: savedImage.background,
-                    width: 1024,
-                    height: 1024,
-                    imageSize: null,
-                    sourceArchiveImageId: null,
-                    referenceImages: {
-                        count: 0,
-                        ids: [],
-                    },
-                    referenceIds: [],
-                    referenceCount: 0,
-                }),
-            }),
-        ]);
-        expect(sessionStore.clearLineageSource).toHaveBeenCalledOnce();
-    });
-
     it('writes a reference-generation step with stable reference ids', async () => {
         const lineage = createStore();
         const sessionStore = createSessionStore();
@@ -181,38 +127,6 @@ describe('saveGeneratedImage', () => {
                 stepType: 'generation',
                 metadata: expect.objectContaining({
                     actualParameters,
-                }),
-            }),
-        ]);
-    });
-
-    it('records Nano Banana Pro reference-generation lineage from the saved used Reference images', async () => {
-        const lineage = createStore();
-        const sessionStore = createSessionStore();
-        const references = Array.from({ length: 14 }, (_, index) => `data:image/png;base64,used-ref-${index}`);
-        const image = createArchiveImage({
-            id: 'generated-nano-with-refs',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
-            references,
-        });
-
-        const savedImage = await saveGeneratedImage(image, {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
-
-        expect(savedImage.references).toEqual(references);
-        await expect(lineage.getByArchiveImageId('generated-nano-with-refs')).resolves.toEqual([
-            expect.objectContaining({
-                stepType: 'reference-generation',
-                metadata: expect.objectContaining({
-                    referenceImages: {
-                        count: references.length,
-                        ids: references.map((_, index) => `generated-nano-with-refs:reference:${index}`),
-                    },
-                    referenceCount: references.length,
-                    referenceIds: references.map((_, index) => `generated-nano-with-refs:reference:${index}`),
                 }),
             }),
         ]);

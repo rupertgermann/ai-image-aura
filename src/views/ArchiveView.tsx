@@ -66,7 +66,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 <div className="header-flex">
                     <div>
                         <h1>Archive</h1>
-                        <p>{images.length === 0 ? 'Your saved images, all in one place.' : `${filteredImages.length} of ${images.length} image${images.length === 1 ? '' : 's'}`}</p>
+                        <p>{images.length === 0 ? '0 images' : `${filteredImages.length} of ${images.length} image${images.length === 1 ? '' : 's'}`}</p>
                     </div>
                     <div className="header-actions archive-toolbar">
                         <button
@@ -107,7 +107,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 <div className="empty-archive">
                     <div className="empty-state glass-panel">
                         <ImageIcon size={48} className="dim-icon" />
-                        <h3>No Images Yet</h3>
+                        <h3>No images yet</h3>
                         <p>Save a generated image to start your collection.</p>
                         <button className="btn-primary" onClick={onOpenGenerate}>Create an image</button>
                     </div>
@@ -116,7 +116,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                 <div className="empty-archive">
                     <div className="empty-state glass-panel">
                         <Search size={48} className="dim-icon" />
-                        <h3>No Matches</h3>
+                        <h3>No matches</h3>
                         <p>No archived images match the current filters.</p>
                         <button className="btn-ghost" onClick={() => { onSearchChange(''); onFavoritesOnlyChange(false); }}>
                             <X size={18} /> Clear Filters

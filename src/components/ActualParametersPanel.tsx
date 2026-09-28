@@ -16,7 +16,7 @@ const ActualParametersPanel: React.FC<ActualParametersPanelProps> = ({ details, 
 
     return (
         <div className={`actual-parameters-panel${compact ? ' compact' : ''}`}>
-            <label className="section-label">Actual Parameters</label>
+            <label className="section-label">Actual parameters</label>
 
             {details.rows.length > 0 && (
                 <dl className="actual-parameter-list">

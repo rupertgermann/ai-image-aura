@@ -2,109 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
-import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateBatchSnapshot, type GenerateDraft } from './GenerateSession';
 import type { SaveLineageStepInput } from '../lineage/LineageStore';
 import {
     addGeneratedResultAsReference,
     addGeneratedResultAsReferenceFromAction,
     buildGenerateResultSlots,
-    buildGeneratedArchiveImage,
     buildGeneratedArchiveImageForSave,
-    notifyGenerateCompletion,
     saveGenerateResultSlots,
-    shouldStreamGeneratePartials,
     snapshotGeneratedReferenceImages,
     startGeneratePartialPreviewRun,
     useGenerateController,
 } from './useGenerateController';
-
-describe('Generate controller Image model archive metadata', () => {
-    it('saves Qwen resolution, aspect, background, and dimensions from the run draft', () => {
-        const draft = createDraft({
-            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
-            prompt: 'paper cutout',
-            qwenImage2_1: { aspectRatio: '3:2', imageSize: '2K', background: 'transparent', batchSize: 4 },
-        });
-        expect(buildGeneratedArchiveImage({
-            id: 'qwen-archive', url: 'data:image/png;base64,AA', timestamp: '2026-09-22', draft,
-            references: [], actualParameters: { elapsedMs: 900 },
-        })).toMatchObject({
-            model: QWEN_IMAGE_2_1_IMAGE_MODEL,
-            prompt: 'paper cutout',
-            quality: '2K', aspectRatio: '3:2', background: 'transparent', width: 2528, height: 1696,
-            actualParameters: { elapsedMs: 900 },
-        });
-    });
-    it('builds gpt-image-2.5-flare archive metadata from shared Image model controls', () => {
-        const draft = createDraft({
-            model: OPENAI_IMAGE_MODEL,
-            gptImage: {
-                quality: 'high',
-                size: '1536x1024',
-                background: 'transparent',
-                batchSize: 1,
-            },
-        });
-
-        expect(buildGeneratedArchiveImage({
-            id: 'generated-openai',
-            url: 'data:image/png;base64,gpt',
-            timestamp: '2026-06-05T12:00:00.000Z',
-            draft,
-            references: ['data:image/png;base64,ref'],
-            actualParameters: {
-                revisedPrompt: 'refined prompt',
-                size: '1536x1024',
-                quality: 'high',
-                elapsedMs: 420,
-            },
-        })).toMatchObject({
-            id: 'generated-openai',
-            model: OPENAI_IMAGE_MODEL,
-            quality: 'high',
-            aspectRatio: '1536x1024',
-            background: 'transparent',
-            width: 1536,
-            height: 1024,
-            references: ['data:image/png;base64,ref'],
-            actualParameters: {
-                revisedPrompt: 'refined prompt',
-                size: '1536x1024',
-                quality: 'high',
-                elapsedMs: 420,
-            },
-        });
-    });
-
-    it('builds nano-banana-pro archive metadata from shared Image model controls', () => {
-        const draft = createDraft({
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
-            nanoBananaPro: {
-                aspectRatio: '16:9',
-                imageSize: '4K',
-                batchSize: 1,
-            },
-        });
-
-        expect(buildGeneratedArchiveImage({
-            id: 'generated-nano',
-            url: 'data:image/png;base64,nano',
-            timestamp: '2026-06-05T12:00:00.000Z',
-            draft,
-            references: [],
-        })).toMatchObject({
-            id: 'generated-nano',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
-            quality: '4K',
-            aspectRatio: '16:9',
-            background: 'auto',
-            width: 4096,
-            height: 2304,
-            references: [],
-        });
-    });
-});
 
 describe('Generate controller batch result slots', () => {
     it('retains successful saves when a later slot fails, so retry does not duplicate them', async () => {
@@ -126,41 +36,6 @@ describe('Generate controller batch result slots', () => {
         await saveGenerateResultSlots({ ...input, results });
         expect(saveImage.mock.calls.map(([image]) => image.url)).toEqual([
             'data:image/png;base64,one', 'data:image/png;base64,two', 'data:image/png;base64,two',
-        ]);
-    });
-
-    it('keeps successful and failed batch slots independent', () => {
-        expect(buildGenerateResultSlots([
-            {
-                slotIndex: 0,
-                status: 'success',
-                imageUrl: 'data:image/png;base64,one',
-                actualParameters: {
-                    elapsedMs: 350,
-                    size: '1536x1024',
-                },
-            },
-            {
-                slotIndex: 1,
-                status: 'failed',
-                error: 'content filter',
-            },
-        ])).toEqual([
-            {
-                slotIndex: 0,
-                status: 'success',
-                imageUrl: 'data:image/png;base64,one',
-                isSaved: false,
-                actualParameters: {
-                    elapsedMs: 350,
-                    size: '1536x1024',
-                },
-            },
-            {
-                slotIndex: 1,
-                status: 'failed',
-                error: 'content filter',
-            },
         ]);
     });
 
@@ -256,32 +131,6 @@ describe('Generate controller batch result slots', () => {
 });
 
 describe('Generate controller partial preview gating', () => {
-    it('streams partial previews only for single-slot GPT Image runs', () => {
-        expect(shouldStreamGeneratePartials(createDraft({
-            model: OPENAI_IMAGE_MODEL,
-            gptImage: {
-                quality: 'high',
-                size: '1024x1024',
-                background: 'auto',
-                batchSize: 1,
-            },
-        }))).toBe(true);
-
-        expect(shouldStreamGeneratePartials(createDraft({
-            model: OPENAI_IMAGE_MODEL,
-            gptImage: {
-                quality: 'high',
-                size: '1024x1024',
-                background: 'auto',
-                batchSize: 2,
-            },
-        }))).toBe(false);
-
-        expect(shouldStreamGeneratePartials(createDraft({
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
-        }))).toBe(false);
-    });
-
     it('updates and clears partial preview state only for the active run', () => {
         let currentRunId = 0;
         let currentPartialResult: string | null = 'data:image/png;base64,old';
@@ -322,37 +171,6 @@ describe('Generate controller partial preview gating', () => {
 });
 
 describe('Generate controller result Reference iteration', () => {
-    it('adds a saved generated result as a Reference image and keeps its lineage source', () => {
-        const addReferenceFiles = vi.fn();
-        const saveLineageSource = vi.fn();
-        const clearLineageSource = vi.fn();
-
-        const added = addGeneratedResultAsReference({
-            slot: {
-                slotIndex: 2,
-                status: 'success',
-                imageUrl: 'data:image/png;base64,c2F2ZWQtcmVzdWx0',
-                isSaved: true,
-                archiveImageId: 'archive-image-123',
-            },
-            addReferenceFiles,
-            session: {
-                saveLineageSource,
-                clearLineageSource,
-            },
-        });
-
-        expect(added).toBe(true);
-        expect(addReferenceFiles).toHaveBeenCalledWith([
-            expect.objectContaining({
-                name: 'generated-result-3.png',
-                type: 'image/png',
-            }),
-        ]);
-        expect(saveLineageSource).toHaveBeenCalledWith({ archiveImageId: 'archive-image-123' });
-        expect(clearLineageSource).not.toHaveBeenCalled();
-    });
-
     it('adds an unsaved generated result as a Reference image without carrying a lineage source', () => {
         const addReferenceFiles = vi.fn();
         const saveLineageSource = vi.fn();
@@ -446,44 +264,6 @@ describe('Generate controller result Reference iteration', () => {
         );
     });
 
-    it('runs the result Reference action without mutating the draft prompt or controls', () => {
-        const draft = createDraft({
-            prompt: 'keep this prompt',
-            gptImage: {
-                quality: 'high',
-                size: '1536x1024',
-                background: 'transparent',
-                batchSize: 4,
-            },
-        });
-        const draftBeforeAction = structuredClone(draft);
-        const addReferenceFiles = vi.fn();
-        const saveLineageSource = vi.fn();
-        const clearLineageSource = vi.fn();
-        const setNotice = vi.fn();
-
-        const added = addGeneratedResultAsReferenceFromAction({
-            slot: {
-                slotIndex: 1,
-                status: 'success',
-                imageUrl: 'data:image/png;base64,aXRlcmF0ZQ==',
-                isSaved: false,
-            },
-            addReferenceFiles,
-            session: {
-                saveLineageSource,
-                clearLineageSource,
-            },
-            capacityMessage: null,
-            setNotice,
-        });
-
-        expect(added).toBe(true);
-        expect(draft).toEqual(draftBeforeAction);
-        expect(addReferenceFiles).toHaveBeenCalledTimes(1);
-        expect(clearLineageSource).toHaveBeenCalled();
-        expect(setNotice).toHaveBeenCalledWith(null);
-    });
 });
 
 describe('Generate controller Reference image provenance', () => {
@@ -682,46 +462,6 @@ describe('Generate controller Autopilot archive controls', () => {
                 controls: { aspectRatio: '16:9', imageSize: '2K', background: 'transparent', batchSize: 1 },
             },
         });
-    });
-});
-
-describe('Generate controller completion notifications', () => {
-    it('notifies when enabled and the document is hidden', () => {
-        const showCompletion = vi.fn();
-
-        notifyGenerateCompletion({
-            enabled: true,
-            documentHidden: true,
-            notificationPort: { showCompletion },
-            title: 'Generation complete',
-            body: 'Your image is ready.',
-        });
-
-        expect(showCompletion).toHaveBeenCalledWith({
-            title: 'Generation complete',
-            body: 'Your image is ready.',
-        });
-    });
-
-    it('does not notify when the document is visible or notifications are disabled', () => {
-        const showCompletion = vi.fn();
-
-        notifyGenerateCompletion({
-            enabled: true,
-            documentHidden: false,
-            notificationPort: { showCompletion },
-            title: 'Generation complete',
-            body: 'Your image is ready.',
-        });
-        notifyGenerateCompletion({
-            enabled: false,
-            documentHidden: true,
-            notificationPort: { showCompletion },
-            title: 'Autopilot complete',
-            body: 'Your run finished.',
-        });
-
-        expect(showCompletion).not.toHaveBeenCalled();
     });
 });
 

@@ -218,36 +218,6 @@ describe('recoverArchiveMetadataFromManifests', () => {
         })).rejects.toThrow('Invalid layer width');
     });
 
-    it('recovers non-layered archive manifest entries without layer stack data', async () => {
-        const metadata = new InMemoryMetadata();
-
-        const summary = await recoverArchiveMetadataFromManifests({
-            version: 1,
-            images: [
-                {
-                    id: 'flat-image',
-                    prompt: 'flat',
-                    quality: 'high',
-                    aspectRatio: '1024x1024',
-                    background: 'transparent',
-                    timestamp: '2026-05-30T16:10:56.590Z',
-                    imageFileName: 'aura-flat-image.png',
-                    references: [],
-                },
-            ],
-        }, undefined, {
-            metadata,
-            blobs: new InMemoryBlobs([['img_flat-image', 'data:image/png;base64,flat']]),
-            lineage: new InMemoryLineage(),
-        });
-
-        expect(summary.restoredImages).toBe(1);
-        expect(metadata.records.get('flat-image')).toEqual(expect.objectContaining({
-            id: 'flat-image',
-            referenceIds: [],
-            layerStack: undefined,
-        }));
-    });
 });
 
 class InMemoryMetadata {

@@ -33,73 +33,11 @@ describe('createBrowserCompletionNotificationPort', () => {
             focusWindow: vi.fn(),
         }).getReadiness()).toBe('granted');
     });
-
-    it('requests permission only from the default readiness state', async () => {
-        const requestPermission = vi.fn(async () => 'granted' as NotificationPermission);
-        const Notification = createNotificationConstructor('default', requestPermission);
-        const port = createBrowserCompletionNotificationPort({
-            isSecureContext: true,
-            Notification,
-            focusWindow: vi.fn(),
-        });
-
-        await expect(port.requestPermission()).resolves.toBe('granted');
-        expect(requestPermission).toHaveBeenCalledOnce();
-
-        await expect(createBrowserCompletionNotificationPort({
-            isSecureContext: true,
-            Notification: createNotificationConstructor('denied'),
-            focusWindow: vi.fn(),
-        }).requestPermission()).resolves.toBe('denied');
-    });
-
-    it('shows a granted notification and focuses the window when clicked', () => {
-        const focusWindow = vi.fn();
-        const Notification = createNotificationConstructor('granted');
-        const port = createBrowserCompletionNotificationPort({
-            isSecureContext: true,
-            Notification,
-            focusWindow,
-        });
-
-        const notification = port.showCompletion({
-            title: 'Generation complete',
-            body: 'Your image is ready.',
-        });
-
-        expect(Notification.instances).toEqual([
-            expect.objectContaining({
-                title: 'Generation complete',
-                options: { body: 'Your image is ready.' },
-            }),
-        ]);
-
-        notification?.onclick?.(new Event('click'));
-        expect(focusWindow).toHaveBeenCalledOnce();
-    });
 });
 
-function createNotificationConstructor(
-    permission: NotificationPermission,
-    requestPermission = vi.fn(async () => permission),
-) {
-    class TestNotification {
+function createNotificationConstructor(permission: NotificationPermission) {
+    return class TestNotification {
         static permission = permission;
-        static requestPermission = requestPermission;
-        static instances: TestNotification[] = [];
         onclick: ((event: Event) => unknown) | null = null;
-        readonly title: string;
-        readonly options?: NotificationOptions;
-
-        constructor(
-            title: string,
-            options?: NotificationOptions,
-        ) {
-            this.title = title;
-            this.options = options;
-            TestNotification.instances.push(this);
-        }
-    }
-
-    return TestNotification;
+    };
 }

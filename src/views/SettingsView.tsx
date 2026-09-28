@@ -33,7 +33,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="settings-container">
             <header className="view-header">
                 <h1>Settings</h1>
-                <p>Connect the providers you use. Your images and settings stay in this browser.</p>
+                <p>Connect the providers you use. Your archive and settings are stored in this browser.</p>
                 <button className="btn-text-link" onClick={onOpenGenerate}>Back to Generate →</button>
             </header>
 
@@ -63,7 +63,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
             <section className="settings-section glass-panel">
                 <div className="section-title">
                     <Bell size={20} className={completionNotificationsEnabled ? 'icon-green' : 'icon-purple'} />
-                    <h2>Completion Notifications</h2>
+                    <h2>Completion notifications</h2>
                     <span className="status-badge">{getReadinessLabel(completionNotificationReadiness)}</span>
                 </div>
 
@@ -122,7 +122,7 @@ const LocalServerSection: React.FC<LocalServerSectionProps> = ({ localServerUrl,
         <section className="settings-section glass-panel">
             <div className="section-title">
                 <Server size={20} className={configuredUrl ? 'icon-green' : 'icon-purple'} />
-                <h2>Local Server (stable-diffusion.cpp)</h2>
+                <h2>Local server (stable-diffusion.cpp)</h2>
                 <span className="status-badge">{configuredUrl ? 'Configured' : 'Not configured'}</span>
             </div>
             <p className="section-desc">Connect to an sd-server on your machine or behind llama-swap. The URL is stored in this browser.</p>

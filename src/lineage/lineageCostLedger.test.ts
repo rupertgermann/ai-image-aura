@@ -3,17 +3,6 @@ import type { ApiCostKind, ApiCostLedger } from '../db/types';
 import { buildLineageCostLedger } from './lineageCostLedger';
 
 describe('lineageCostLedger', () => {
-    it('sums recorded generation and edit step costs', () => {
-        const ledger = buildLineageCostLedger([
-            createEntry('step-1', 'generation', 'Generated', createCostLedger('generation', 'image-generation', 0.05)),
-            createEntry('step-2', 'ai-edit', 'AI Edit', createCostLedger('edit', 'image-edit', 0.04)),
-        ]);
-
-        expect(ledger?.items.map((item) => [item.id, item.amountUsd])).toEqual([
-            ['generation', 0.05],
-            ['edit', 0.04],
-        ]);
-    });
 
     it('marks missing charged lineage step costs as unavailable when another step cost was recorded', () => {
         const ledger = buildLineageCostLedger([

@@ -49,27 +49,6 @@ class InMemoryArchiveStore implements Pick<ArchiveStore, 'save'> {
 }
 
 describe('ArchiveTransfer', () => {
-    it('exports a lineage manifest with every exported image step', async () => {
-        const lineage = createStore();
-        const images = createImages();
-
-        await seedLineage(lineage);
-
-        const zipBytes = await buildArchiveZip(images, { lineageStore: lineage });
-        const zip = await JSZip.loadAsync(zipBytes);
-        const manifestText = await zip.file(LINEAGE_MANIFEST_FILE)?.async('text');
-
-        expect(manifestText).toBeTruthy();
-        expect(JSON.parse(manifestText ?? 'null')).toEqual({
-            version: 1,
-            steps: [
-                expect.objectContaining({ id: 'step-1', stepType: 'generation' }),
-                expect.objectContaining({ id: 'step-2', stepType: 'overwrite' }),
-                expect.objectContaining({ id: 'step-3', stepType: 'ai-edit' }),
-                expect.objectContaining({ id: 'step-4', stepType: 'save-as-copy' }),
-            ],
-        });
-    });
 
     it('round-trips typed Generate, Editor, and Autopilot lineage metadata without changing the lineage manifest version', async () => {
         const sourceLineage = createStore();

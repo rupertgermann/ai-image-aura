@@ -345,7 +345,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         <div className="editor-container">
             <header className="view-header">
                 <div className="header-flex">
-                    <div><h1>Editor</h1><p>{draftLoading ? 'Restoring your draft…' : saving ? 'Saving your image…' : isDirty ? 'Changes not yet saved to archive' : 'Your image is up to date'}</p></div>
+                    <div><h1>Editor</h1><p>{draftLoading ? 'Restoring your draft…' : saving ? 'Saving your image…' : isDirty ? 'Changes not yet saved to archive' : 'No unsaved changes'}</p></div>
                     <div className="editor-toolbar">
                         <button className="btn-ghost btn-icon" onClick={undo} disabled={!canUndo || aiLoading || saving} aria-label="Undo" title="Undo (⌘/Ctrl Z)"><Undo2 size={18} /></button>
                         <button className="btn-ghost btn-icon" onClick={redo} disabled={!canRedo || aiLoading || saving} aria-label="Redo" title="Redo (⌘/Ctrl Shift Z)"><Redo2 size={18} /></button>
@@ -567,7 +567,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
-                                {aiLoading ? 'AI is thinking...' : 'Transform with AI'}
+                                {aiLoading ? 'Transforming image...' : 'Transform with AI'}
                             </button>
 
                             <div
@@ -578,7 +578,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                                 onPaste={handleReferencePaste}
                                 tabIndex={0}
                             >
-                                <label>ADD VISUAL CONTEXT (OPTIONAL) {isDragging && '- DROP TO UPLOAD'}</label>
+                                <label>Reference images (optional) {isDragging && '- DROP TO UPLOAD'}</label>
                                 <div className="reference-grid mini">
                                     {referencePreviews.map((url: string, idx: number) => (
                                         <div key={url} className="reference-preview mini glass-panel">
@@ -629,7 +629,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                         <div className="transform-mask-toolbar">
                             <div className="section-title">
                                 <Paintbrush size={18} className="icon-purple" />
-                                <h3>Transform Mask</h3>
+                                <h3>Transform mask</h3>
                             </div>
                             <button className="modal-close" onClick={() => setMaskEditorOpen(false)} aria-label="Close mask editor">
                                 <X size={20} />

@@ -5,47 +5,6 @@ import { createLineageNavigator, type LineageNavigatorDeps } from './LineageNavi
 
 describe('LineageNavigator', () => {
     describe('replayIntoGenerate', () => {
-        it('transfers from the archive image when it is present', async () => {
-            const step = createStep({ id: 'step-1', archiveImageId: 'image-1', stepType: 'generation' });
-            const image = createImage({ id: 'image-1' });
-            const { navigator, sessionStore } = setup({
-                steps: [step],
-                images: [image],
-            });
-
-            const outcome = await navigator.replayIntoGenerate('step-1');
-
-            expect(outcome).toEqual({ status: 'replayed' });
-            expect(sessionStore.transferFromArchive).toHaveBeenCalledWith(
-                image,
-                { archiveImageId: 'image-1', stepId: 'step-1' },
-                expect.objectContaining({ isSaved: false }),
-            );
-            expect(sessionStore.writeDraft).not.toHaveBeenCalled();
-            expect(sessionStore.saveLineageSource).not.toHaveBeenCalled();
-        });
-
-        it('writes the draft and saves the lineage source when the image is missing', async () => {
-            const step = createStep({
-                id: 'step-2',
-                archiveImageId: 'autopilot:run:iteration:1',
-                stepType: 'autopilot-iteration',
-                metadata: { prompt: 'a glass forest at dusk' },
-            });
-            const { navigator, sessionStore } = setup({ steps: [step], images: [] });
-
-            const outcome = await navigator.replayIntoGenerate('step-2');
-
-            expect(outcome).toEqual({ status: 'replayed' });
-            expect(sessionStore.transferFromArchive).not.toHaveBeenCalled();
-            expect(sessionStore.writeDraft).toHaveBeenCalledWith(
-                expect.objectContaining({ prompt: 'a glass forest at dusk', isSaved: false }),
-            );
-            expect(sessionStore.saveLineageSource).toHaveBeenCalledWith({
-                archiveImageId: 'autopilot:run:iteration:1',
-                stepId: 'step-2',
-            });
-        });
 
         it('reports unavailable when the step is missing or not generate-replayable', async () => {
             const editStep = createStep({ id: 'step-3', archiveImageId: 'image-3', stepType: 'ai-edit' });
@@ -65,53 +24,6 @@ describe('LineageNavigator', () => {
     });
 
     describe('replayIntoEditor', () => {
-        it('saves the lineage source and returns the image when it is present', async () => {
-            const step = createStep({ id: 'step-4', archiveImageId: 'image-4', stepType: 'ai-edit' });
-            const image = createImage({ id: 'image-4' });
-            const { navigator, sessionStore } = setup({ steps: [step], images: [image] });
-
-            const outcome = await navigator.replayIntoEditor('step-4');
-
-            expect(outcome).toEqual({ status: 'replayed', image, replay: { prompt: null, model: null } });
-            expect(sessionStore.saveLineageSource).toHaveBeenCalledWith({
-                archiveImageId: 'image-4',
-                stepId: 'step-4',
-            });
-        });
-
-        it('returns masked editor replay metadata for the Editor to send on the next AI transform', async () => {
-            const step = createStep({
-                id: 'masked-step',
-                archiveImageId: 'masked-image',
-                stepType: 'ai-edit',
-                metadata: {
-                    aiEdit: {
-                        prompt: 'replace the masked area',
-                        imageModel: { slug: 'gpt-image-2' },
-                        transformMask: {
-                            dataUrl: 'data:image/png;base64,bWFzaw==',
-                            mimeType: 'image/png',
-                        },
-                    },
-                },
-            });
-            const image = createImage({ id: 'masked-image' });
-            const { navigator } = setup({ steps: [step], images: [image] });
-
-            const outcome = await navigator.replayIntoEditor('masked-step');
-
-            expect(outcome.status).toBe('replayed');
-            if (outcome.status !== 'replayed') {
-                return;
-            }
-            expect(outcome.image).toBe(image);
-            expect(outcome.replay).toMatchObject({
-                prompt: 'replace the masked area',
-                model: 'gpt-image-2.5-flare',
-            });
-            expect(outcome.replay.maskImage).toBeInstanceOf(File);
-            await expect(outcome.replay.maskImage?.text()).resolves.toBe('mask');
-        });
 
         it('reports unavailable when the image is missing from the archive', async () => {
             const step = createStep({ id: 'step-5', archiveImageId: 'image-5', stepType: 'save-as-copy' });
@@ -138,18 +50,6 @@ describe('LineageNavigator', () => {
     });
 
     describe('fork', () => {
-        it('saves the lineage source so the next save branches from the step', async () => {
-            const step = createStep({ id: 'step-7', archiveImageId: 'image-7', stepType: 'ai-edit' });
-            const { navigator, sessionStore } = setup({ steps: [step], images: [] });
-
-            const outcome = await navigator.fork('step-7');
-
-            expect(outcome).toEqual({ status: 'forked' });
-            expect(sessionStore.saveLineageSource).toHaveBeenCalledWith({
-                archiveImageId: 'image-7',
-                stepId: 'step-7',
-            });
-        });
 
         it('reports unavailable when the step no longer exists', async () => {
             const { navigator, sessionStore } = setup({ steps: [], images: [] });

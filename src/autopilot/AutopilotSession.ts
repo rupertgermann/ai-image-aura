@@ -202,7 +202,7 @@ function getBestIteration(iterations: AutopilotIteration[]): AutopilotIteration 
     return iterations.reduce<AutopilotIteration | null>(pickBetterIteration, null);
 }
 
-// Single source of truth for "what counts as best": highest score, ties broken by earliest iteration.
+// Choose the highest score; break ties using the earliest iteration.
 function pickBetterIteration(best: AutopilotIteration | null, candidate: AutopilotIteration): AutopilotIteration {
     if (!best) {
         return candidate;

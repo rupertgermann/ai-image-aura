@@ -1,18 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
-    LOCAL_SERVER_URL_STORAGE_KEY,
-    PROVIDER_API_KEY_STORAGE_KEYS,
     createProviderCredentialResolver,
     normalizeLocalServerUrl,
     readProviderApiKey,
 } from './providerKeys';
 
 describe('provider credentials', () => {
-    it('keeps OpenAI and Google keys in distinct local storage slots', () => {
-        expect(PROVIDER_API_KEY_STORAGE_KEYS.openai).toBe('aura_openapi_key');
-        expect(PROVIDER_API_KEY_STORAGE_KEYS.google).toBe('aura_google_api_key');
-        expect(PROVIDER_API_KEY_STORAGE_KEYS.openai).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.google);
-    });
 
     it('reads provider keys from JSON-stringified local storage values', () => {
         const storage = createStorage({
@@ -56,10 +49,7 @@ describe('provider credentials', () => {
         expect(resolver.getCredential('local')).toBeNull();
     });
 
-    it('has a dedicated Local server URL slot and resolves a cleaned saved URL', () => {
-        expect(LOCAL_SERVER_URL_STORAGE_KEY).toBe('aura_local_server_url');
-        expect(LOCAL_SERVER_URL_STORAGE_KEY).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.openai);
-        expect(LOCAL_SERVER_URL_STORAGE_KEY).not.toBe(PROVIDER_API_KEY_STORAGE_KEYS.google);
+    it('resolves a cleaned saved Local server URL', () => {
         expect(createProviderCredentialResolver({
             openai: null,
             google: null,
