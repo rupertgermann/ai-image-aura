@@ -14,7 +14,7 @@ import {
     type EditorAdjustments,
     type EditorDraft,
 } from './layers';
-import type { EditorSaveContext } from './saveEditedImage';
+import type { EditorSaveContext } from '../archive/saveArchiveImage';
 
 interface UseEditorControllerOptions {
     imageCredential: string | null;

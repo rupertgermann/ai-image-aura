@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ApiCostKind, ApiCostLedger, ArchiveImage } from '../db/types';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
-import { saveEditedImage, type EditorSaveContext } from './saveEditedImage';
+import { saveArchiveImage, type EditorSaveContext } from '../archive/saveArchiveImage';
 import { createEditorDraft } from './layers';
 import { OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
@@ -37,15 +37,15 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
     }
 }
 
-describe('saveEditedImage', () => {
+describe('saveArchiveImage edit', () => {
     it.each([false, true])('reopens saved adjustments only for editable layer stacks (copy: %s)', async (isCopy) => {
         const context = { ...createSaveContext(), isCopy };
-        const deps = { saveImage: vi.fn(async (image: ArchiveImage) => image), lineageStore: createStore() };
-        const flat = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,flattened', context, deps);
+        const deps = { archive: { get: async () => null, save: vi.fn(async (image: ArchiveImage) => image), remove: vi.fn() }, lineage: createStore() };
+        const flat = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,flattened', context: context }, deps);
         expect(createEditorDraft(flat).adjustments.brightness).toBe(100);
         expect(createEditorDraft(flat).layerStack.layers[0].assetUrl).toBe(flat.url);
 
-        const layered = await saveEditedImage(createArchiveImage(), flat.url, { ...context, layerStack: createLayerStack() }, deps);
+        const layered = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: flat.url, context: { ...context, layerStack: createLayerStack() } }, deps);
         expect(createEditorDraft(layered).adjustments).toEqual(context.adjustments);
         expect(createEditorDraft(layered).layerStack.layers).toEqual(createLayerStack().layers);
     });
@@ -54,16 +54,11 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,edited-copy', {
+        const savedImage = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,edited-copy', context: {
             ...createSaveContext(),
             isCopy: true,
             aiEditPrompt: 'add a moonlit skyline',
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            clock: () => '2026-04-04T12:00:00.000Z',
-            makeId: () => 'branch-image',
-        });
+        } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, clock: () => '2026-04-04T12:00:00.000Z', makeId: () => 'branch-image' });
 
         await expect(lineage.getByArchiveImageId(savedImage.id)).resolves.toEqual([
             expect.objectContaining({
@@ -117,22 +112,12 @@ describe('saveEditedImage', () => {
         const generationCostLedger = createCostLedger('image-generation', 'image-generation', 0.05);
         const editCostLedger = createCostLedger('ai-edit', 'image-edit', 0.04);
 
-        const savedImage = await saveEditedImage(
-            createArchiveImage({ costLedger: generationCostLedger }),
-            'data:image/png;base64,edited-copy',
-            {
+        const savedImage = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage({ costLedger: generationCostLedger }), updatedUrl: 'data:image/png;base64,edited-copy', context: {
                 ...createSaveContext(),
                 isCopy: true,
                 aiEditPrompt: 'add a moonlit skyline',
                 costLedger: editCostLedger,
-            },
-            {
-                saveImage: vi.fn(async (image) => image),
-                lineageStore: lineage,
-                clock: () => '2026-04-04T12:00:00.000Z',
-                makeId: () => 'costed-edit-copy',
-            },
-        );
+            } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, clock: () => '2026-04-04T12:00:00.000Z', makeId: () => 'costed-edit-copy' });
 
         expect(savedImage.costLedger?.items.map((item) => [item.id, item.amountUsd])).toEqual([
             ['image-generation', 0.05],
@@ -146,16 +131,11 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        await saveEditedImage(createArchiveImage(), 'data:image/png;base64,manual-copy', {
+        await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,manual-copy', context: {
             ...createSaveContext(),
             isCopy: true,
             aiEditPrompt: null,
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            clock: () => '2026-04-04T12:30:00.000Z',
-            makeId: () => 'manual-branch',
-        });
+        } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, clock: () => '2026-04-04T12:30:00.000Z', makeId: () => 'manual-branch' });
 
         await expect(lineage.getByArchiveImageId('manual-branch')).resolves.toEqual([
             expect.objectContaining({
@@ -193,15 +173,11 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        await saveEditedImage(createArchiveImage(), 'data:image/png;base64,manual-overwrite', {
+        await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,manual-overwrite', context: {
             ...createSaveContext(),
             isCopy: false,
             aiEditPrompt: null,
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            clock: () => '2026-04-04T13:00:00.000Z',
-        });
+        } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, clock: () => '2026-04-04T13:00:00.000Z' });
 
         await expect(lineage.getByArchiveImageId('source-image')).resolves.toEqual([
             expect.objectContaining({ id: 'step-1', stepType: 'generation' }),
@@ -241,16 +217,12 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,ai-overwrite', {
+        const savedImage = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,ai-overwrite', context: {
             ...createSaveContext(),
             isCopy: false,
             aiEditPrompt: 'make the nebula denser',
             aiEditModel: QWEN_IMAGE_2_1_IMAGE_MODEL,
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            clock: () => '2026-04-04T13:30:00.000Z',
-        });
+        } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, clock: () => '2026-04-04T13:30:00.000Z' });
 
         const steps = await lineage.getByArchiveImageId('source-image');
         expect(savedImage).toMatchObject({
@@ -274,7 +246,7 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,masked-edit', {
+        const savedImage = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,masked-edit', context: {
             ...createSaveContext(),
             isCopy: true,
             layerStack: createLayerStack(),
@@ -285,11 +257,7 @@ describe('saveEditedImage', () => {
                 dataUrl: 'data:image/png;base64,bWFzaw==',
                 mimeType: 'image/png',
             },
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            makeId: () => 'masked-copy',
-        });
+        } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, makeId: () => 'masked-copy' });
 
         const steps = await lineage.getByArchiveImageId(savedImage.id);
         expect(steps.at(-1)?.metadata).toEqual(expect.objectContaining({
@@ -314,7 +282,7 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        const savedImage = await saveEditedImage(createArchiveImage(), 'data:image/png;base64,layered', {
+        const savedImage = await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,layered', context: {
             ...createSaveContext(),
             isCopy: true,
             layerStack: createLayerStack(),
@@ -324,11 +292,7 @@ describe('saveEditedImage', () => {
             targetIncludesBaseLayer: false,
             aiResultLayerId: 'ai-layer',
             aiResultLayerName: 'AI result',
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            makeId: () => 'layered-copy',
-        });
+        } }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, makeId: () => 'layered-copy' });
 
         expect(savedImage.layerStack?.layers.map((layer) => layer.id)).toEqual(['base', 'upload', 'ai-layer']);
         const steps = await lineage.getByArchiveImageId('layered-copy');
@@ -362,15 +326,10 @@ describe('saveEditedImage', () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
 
-        await saveEditedImage(createArchiveImage(), 'data:image/png;base64,forked-overwrite', {
+        await saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,forked-overwrite', context: {
             ...createSaveContext(),
             isCopy: false,
-        }, {
-            saveImage: vi.fn(async (image) => image),
-            lineageStore: lineage,
-            parentStepId: 'step-1',
-            clock: () => '2026-04-04T14:00:00.000Z',
-        });
+        }, parentStepId: 'step-1' }, { archive: { get: async () => null, save: vi.fn(async (image) => image), remove: vi.fn() }, lineage: lineage, clock: () => '2026-04-04T14:00:00.000Z' });
 
         const steps = await lineage.getByArchiveImageId('source-image');
         expect(steps.at(-1)).toEqual(expect.objectContaining({
@@ -384,16 +343,13 @@ describe('saveEditedImage', () => {
         await seedSourceLineage(lineage);
         const error = new Error('disk full');
 
-        await expect(saveEditedImage(createArchiveImage(), 'data:image/png;base64,failed', {
+        await expect(saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,failed', context: {
             ...createSaveContext(),
             isCopy: true,
             aiEditPrompt: 'make it cinematic',
-        }, {
-            saveImage: vi.fn(async () => {
+        } }, { archive: { get: async () => null, save: vi.fn(async () => {
                 throw error;
-            }),
-            lineageStore: lineage,
-        })).rejects.toThrow(error);
+            }), remove: vi.fn() }, lineage: lineage })).rejects.toThrow(error);
 
         const steps = await lineage.getByArchiveImageId('source-image');
         expect(steps).toHaveLength(2);

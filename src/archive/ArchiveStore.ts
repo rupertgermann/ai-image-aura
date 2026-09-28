@@ -25,6 +25,7 @@ export type SaveArchiveImageInput = Omit<ArchiveImage, 'id' | 'timestamp'> & {
 
 export interface ArchiveStore {
     list(): Promise<ArchiveImage[]>;
+    get(id: string): Promise<ArchiveImage | null>;
     save(input: SaveArchiveImageInput): Promise<ArchiveImage>;
     remove(id: string): Promise<void>;
 }
@@ -99,6 +100,11 @@ class LocalArchiveStore implements ArchiveStore {
             ...images.filter((image): image is ArchiveImage => image !== null),
             ...recoveredImages,
         ];
+    }
+
+    async get(id: string): Promise<ArchiveImage | null> {
+        const record = await this.metadata.get(id);
+        return record ? this.hydrate(record) : null;
     }
 
     async save(input: SaveArchiveImageInput): Promise<ArchiveImage> {

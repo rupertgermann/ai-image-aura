@@ -50,14 +50,19 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
         }
     }, [onError, store]);
 
+    const publishSavedImage = useCallback((image: ArchiveImage) => {
+        setError(null);
+        setImages((current) => sortImagesByTimestamp([
+            image,
+            ...current.filter((entry) => entry.id !== image.id),
+        ]));
+    }, []);
+
     const addImage = async (image: ArchiveImage): Promise<ArchiveImage> => {
         try {
             setError(null);
             const savedImage = await store.save(image);
-            setImages((current) => sortImagesByTimestamp([
-                savedImage,
-                ...current.filter((entry) => entry.id !== savedImage.id),
-            ]));
+            publishSavedImage(savedImage);
             return savedImage;
         } catch (err) {
             const nextError = err instanceof Error ? err : new Error('Failed to save image');
@@ -84,5 +89,5 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
         loadImages();
     }, [loadImages]);
 
-    return { images, loading, error, addImage, deleteImage, refresh: loadImages };
+    return { images, loading, error, addImage, publishSavedImage, deleteImage, refresh: loadImages };
 }

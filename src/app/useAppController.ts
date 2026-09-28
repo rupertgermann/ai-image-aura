@@ -8,7 +8,7 @@ import { useAppPreferences } from './useAppPreferences';
 import { useImageArchive } from '../hooks/useImageArchive';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { initializeAuraPersistence } from '../db/AuraPersistence';
-import { saveEditedImage, type EditorSaveContext } from '../editor/saveEditedImage';
+import { saveArchiveImage, type EditorSaveContext, type GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { clearEditorDraft } from '../editor/editorDraftStorage';
 import { lineageStore } from '../lineage/LineageStore';
 import { createLineageNavigator } from '../lineage/LineageNavigator';
@@ -33,7 +33,7 @@ export function useAppController() {
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
     }, [notifyError]);
-    const { images, loading: archiveLoading, error: archiveError, addImage, deleteImage, refresh } = useImageArchive({
+    const { images, loading: archiveLoading, error: archiveError, addImage, publishSavedImage, deleteImage, refresh } = useImageArchive({
         onError: handleArchiveError,
     });
     const [generateTransferKey, setGenerateTransferKey] = useState(0);
@@ -97,11 +97,12 @@ export function useAppController() {
         void recover();
     }, [addToast, notifyError, refresh]);
 
-    const saveImage = useCallback(async (image: ArchiveImage) => {
-        const savedImage = await addImage(image);
+    const saveImage = useCallback(async (request: GenerationSaveRequest) => {
+        const savedImage = await saveArchiveImage(request);
+        publishSavedImage(savedImage);
         addToast('Image saved to archive', 'success');
         return savedImage;
-    }, [addImage, addToast]);
+    }, [addToast, publishSavedImage]);
 
     const changeCompletionNotificationsEnabled = useCallback(async (enabled: boolean) => {
         if (!enabled) {
@@ -153,12 +154,15 @@ export function useAppController() {
             return;
         }
 
-        const savedImage = await saveEditedImage(editingImage, updatedUrl, context, {
-            saveImage: async (image) => addImage(image),
-            lineageStore,
+        const savedImage = await saveArchiveImage({
+            kind: 'edit',
+            sourceImage: editingImage,
+            updatedUrl,
+            context,
             parentStepId: generateSessionStore.loadLineageSource()?.stepId ?? null,
         });
 
+        publishSavedImage(savedImage);
         generateSessionStore.clearLineageSource();
 
         if (savedImage.id !== editingImage.id) {
@@ -173,7 +177,7 @@ export function useAppController() {
         setEditingImage(null);
         setSavedEditorImageId(null);
         setEditorReplay(null);
-    }, [addImage, addToast, changeView, editingImage, setSavedEditorImageId]);
+    }, [addToast, changeView, editingImage, publishSavedImage, setSavedEditorImageId]);
 
     const createSimilar = useCallback(async (image: ArchiveImage) => {
         if (generateBusy) {

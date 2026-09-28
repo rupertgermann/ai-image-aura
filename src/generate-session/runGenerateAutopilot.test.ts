@@ -8,7 +8,7 @@ import { calculateApiCostTotals } from '../costs/apiCost';
 import { DEFAULT_GENERATE_DRAFT } from './GenerateSession';
 
 describe('runGenerateAutopilot', () => {
-    it('limits and persists the provider-used Reference image snapshot for Nano Banana Pro runs', async () => {
+    it('limits and returns the provider-used Reference image snapshot for Nano Banana Pro runs', async () => {
         const selectedReferenceFiles = Array.from({ length: 15 }, (_, index) =>
             new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
         );
@@ -36,7 +36,6 @@ describe('runGenerateAutopilot', () => {
                 },
             }];
         });
-        const saveCurrentBatch = vi.fn(async () => undefined);
         const serializeReferences = vi.fn(async (files: File[]) =>
             files.map((file) => referenceDataUrlByFile.get(file) ?? 'data:image/png;base64,unknown'),
         );
@@ -81,8 +80,6 @@ describe('runGenerateAutopilot', () => {
             referenceImages: selectedReferenceFiles,
             sessionStore: {
                 loadLineageSource: () => null,
-                saveCurrentBatch,
-                saveLineageSource: vi.fn(),
             },
             lineageStore: {
                 save: saveLineageStep,
@@ -104,7 +101,7 @@ describe('runGenerateAutopilot', () => {
             expectedProviderReferenceNames,
         ]);
         expect(serializeReferences).toHaveBeenCalledWith(expectedProviderReferenceFiles);
-        expect(saveCurrentBatch).toHaveBeenCalledWith({
+        expect(outcome.batch).toEqual({
             results: [{
                 slotIndex: 0,
                 status: 'success',
@@ -127,10 +124,6 @@ describe('runGenerateAutopilot', () => {
                 stepId: 'step-2',
             },
         });
-        expect(outcome.usedReferenceImages.map((file) => file.name)).toEqual(
-            expectedProviderReferenceNames,
-        );
-        expect(outcome.usedReferences).toEqual(selectedReferenceDataUrls.slice(0, 14));
     });
 
     it('runs Qwen images with hosted reasoning and charges only for reasoning', async () => {
@@ -176,7 +169,6 @@ describe('runGenerateAutopilot', () => {
             ...step,
             id: 'qwen-step',
         }));
-        const saveCurrentBatch = vi.fn(async () => undefined);
 
         const outcome = await runGenerateAutopilot({
             goal: 'A paper crane',
@@ -197,8 +189,6 @@ describe('runGenerateAutopilot', () => {
             referenceImages: [],
             sessionStore: {
                 loadLineageSource: () => null,
-                saveCurrentBatch,
-                saveLineageSource: vi.fn(),
             },
             lineageStore: { save },
             workflow: { generate, serializeReferences: vi.fn(async () => []) },
@@ -234,7 +224,7 @@ describe('runGenerateAutopilot', () => {
             imageGenerationTotalUsd: 0,
             reasoningTotalUsd: 0.003,
         });
-        expect(saveCurrentBatch).toHaveBeenCalledWith(expect.objectContaining({
+        expect(outcome.batch).toEqual(expect.objectContaining({
             draft: expect.objectContaining({
                 prompt: 'paper crane',
                 qwenImage2_1: expect.objectContaining({

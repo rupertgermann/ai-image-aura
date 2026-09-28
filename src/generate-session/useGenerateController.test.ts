@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { saveArchiveImage, type GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
@@ -25,11 +26,13 @@ describe('Generate controller batch result slots', () => {
         const saveImage = vi.fn(async (image) => image);
         saveImage.mockImplementationOnce(async (image) => image).mockRejectedValueOnce(new Error('Disk full'));
         const input = {
-            draft: createDraft({}), runDraft: null, usedReferences: [], runLineageSource: null,
-            serializeReferences: vi.fn(async () => []), saveImage,
-            lineageStore: { getByArchiveImageId: vi.fn(async () => []), save: vi.fn(async (step) => ({ ...step, id: 'step' })) },
-            sessionStore: { loadLineageSource: vi.fn(() => null), clearLineageSource: vi.fn() },
-            onSaved: (nextResults: typeof results) => { results = nextResults; },
+            draft: createDraft({}),
+            runDraft: null,
+            usedReferences: [],
+            runLineageSource: null,
+            serializeReferences: vi.fn(async () => []),
+            saveImage: (request: GenerationSaveRequest) => saveArchiveImage(request, { archive: { get: async () => null, save: saveImage, remove: vi.fn() }, lineage: { getByArchiveImageId: vi.fn(async () => []), save: vi.fn(async (step) => ({ ...step, id: 'step' })) } }),
+            onSaved: (nextResults: typeof results) => { results = nextResults; }
         };
         await expect(saveGenerateResultSlots({ ...input, results })).rejects.toThrow('Disk full');
         expect(results[0]).toMatchObject({ isSaved: true });
@@ -73,11 +76,10 @@ describe('Generate controller batch result slots', () => {
             usedReferences: [],
             runLineageSource: null,
             serializeReferences: vi.fn(async () => []),
-            saveImage: vi.fn(async (image) => {
+            saveImage: (request: GenerationSaveRequest) => saveArchiveImage(request, { archive: { get: async () => null, save: vi.fn(async (image) => {
                 savedImages.push(image.id);
                 return image;
-            }),
-            lineageStore: {
+            }), remove: vi.fn() }, lineage: {
                 getByArchiveImageId: vi.fn(async () => []),
                 save: vi.fn(async (input) => ({
                     id: input.id ?? 'lineage-step',
@@ -87,15 +89,11 @@ describe('Generate controller batch result slots', () => {
                     timestamp: input.timestamp ?? '2026-06-05T12:00:00.000Z',
                     metadata: input.metadata,
                 })),
-            },
-            sessionStore: {
-                loadLineageSource: vi.fn(() => null),
-                clearLineageSource: vi.fn(),
-            },
+            } }),
             createArchiveImageId: vi.fn()
                 .mockReturnValueOnce('archive-0')
                 .mockReturnValueOnce('archive-3'),
-            now: vi.fn(() => new Date('2026-06-05T12:00:00.000Z')),
+            now: vi.fn(() => new Date('2026-06-05T12:00:00.000Z'))
         });
 
         expect(savedImages).toEqual(['archive-0', 'archive-3']);
@@ -292,7 +290,7 @@ describe('Generate controller Reference image provenance', () => {
                 referenceImages: selectedFiles,
                 replaceReferences: vi.fn(),
                 serializeReferences: vi.fn(async () => selectedDataUrls),
-                onSaveImage: vi.fn(async (image) => image),
+                onSaveImage: vi.fn(async (request) => request.image),
                 session: {
                     loadCurrentBatch: vi.fn(async () => null),
                     saveCurrentBatch,
@@ -324,10 +322,8 @@ describe('Generate controller Reference image provenance', () => {
             usedReferences: snapshot!.references,
             runLineageSource: snapshot!.lineageSource,
             serializeReferences: vi.fn(async () => selectedDataUrls),
-            saveImage,
-            lineageStore: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage },
-            sessionStore: { loadLineageSource: vi.fn(() => null), clearLineageSource: vi.fn() },
-            createArchiveImageId: () => 'qwen-archive',
+            saveImage: (request: GenerationSaveRequest) => saveArchiveImage(request, { archive: { get: async () => null, save: saveImage, remove: vi.fn() }, lineage: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage } }),
+            createArchiveImageId: () => 'qwen-archive'
         });
 
         expect(saveImage.mock.calls[0]?.[0].references).toEqual(selectedDataUrls.slice(0, 10));
@@ -406,7 +402,7 @@ describe('Generate controller Autopilot archive controls', () => {
                 referenceImages: [],
                 replaceReferences: vi.fn(),
                 serializeReferences: vi.fn(async () => []),
-                onSaveImage: saveImage,
+                onSaveImage: async (request) => saveImage(request.image),
                 session: {
                     loadCurrentBatch: vi.fn(async () => null),
                     saveCurrentBatch,
@@ -431,6 +427,7 @@ describe('Generate controller Autopilot archive controls', () => {
         }));
 
         await controller.current!.runAutopilot({ goal: 'A paper crane', maxIterations: 1 });
+        expect(saveCurrentBatch).toHaveBeenCalledTimes(1);
         const finalSnapshot = saveCurrentBatch.mock.calls.at(-1)?.[0];
         expect(finalSnapshot?.draft).toMatchObject({
             prompt: 'paper crane',
@@ -444,10 +441,8 @@ describe('Generate controller Autopilot archive controls', () => {
             usedReferences: finalSnapshot!.references,
             runLineageSource: finalSnapshot!.lineageSource,
             serializeReferences: vi.fn(async () => []),
-            saveImage,
-            lineageStore: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage },
-            sessionStore: { loadLineageSource: vi.fn(() => null), clearLineageSource: vi.fn() },
-            createArchiveImageId: () => 'saved-best',
+            saveImage: (request: GenerationSaveRequest) => saveArchiveImage(request, { archive: { get: async () => null, save: saveImage, remove: vi.fn() }, lineage: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage } }),
+            createArchiveImageId: () => 'saved-best'
         });
 
         expect(saveImage.mock.calls[0]?.[0]).toMatchObject({

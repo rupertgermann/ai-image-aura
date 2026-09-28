@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createLineageStore, type LineageMetadataPort, type LineageStep } from '../lineage/LineageStore';
-import { saveGeneratedImage } from './saveGeneratedImage';
+import { saveArchiveImage } from '../archive/saveArchiveImage';
 import type { ArchiveImage } from '../db/types';
-import { DEFAULT_GENERATE_DRAFT, type GenerateDraft, type GenerateLineageSource } from './GenerateSession';
+import { DEFAULT_GENERATE_DRAFT, type GenerateDraft } from './GenerateSession';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import { buildGenerateReplay } from '../lineage/replayLineageStep';
 
@@ -38,7 +38,7 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
     }
 }
 
-describe('saveGeneratedImage', () => {
+describe('saveArchiveImage generation', () => {
     it('saves Qwen controls for exact lineage replay', async () => {
         const lineage = createStore();
         const image = createArchiveImage({
@@ -52,12 +52,7 @@ describe('saveGeneratedImage', () => {
             qwenImage2_1: { aspectRatio: '9:16' as const, imageSize: '2K' as const, background: 'transparent' as const, batchSize: 3 },
         };
 
-        await saveGeneratedImage(image, {
-            saveImage: async (nextImage) => nextImage,
-            lineageStore: lineage,
-            sessionStore: createSessionStore(),
-            runDraft,
-        });
+        await saveArchiveImage({ kind: 'generation', image: image, source: null, runDraft: runDraft }, { archive: { get: async () => null, save: async (nextImage) => createArchiveImage(nextImage), remove: vi.fn() }, lineage: lineage });
         const [step] = await lineage.getByArchiveImageId(image.id);
         expect(step.metadata).toMatchObject({
             model: QWEN_IMAGE_2_1_IMAGE_MODEL,
@@ -69,17 +64,13 @@ describe('saveGeneratedImage', () => {
     });
     it('writes a reference-generation step with stable reference ids', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore();
+        const source = null;
         const image = createArchiveImage({
             id: 'generated-2',
             references: ['data:image/png;base64,aaa', 'data:image/png;base64,bbb'],
         });
 
-        await saveGeneratedImage(image, {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
+        await saveArchiveImage({ kind: 'generation', image: image, source: source, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
 
         await expect(lineage.getByArchiveImageId('generated-2')).resolves.toEqual([
             expect.objectContaining({
@@ -104,7 +95,7 @@ describe('saveGeneratedImage', () => {
 
     it('writes actual parameters into generation lineage metadata', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore();
+        const source = null;
         const actualParameters = {
             revisedPrompt: 'refined prompt',
             size: '1536x1024',
@@ -116,11 +107,7 @@ describe('saveGeneratedImage', () => {
             actualParameters,
         });
 
-        await saveGeneratedImage(image, {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
+        await saveArchiveImage({ kind: 'generation', image: image, source: source, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
 
         await expect(lineage.getByArchiveImageId('generated-with-actuals')).resolves.toEqual([
             expect.objectContaining({
@@ -134,7 +121,7 @@ describe('saveGeneratedImage', () => {
 
     it('records nano-banana-pro archive metadata dimensions through shared Image model controls', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore();
+        const source = null;
         const image = createArchiveImage({
             id: 'generated-nano',
             model: NANO_BANANA_PRO_IMAGE_MODEL,
@@ -145,11 +132,7 @@ describe('saveGeneratedImage', () => {
             height: 1152,
         });
 
-        await saveGeneratedImage(image, {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
+        await saveArchiveImage({ kind: 'generation', image: image, source: source, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
 
         await expect(lineage.getByArchiveImageId('generated-nano')).resolves.toEqual([
             expect.objectContaining({
@@ -181,7 +164,7 @@ describe('saveGeneratedImage', () => {
 
     it('links create-similar saves to the source image latest lineage step', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore({ archiveImageId: 'source-image' });
+        const source = { archiveImageId: 'source-image' };
         await lineage.save({
             archiveImageId: 'source-image',
             parentStepId: null,
@@ -197,11 +180,7 @@ describe('saveGeneratedImage', () => {
             metadata: { prompt: 'refined prompt' },
         });
 
-        await saveGeneratedImage(createArchiveImage({ id: 'branch-image' }), {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
+        await saveArchiveImage({ kind: 'generation', image: createArchiveImage({ id: 'branch-image' }), source: source, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
 
         await expect(lineage.getByArchiveImageId('branch-image')).resolves.toEqual([
             expect.objectContaining({
@@ -215,7 +194,7 @@ describe('saveGeneratedImage', () => {
 
     it('uses the explicitly selected lineage step id for forked saves', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore({ archiveImageId: 'source-image', stepId: 'step-1' });
+        const source = { archiveImageId: 'source-image', stepId: 'step-1' };
         await lineage.save({
             archiveImageId: 'source-image',
             parentStepId: null,
@@ -231,11 +210,7 @@ describe('saveGeneratedImage', () => {
             metadata: { prompt: 'newest prompt' },
         });
 
-        await saveGeneratedImage(createArchiveImage({ id: 'forked-image' }), {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-        });
+        await saveArchiveImage({ kind: 'generation', image: createArchiveImage({ id: 'forked-image' }), source: source, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
 
         const steps = await lineage.getByArchiveImageId('forked-image');
         expect(steps.at(-1)).toEqual(expect.objectContaining({
@@ -245,7 +220,6 @@ describe('saveGeneratedImage', () => {
 
     it('can reuse a captured lineage source for multiple batch result saves', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore(null);
         await lineage.save({
             archiveImageId: 'source-image',
             parentStepId: null,
@@ -255,18 +229,8 @@ describe('saveGeneratedImage', () => {
         });
         const lineageSource = { archiveImageId: 'source-image' };
 
-        await saveGeneratedImage(createArchiveImage({ id: 'batch-result-1' }), {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-            lineageSource,
-        });
-        await saveGeneratedImage(createArchiveImage({ id: 'batch-result-2' }), {
-            saveImage: vi.fn(async (nextImage) => nextImage),
-            lineageStore: lineage,
-            sessionStore,
-            lineageSource,
-        });
+        await saveArchiveImage({ kind: 'generation', image: createArchiveImage({ id: 'batch-result-1' }), source: lineageSource, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
+        await saveArchiveImage({ kind: 'generation', image: createArchiveImage({ id: 'batch-result-2' }), source: lineageSource, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async (nextImage) => nextImage), remove: vi.fn() }, lineage: lineage });
 
         await expect(lineage.getByArchiveImageId('batch-result-1')).resolves.toEqual([
             expect.objectContaining({ parentStepId: 'step-1' }),
@@ -278,19 +242,14 @@ describe('saveGeneratedImage', () => {
 
     it('does not write provenance when archive save fails', async () => {
         const lineage = createStore();
-        const sessionStore = createSessionStore({ archiveImageId: 'source-image' });
+        const source = { archiveImageId: 'source-image' };
         const error = new Error('disk full');
 
-        await expect(saveGeneratedImage(createArchiveImage(), {
-            saveImage: vi.fn(async () => {
+        await expect(saveArchiveImage({ kind: 'generation', image: createArchiveImage(), source: source, runDraft: null }, { archive: { get: async () => null, save: vi.fn(async () => {
                 throw error;
-            }),
-            lineageStore: lineage,
-            sessionStore,
-        })).rejects.toThrow(error);
+            }), remove: vi.fn() }, lineage: lineage })).rejects.toThrow(error);
 
         await expect(lineage.getByArchiveImageId('generated-1')).resolves.toEqual([]);
-        expect(sessionStore.clearLineageSource).not.toHaveBeenCalled();
     });
 });
 
@@ -304,13 +263,6 @@ function createStore() {
             return `step-${nextId}`;
         },
     });
-}
-
-function createSessionStore(lineageSource: GenerateLineageSource | null = null) {
-    return {
-        loadLineageSource: vi.fn(() => lineageSource),
-        clearLineageSource: vi.fn(),
-    };
 }
 
 function createArchiveImage(overrides: Partial<ArchiveImage> = {}): ArchiveImage {
