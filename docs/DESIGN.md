@@ -17,7 +17,7 @@ The Telepathic Instruments reference uses black, white, one orange accent, and c
 | Mercury | `#c2c2c2` | `--color-mercury` | Subtle background accents, dividers |
 | Powder | `#dddee2` | `--color-powder` | Light background accents, very subtle surface differentiators |
 | Muted Sage | `#d7cdb8` | `--color-muted-sage` | Decorative graphical elements, subtle background textures |
-| Amber Glow | `#ff6c2f` | `--color-amber-glow` | Orange action color for filled buttons, selected navigation states, and focused conversion moments. |
+| Amber Glow | `#ff6c2f` | `--color-amber-glow` | Orange fill for action buttons and selected navigation items. |
 
 ## Tokens — Typography
 
@@ -124,7 +124,7 @@ Transparent background, Steel text (#a3a3a3), and a 'Steel' bottom border. 0px b
 ### Do
 - Prioritize Charcoal (#000000) for primary text and Snow (#ffffff) for backgrounds to maintain a high-contrast base.
 - Use Amber Glow (#ff6c2f) exclusively for primary calls-to-action like 'Join Mailing List' to ensure its impact.
-- Apply Suisse Intl with tight letter-spacing (-0.0300em for 100px text) for headlines to create a sharp, modern feel.
+- Use Suisse Intl for headlines, with -0.0300em letter spacing at 100px.
 - Use Suisse Intl Mono for any technical or data-driven text, like input fields or code, to convey precision.
 - Maintain minimal padding (8px, 12px) and flush card designs (0px border radius, no shadow) to keep surfaces lightweight.
 - Construct button corners with a large radius (24px) for a soft, approachable pill-like shape, or 0px for Ghost Buttons.

@@ -72,7 +72,7 @@ From the stable-diffusion.cpp repository root, adjust the paths and launch the s
   --diffusion-fa --offload-to-cpu -v
 ```
 
-The [Qwen Image 2.1 guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/qwen_image_2.1.md) recommends CFG scale 6, Euler sampling, verbose logging, and CPU offloading; the [server guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/examples/server/README.md) documents flash attention and the default address `http://127.0.0.1:1234`. Enter that address in **Settings → Local Server (stable-diffusion.cpp)**, save it, and use **Test connection**. AURA sends requests directly to its OpenAI-compatible images API without an API key.
+The [Qwen Image 2.1 guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/qwen_image_2.1.md) recommends CFG scale 6, Euler sampling, verbose logging, and CPU offloading; the [server guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/examples/server/README.md) documents flash attention and the default address `http://127.0.0.1:1234`. Enter that address in **Settings → Local server (stable-diffusion.cpp)**, save it, and use **Test connection**. AURA sends requests directly to its OpenAI-compatible images API without an API key.
 
 If `sd-server` runs behind [llama-swap](https://github.com/mostlygeek/llama-swap/blob/main/docs/configuration.md), enter the llama-swap URL instead and name the model `qwen-image-2.1` in its config, or add that exact alias. AURA sends `qwen-image-2.1` as the model ID for every local image request.
 
@@ -142,7 +142,7 @@ The Generate view supports:
 - A batch result grid for multi-image runs with per-slot save, download, use-as-reference, and isolated per-slot failure reporting
 - Save all and Clear results actions for batch runs, with confirmation before discarding unsaved images
 - Use as Reference to feed a generated result back into the reference set while preserving lineage
-- Actual parameter panels that surface provider-reported values and measured elapsed time without inventing unavailable values
+- Actual parameter panels show provider-reported values and measured elapsed time. Unavailable values are omitted.
 - Save-to-archive, download, and clear-result actions
 
 Prompt-only GPT Image 2.5 generations use the OpenAI generations endpoint. GPT Image 2.5 requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts. `Qwen Image 2.1` uses the local server's OpenAI-compatible image generations and edits endpoints. For Transparent background, AURA adds Qwen's RGBA wording to the request prompt while keeping the saved prompt unchanged; PNG results preserve any alpha channel the model returns.
@@ -263,11 +263,6 @@ The app calls provider APIs directly from the browser.
 - Image responses are consumed as base64 payloads and converted into browser-safe data URLs for preview and persistence
 - Actual generation parameters contain only values reported by the provider or measured by AURA; Qwen runs record elapsed time only
 
-Additional implementation details live in:
-
-- `docs/openAI_image_generation.md`
-- `docs/openAI_create_image.md`
-
 ## Privacy and Security
 
 - The project is designed for local use in the browser
@@ -298,32 +293,19 @@ src/
   utils/           Provider model constants, OpenAI helpers, and file conversion helpers
   views/           Generate, Archive, Editor, and Settings views
 docs/
-  agentic-creative-autopilot-prd.md
-  creative-lineage-autopilot-qa-plan.md
-  creative-lineage-graph-prd.md
+  agents/          Agent workflow instructions
+  screens/         App screenshots
   DESIGN.md
-  adr/
-  openAI_create_image.md
-  openAI_image_generation.md
-plans/
-  creative-lineage-and-autopilot.md
-  layered-editor.md
-  localstorage-to-sqlite.md
-  telepathic-instruments-rebrand.md
+  product-polish-validation.md
+  todo.md
 ```
 
 ## Documentation
 
 - `CONTEXT.md` defines the repo's domain vocabulary for image models, providers, lineage, and layered editor concepts
 - `docs/DESIGN.md` defines the Telepathic Instruments-inspired visual design language used by the app
-- `docs/openAI_image_generation.md` describes the current provider integration and request routing
-- `docs/openAI_create_image.md` maps Generate, Editor, and Autopilot flows to the request payloads used by the app
-- `docs/adr/` captures durable architecture decisions for archive assets, Konva canvas rendering, editor history, copy semantics, AI transform targeting, and layered-image adjustments
-- `docs/creative-lineage-graph-prd.md` captures the lineage product requirements
-- `docs/agentic-creative-autopilot-prd.md` captures the Autopilot product requirements
-- `docs/creative-lineage-autopilot-qa-plan.md` outlines QA coverage for lineage and Autopilot flows
-- `plans/creative-lineage-and-autopilot.md` summarizes the implementation plan behind the current lineage and Autopilot architecture
-- `plans/layered-editor.md` summarizes the implementation plan behind the current layered editor architecture
+- `docs/product-polish-validation.md` records the product-polish browser checks and their limits
+- `docs/agents/` contains issue-tracking, triage, and domain-documentation instructions
 
 ## License
 

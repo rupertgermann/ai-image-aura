@@ -423,7 +423,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         onClick={() => { void handleTranslateGoal(); }}
                                         disabled={!goal.trim() || !reasoningApiKey || translatingGoal || loading}
                                     >
-                                        {translatingGoal ? 'Translating...' : 'Translate to Prompt'}
+                                        {translatingGoal ? 'Creating prompt...' : 'Create starting prompt'}
                                     </button>
                                 </div>
                                 <textarea
@@ -434,7 +434,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     className="prompt-input autopilot-goal-input"
                                 />
                                 <p className="field-relationship-note">
-                                    The goal is the target Autopilot evaluates against; the starting prompt above is the first image attempt.
+                                    Autopilot checks each image against your goal. It uses the starting prompt to generate the first image.
                                 </p>
                             </div>
 

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSatisfactionEvaluator, parseEvaluation } from './SatisfactionEvaluator';
 
 describe('SatisfactionEvaluator', () => {
-    it('returns a graceful low score when the response is malformed', async () => {
+    it('returns score 0 and retry feedback for invalid evaluation data', async () => {
         const evaluator = createSatisfactionEvaluator({
             createResponse: vi.fn(async () => ({ outputText: '{"score":"high"}' })),
         });

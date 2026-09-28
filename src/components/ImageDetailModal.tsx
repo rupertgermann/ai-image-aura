@@ -284,13 +284,13 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                                         <button className="btn-ghost lineage-action-btn" type="button" onClick={(event) => {
                                                             event.stopPropagation();
                                                             onReplayGenerate(entry.id);
-                                                        }}>Replay into Generate</button>
+                                                        }}>Load in Generate</button>
                                                     )}
                                                     {isEditorReplayable(entry) && (
                                                         <button className="btn-ghost lineage-action-btn" type="button" onClick={(event) => {
                                                             event.stopPropagation();
                                                             onReplayEditor(entry.id);
-                                                        }}>Replay into Editor</button>
+                                                        }}>Load in Editor</button>
                                                     )}
                                                     <button className="btn-ghost lineage-action-btn" type="button" onClick={(event) => {
                                                         event.stopPropagation();

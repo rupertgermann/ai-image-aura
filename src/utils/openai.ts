@@ -297,7 +297,7 @@ function parseOpenAiImageEventBlock(
             try {
                 onPartialImage({ b64_json: b64Json });
             } catch {
-                // Partial previews are opportunistic; the final generation should still resolve.
+                // Ignore preview callback errors so they do not reject the generation request.
             }
         }
         return null;
