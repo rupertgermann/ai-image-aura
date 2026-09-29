@@ -262,9 +262,9 @@ describe('loadLineageTimeline', () => {
             },
         }));
 
-        expect(timeline.entries.map((entry) => entry.costLedger?.items[0]?.id)).toEqual([
-            'image-generation',
-            'ai-edit',
+        expect(timeline.entries.map((entry) => entry.costLedger)).toEqual([
+            generationCostLedger,
+            editCostLedger,
         ]);
     });
 

@@ -605,8 +605,9 @@ describe('googleImageProvider', () => {
         const requestInit = fetchImpl.mock.calls[0]?.[1] as RequestInit;
         const body = JSON.parse(String(requestInit.body));
         expect(body.contents[0].parts[0]).toEqual({ text: 'a luminous teapot city' });
-        expect(body.contents[0].parts[1].inline_data).toMatchObject({
+        expect(body.contents[0].parts[1].inline_data).toEqual({
             mime_type: 'image/png',
+            data: 'cmVmZXJlbmNl',
         });
         expect(body.generationConfig.imageConfig).toEqual({
             aspectRatio: '16:9',

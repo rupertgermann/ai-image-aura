@@ -2,7 +2,7 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage } from '../db/types';
-import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE, LINEAGE_MANIFEST_VERSION } from './ArchiveTransfer';
+import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE } from './ArchiveTransfer';
 import { createLineageStore, type LineageMetadataPort, type LineageStep, type LineageStore } from '../lineage/LineageStore';
 import { OPENAI_IMAGE_MODEL, OPENAI_RESPONSES_MODEL } from '../utils/openaiModels';
 import type { EditorLineageMetadata, EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
@@ -87,7 +87,7 @@ describe('ArchiveTransfer', () => {
             steps: LineageStep[];
         };
 
-        expect(manifest.version).toBe(LINEAGE_MANIFEST_VERSION);
+        expect(manifest.version).toBe(1);
         expect(manifest.steps).toEqual([
             expect.objectContaining({
                 id: 'typed-generate-step',
@@ -198,6 +198,11 @@ describe('ArchiveTransfer', () => {
     it('round-trips archive images and lineage relationships through ZIP import', async () => {
         const sourceLineage = createStore();
         const sourceImages = [...createImages(), createLayeredImage()];
+        sourceImages[0] = {
+            ...sourceImages[0],
+            url: 'data:image/png;base64,aW1hZ2U=',
+            references: ['data:image/png;base64,cmVmZXJlbmNl'],
+        };
         await seedLineage(sourceLineage);
 
         const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: sourceLineage });
@@ -214,6 +219,8 @@ describe('ArchiveTransfer', () => {
         expect(summary.importedImageIds).toEqual(['image-1', 'image-2', 'image-3', 'layered-image']);
         expect(summary.importedStepIds).toEqual(['step-1', 'step-2', 'step-3', 'step-4']);
         expect(Array.from(archiveStore.images.keys())).toEqual(['image-1', 'image-2', 'image-3', 'layered-image']);
+        expect(archiveStore.images.get('image-1')?.url).toBe('data:image/png;base64,aW1hZ2U=');
+        expect(archiveStore.images.get('image-1')?.references).toEqual(['data:image/png;base64,cmVmZXJlbmNl']);
         expect(archiveStore.images.get('layered-image')?.layerStack?.layers.map((layer) => layer.id)).toEqual(['base', 'upload']);
 
         await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
@@ -361,15 +368,19 @@ describe('ArchiveTransfer', () => {
             ],
         }));
 
+        const importedLineage = createStore();
         const summary = await importArchiveZip(await zip.generateAsync({ type: 'uint8array' }), {
             archiveStore: new InMemoryArchiveStore(),
-            lineageStore: createStore(),
+            lineageStore: importedLineage,
         });
 
         expect(summary.brokenParentReferences).toEqual([
             { stepId: 'step-1', parentStepId: 'missing-parent' },
         ]);
         expect(summary.importedStepIds).toEqual(['step-1']);
+        await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
+            expect.objectContaining({ id: 'step-1', parentStepId: 'missing-parent' }),
+        ]);
     });
 
     it('rejects malformed layer stack entries through the shared manifest parser', async () => {
