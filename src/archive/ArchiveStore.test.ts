@@ -25,6 +25,14 @@ class InMemoryArchiveMetadataPort {
         this.records.set(record.id, record);
     }
 
+    async setFavorite(id: string, favorite: boolean) {
+        const record = this.records.get(id);
+        if (!record) {
+            throw new Error('Archive image no longer exists');
+        }
+        this.records.set(id, { ...record, favorite: favorite ? true : undefined });
+    }
+
     async remove(id: string) {
         this.records.delete(id);
     }

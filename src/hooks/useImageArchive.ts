@@ -58,12 +58,13 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
         ]));
     }, []);
 
-    const addImage = async (image: ArchiveImage): Promise<ArchiveImage> => {
+    const setFavorite = async (id: string, favorite: boolean): Promise<void> => {
         try {
             setError(null);
-            const savedImage = await store.save(image);
-            publishSavedImage(savedImage);
-            return savedImage;
+            await store.setFavorite(id, favorite);
+            setImages((current) => current.map((image) => image.id === id
+                ? { ...image, favorite: favorite ? true : undefined }
+                : image));
         } catch (err) {
             const nextError = err instanceof Error ? err : new Error('Failed to save image');
             setError(nextError);
@@ -89,5 +90,5 @@ export function useImageArchive(options: UseImageArchiveOptions = {}) {
         loadImages();
     }, [loadImages]);
 
-    return { images, loading, error, addImage, publishSavedImage, deleteImage, refresh: loadImages };
+    return { images, loading, error, setFavorite, publishSavedImage, deleteImage, refresh: loadImages };
 }
