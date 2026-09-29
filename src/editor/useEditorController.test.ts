@@ -16,7 +16,10 @@ const adjustments: EditorAdjustments = {
 
 describe('Editor controller AI transform flow', () => {
     it('runs an end-to-end selected-layer transform and builds save-after-transform provenance', async () => {
-        const draft = createDraft(createLayerStack(), ['layer-1']);
+        const draft = {
+            ...createDraft(createLayerStack(), ['layer-1']),
+            references: ['data:image/png;base64,reference'],
+        };
         const costLedger = createCostLedger('ai-edit', 0.04866);
         const referenceImages = [
             new File(['reference'], 'reference.png', { type: 'image/png' }),
@@ -56,7 +59,7 @@ describe('Editor controller AI transform flow', () => {
             maskImage,
             quality: 'medium',
         }));
-        expect(result.draft.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
+        expect(result.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
             ['base', true],
             ['layer-1', false],
             ['ai-layer', true],
@@ -65,10 +68,7 @@ describe('Editor controller AI transform flow', () => {
 
         const context = buildEditorSaveContext({
             isCopy: false,
-            references: ['data:image/png;base64,reference'],
-            adjustments,
-            draft: result.draft,
-            aiTransformProvenance: result.provenance,
+            draft: result,
         });
 
         expect(context).toEqual(expect.objectContaining({
@@ -98,15 +98,12 @@ describe('Editor controller AI transform flow', () => {
     it('drops stale save provenance after undoing the AI result layer', async () => {
         const draft = createDraft(createLayerStack(), ['layer-1']);
         const result = await runTransform(draft);
-        const history = pushHistory({ past: [], present: draft, future: [] }, result.draft);
+        const history = pushHistory({ past: [], present: draft, future: [] }, result);
         const undone = undoHistory(history);
 
         const context = buildEditorSaveContext({
             isCopy: false,
-            references: [],
-            adjustments,
             draft: undone.present,
-            aiTransformProvenance: result.provenance,
         });
 
         expect(context.aiEditPrompt).toBeUndefined();
@@ -119,15 +116,12 @@ describe('Editor controller AI transform flow', () => {
     it('restores save provenance after redoing the AI result layer', async () => {
         const draft = createDraft(createLayerStack(), ['layer-1']);
         const result = await runTransform(draft);
-        const history = pushHistory({ past: [], present: draft, future: [] }, result.draft);
+        const history = pushHistory({ past: [], present: draft, future: [] }, result);
         const redone = redoHistory(undoHistory(history));
 
         const context = buildEditorSaveContext({
             isCopy: false,
-            references: [],
-            adjustments,
             draft: redone.present,
-            aiTransformProvenance: result.provenance,
         });
 
         expect(context).toEqual(expect.objectContaining({
@@ -143,18 +137,15 @@ describe('Editor controller AI transform flow', () => {
 
     it('uses the present editor draft for layered save metadata after manual layer changes', async () => {
         const result = await runTransform(createDraft(createLayerStack(), ['layer-1']));
-        const renamedLayerStack = updateLayer(result.draft.layerStack, 'ai-layer', { name: 'Retouched jacket' });
+        const renamedLayerStack = updateLayer(result.layerStack, 'ai-layer', { name: 'Retouched jacket' });
         const changedDraft = {
-            ...result.draft,
+            ...result,
             layerStack: renamedLayerStack,
         };
 
         const context = buildEditorSaveContext({
             isCopy: true,
-            references: [],
-            adjustments,
             draft: changedDraft,
-            aiTransformProvenance: result.provenance,
         });
 
         expect(context.aiResultLayerName).toBe('Retouched jacket');

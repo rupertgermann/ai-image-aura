@@ -30,7 +30,7 @@ describe('Editor AI transforms', () => {
         const input = await renderAiTransformEditInput({ draft, adjustments, referenceImages: [], render });
         expect(render.mock.calls[0]?.[2]).toEqual(bounds);
         const result = applyAiTransformResultToDraft(draft, input.targetPlan, 'data:image/png;base64,result', () => 'ai-result');
-        expect(result.draft.layerStack.layers.find((layer) => layer.id === 'ai-result')).toMatchObject({ ...bounds, rotation: 0 });
+        expect(result.layerStack.layers.find((layer) => layer.id === 'ai-result')).toMatchObject({ ...bounds, rotation: 0 });
     });
 
     it('places a whole-composition result at the canvas bounds when a rotated layer crosses its edge', async () => {
@@ -39,7 +39,7 @@ describe('Editor AI transforms', () => {
         const draft = createDraft(layerStack, ['base']);
         const input = await renderAiTransformEditInput({ draft, adjustments, referenceImages: [], render: createRecordingRenderer() });
         const result = applyAiTransformResultToDraft(draft, input.targetPlan, 'data:image/png;base64,result', () => 'ai-result');
-        expect(result.draft.layerStack.layers.at(-1)).toMatchObject({ x: 0, y: 0, width: 1000, height: 800, rotation: 0 });
+        expect(result.layerStack.layers.at(-1)).toMatchObject({ x: 0, y: 0, width: 1000, height: 800, rotation: 0 });
     });
 
     it('warns for the Qwen references that will be omitted from a selected-layer edit', () => {
@@ -119,16 +119,16 @@ describe('Editor AI transforms', () => {
             () => 'ai-layer',
         );
 
-        expect(input.draft.layerStack.layers.find((layer) => layer.id === 'ai-layer')?.name).toBe('AI result');
-        expect(input.draft.selectedLayerIds).toEqual(['ai-layer']);
-        expect(input.draft.primarySelectedLayerId).toBe('ai-layer');
-        expect(input.draft.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
+        expect(input.layerStack.layers.find((layer) => layer.id === 'ai-layer')?.name).toBe('AI result');
+        expect(input.selectedLayerIds).toEqual(['ai-layer']);
+        expect(input.primarySelectedLayerId).toBe('ai-layer');
+        expect(input.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
             ['base', true],
             ['layer-1', false],
             ['layer-2', false],
             ['ai-layer', true],
         ]);
-        expect(input.draft.layerStack.layers.at(-1)).toEqual(expect.objectContaining({
+        expect(input.layerStack.layers.at(-1)).toEqual(expect.objectContaining({
             id: 'ai-layer',
             x: 100,
             y: 120,
@@ -155,19 +155,19 @@ describe('Editor AI transforms', () => {
             'data:image/png;base64,ai',
             () => 'whole-ai-layer',
         );
-        const history = pushHistory({ past: [], present: beforeDraft, future: [] }, after.draft);
+        const history = pushHistory({ past: [], present: beforeDraft, future: [] }, after);
         const undone = undoHistory(history);
         const redone = redoHistory(undone);
 
-        expect(after.draft.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
+        expect(after.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([
             ['base', true],
             ['layer-1', false],
             ['layer-2', false],
             ['whole-ai-layer', true],
         ]);
-        expect(after.draft.selectedLayerIds).toEqual(['whole-ai-layer']);
+        expect(after.selectedLayerIds).toEqual(['whole-ai-layer']);
         expect(undone.present).toEqual(beforeDraft);
-        expect(redone.present).toEqual(after.draft);
+        expect(redone.present).toEqual(after);
     });
 
 

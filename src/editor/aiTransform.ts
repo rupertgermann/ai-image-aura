@@ -7,7 +7,7 @@ import {
     insertAiResultLayer,
     planAiTransformTarget,
     type AiTransformTargetPlan,
-    type AiTransformTargetMetadata,
+    type AiTransformSaveProvenance,
     type EditorAdjustments,
     type EditorDraft,
     type LayerBounds,
@@ -32,20 +32,6 @@ export interface RenderedAiTransformEditInput {
     sourceImage: Blob;
     compositionContextImage: File | null;
     referenceImages: File[];
-}
-
-export interface AppliedAiTransformResult {
-    draft: EditorDraft;
-    provenance: AiTransformSaveProvenance | null;
-}
-
-export interface AiTransformSaveProvenance extends AiTransformTargetMetadata {
-    aiEditPrompt: string;
-    aiEditModel: ImageModelSlug;
-    aiResultLayerId: string;
-    aiResultLayerName: string | null;
-    costLedger?: ApiCostLedger;
-    transformMask?: EditorLineageTransformMaskAsset | null;
 }
 
 export interface AiTransformProvenanceInput {
@@ -92,19 +78,17 @@ export function applyAiTransformResultToDraft(
     resultUrl: string,
     makeId: () => string,
     provenanceInput?: AiTransformProvenanceInput,
-): AppliedAiTransformResult {
+): EditorDraft {
     const result = insertAiResultLayer(draft.layerStack, targetPlan.targetLayerIds, resultUrl, makeId, targetPlan.targetBounds);
     const resultLayer = result.layerStack.layers.find((layer) => layer.id === result.layerId);
     const resultLayerName = resultLayer?.name ?? null;
 
     return {
-        draft: {
-            ...draft,
-            layerStack: result.layerStack,
-            selectedLayerIds: [result.layerId],
-            primarySelectedLayerId: result.layerId,
-        },
-        provenance: provenanceInput
+        ...draft,
+        layerStack: result.layerStack,
+        selectedLayerIds: [result.layerId],
+        primarySelectedLayerId: result.layerId,
+        aiTransformProvenance: provenanceInput
             ? {
                 aiEditPrompt: provenanceInput.prompt,
                 aiEditModel: provenanceInput.model,
@@ -116,15 +100,15 @@ export function applyAiTransformResultToDraft(
                 aiResultLayerId: result.layerId,
                 aiResultLayerName: resultLayerName,
             }
-            : null,
+            : undefined,
     };
 }
 
 export function getAiTransformSaveProvenance(
-    draft: EditorDraft | null,
-    provenance: AiTransformSaveProvenance | null,
+    draft: EditorDraft,
 ): AiTransformSaveProvenance | null {
-    if (!draft || !provenance) {
+    const provenance = draft.aiTransformProvenance;
+    if (!provenance) {
         return null;
     }
 
