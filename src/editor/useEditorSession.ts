@@ -100,10 +100,6 @@ export function useEditorSession(image: ArchiveImage | null) {
         });
     };
 
-    const serializeReferences = () => {
-        return Promise.resolve(draft?.references ?? []);
-    };
-
     const addLayerFiles = useCallback(async (files: File[]) => {
         if (!draft || files.length === 0) {
             return;
@@ -318,7 +314,6 @@ export function useEditorSession(image: ArchiveImage | null) {
         isDirty,
         revertDraft,
         resetAdjustments,
-        serializeReferences,
     };
 }
 
