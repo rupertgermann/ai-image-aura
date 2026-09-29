@@ -249,8 +249,9 @@ async function autopilot(browser, kind) {
   } finally { releaseImage(); await context.close(); }
 }
 
-async function reasoningSelection(browser, model) {
-  const { page, context, images, errors } = await createScenario(browser, model, 1);
+async function reasoningSelection(browser, model, editedField = null) {
+  const name = editedField === 'goal' ? `${model}-edited-goal` : model;
+  const { page, context, images, errors } = await createScenario(browser, name, 1);
   const google = model === 'gemini-2.5-flash';
   const endpoint = google
     ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
@@ -284,8 +285,9 @@ async function reasoningSelection(browser, model) {
     await page.getByLabel('Goal', { exact: true }).fill('A paper crane in warm light');
     await page.getByRole('button', { name: 'Create starting prompt', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('#generation-prompt').value === 'A paper crane in warm light');
-    const startingPrompt = google ? 'A user-edited paper crane prompt' : 'A paper crane in warm light';
-    if (google) await page.getByLabel('Starting prompt', { exact: true }).fill(startingPrompt);
+    const startingPrompt = editedField === 'prompt' ? 'A user-edited paper crane prompt' : 'A paper crane in warm light';
+    if (editedField === 'prompt') await page.getByLabel('Starting prompt', { exact: true }).fill(startingPrompt);
+    if (editedField === 'goal') await page.getByLabel('Goal', { exact: true }).fill('A paper crane in cool light');
     await page.getByLabel('Max iterations').fill('2');
     await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
@@ -296,9 +298,9 @@ async function reasoningSelection(browser, model) {
     assert(imageRequests[1].includes('A paper crane in stronger warm light'), 'Next image uses the selected reasoning model refinement');
     await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
     await waitForSaved(page, 1);
-    const state = await capture(page, `reasoning-${model}`, { reasoningModel: model, operations });
+    const state = await capture(page, `reasoning-${name}`, { reasoningModel: model, operations });
     const reasoningCosts = state.images[0].costLedger.items.filter(item => item.kind === 'reasoning');
-    assert.deepEqual(reasoningCosts.map(item => item.operation), google ? operations.slice(1) : operations,
+    assert.deepEqual(reasoningCosts.map(item => item.operation), editedField ? operations.slice(1) : operations,
       'Translation cost follows the existing goal-and-prompt association');
     assert(reasoningCosts.every(item => item.provider === (google ? 'google' : 'openai') && item.model === model));
     assert.equal(state.images[0].model, 'qwen-image-2.1', 'Image model remains independent');
@@ -310,10 +312,10 @@ async function reasoningSelection(browser, model) {
     }, state.batch.lineageSource.stepId);
     assert.deepEqual(iterations.map(step => step.metadata.reasoningModel.slug), [model, model]);
     assert.equal(state.steps[0].parentStepId, iterations[1].id);
-    await fs.writeFile(path.join(output, `reasoning-${model}-iterations.json`), JSON.stringify(iterations, null, 2));
+    await fs.writeFile(path.join(output, `reasoning-${name}-iterations.json`), JSON.stringify(iterations, null, 2));
     assert.deepEqual(errors, []);
   } catch (error) {
-    await capture(page, `reasoning-${model}-failure`);
+    await capture(page, `reasoning-${name}-failure`);
     throw error;
   } finally { await context.close(); }
 }
@@ -421,7 +423,8 @@ async function imageModelControls(browser, autopilotMode) {
     await autopilot(browser, 'serialization-failure');
     await autopilot(browser, 'persistence-failure');
     await reasoningSelection(browser, 'gpt-6-sol');
-    await reasoningSelection(browser, 'gemini-2.5-flash');
+    await reasoningSelection(browser, 'gemini-2.5-flash', 'prompt');
+    await reasoningSelection(browser, 'gpt-6-sol', 'goal');
     await imageModelControls(browser, false);
     await imageModelControls(browser, true);
     await fs.writeFile(path.join(output, 'summary.json'), JSON.stringify(results, null, 2));

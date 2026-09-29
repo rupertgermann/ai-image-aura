@@ -1,7 +1,7 @@
 import type { GenerationSaveRequest } from '../archive/saveArchiveImage';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
-import type { ApiCostLedger, ArchiveImage } from '../db/types';
+import type { ArchiveImage } from '../db/types';
 import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
 import { addGeneratedResultAsReferenceFromAction, useGenerateController, type GenerateResultSlot } from '../generate-session/useGenerateController';
 import { getImageFilesFromClipboard } from '../references/clipboard';
@@ -16,7 +16,7 @@ import {
     buildActualParameterDetails,
     getRequestedGenerateParameters,
 } from '../generate-session/actualParameters';
-import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS, translateAutopilotGoal } from '../autopilot/AutopilotSession';
+import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
 import type { CompletionNotificationPort } from '../app/CompletionNotificationPort';
 import {
     buildImageModelGenerateReferenceRunPlan,
@@ -124,12 +124,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const [viewingReferenceIndex, setViewingReferenceIndex] = useState<number | null>(null);
     const [showCostDisclosure, setShowCostDisclosure] = useState(false);
     const [autopilotNotice, setAutopilotNotice] = useState<string | null>(null);
-    const [translatingGoal, setTranslatingGoal] = useState(false);
-    const [goalTranslationCostContext, setGoalTranslationCostContext] = useState<{
-        goal: string;
-        prompt: string;
-        ledger: ApiCostLedger;
-    } | null>(null);
     const { prompt, model, style, lighting, palette, isSaved } = draft;
     const activeModel = resolveImageModelConfig(model);
     const imageCredential = getProviderCredential(activeModel.provider);
@@ -153,6 +147,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         saving,
         error,
         autopilot,
+        translatingGoal,
+        translateGoal,
         updateDraft,
         generate,
         runAutopilot,
@@ -228,36 +224,20 @@ const GenerateView: React.FC<GenerateViewProps> = ({
             return;
         }
 
-        setTranslatingGoal(true);
         setAutopilotNotice(null);
         try {
-            const translation = await translateAutopilotGoal({ goal, reasoningModel, getProviderCredential });
-            updateDraft({ prompt: translation.prompt, isSaved: false });
-            setGoalTranslationCostContext(translation.costLedger ? {
-                goal,
-                prompt: translation.prompt,
-                ledger: translation.costLedger,
-            } : null);
+            await translateGoal(goal);
         } catch (translationError) {
-            setGoalTranslationCostContext(null);
             setAutopilotNotice(translationError instanceof Error ? translationError.message : 'Failed to translate goal');
-        } finally {
-            setTranslatingGoal(false);
         }
     };
 
     const handleRunAutopilot = async () => {
         setAutopilotNotice(null);
-        const initialCostLedger = goalTranslationCostContext
-            && goalTranslationCostContext.goal === goal
-            && goalTranslationCostContext.prompt === draft.prompt
-            ? goalTranslationCostContext.ledger
-            : undefined;
         const result = await runAutopilot({
             goal,
             maxIterations,
             satisfactionThreshold,
-            initialCostLedger,
         });
 
         if (!result) {
