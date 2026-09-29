@@ -231,14 +231,15 @@ function parseAdjustments(value: unknown): ArchiveLayerStack['adjustments'] {
     if (!isRecord(value)) throw new Error('Invalid composition adjustments');
     const values = [value.brightness, value.contrast, value.saturation];
     if (!values.every((entry) => typeof entry === 'number' && Number.isFinite(entry) && entry >= 0 && entry <= 200)
-        || !['none', 'grayscale(100%)', 'sepia(100%)', 'blur(5px)'].includes(String(value.filter))) {
+        || typeof value.filter !== 'string'
+        || !['none', 'grayscale(100%)', 'sepia(100%)', 'blur(5px)'].includes(value.filter)) {
         throw new Error('Invalid composition adjustments');
     }
     return {
         brightness: value.brightness as number,
         contrast: value.contrast as number,
         saturation: value.saturation as number,
-        filter: value.filter as string,
+        filter: value.filter,
     };
 }
 

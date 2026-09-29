@@ -27,7 +27,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
         expect(lineage.steps.get('stored-step')?.metadata).toEqual(step.metadata);
     });
 
-    it('recreates archive and lineage metadata from manifests when image blobs still exist', async () => {
+    it.each(['none', 'grayscale(100%)', 'sepia(100%)', 'blur(5px)', undefined, null])('recovers composition filter %s with archive and lineage metadata', async (filter) => {
         const metadata = new InMemoryMetadata();
         const blobs = new InMemoryBlobs([
             ['img_image-1', 'data:image/png;base64,image'],
@@ -37,6 +37,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
         const generateMetadata = createTypedGenerateMetadata();
         const editorMetadata = createTypedEditorMetadata();
         const autopilotMetadata = createTypedAutopilotMetadata();
+        const adjustments = filter == null ? filter : { brightness: 120, contrast: 90, saturation: 150, filter };
         const actualParameters = {
             revisedPrompt: 'refined prompt',
             size: '1536x1024',
@@ -64,6 +65,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
                     imageFileName: 'aura-image-1.png',
                     references: [{ fileName: 'aura-image-1-reference-0.png' }],
                     layerStack: {
+                        adjustments,
                         canvasWidth: 1536,
                         canvasHeight: 1024,
                         layers: [
@@ -154,6 +156,7 @@ describe('recoverArchiveMetadataFromManifests', () => {
             model: 'gpt-image-2',
             actualParameters,
             layerStack: expect.objectContaining({
+                adjustments: adjustments ?? undefined,
                 layers: [
                     expect.objectContaining({ id: 'base', assetUrl: '' }),
                     expect.objectContaining({ id: 'upload', assetUrl: '' }),
@@ -175,6 +178,34 @@ describe('recoverArchiveMetadataFromManifests', () => {
             stepType: 'autopilot-iteration',
             metadata: autopilotMetadata,
         }));
+    });
+
+    it('rejects a non-string composition filter before recovering any metadata', async () => {
+        const metadata = new InMemoryMetadata();
+        const lineage = new InMemoryLineage();
+        const image = {
+            id: 'image-1', prompt: 'saved', quality: 'high', aspectRatio: '1024x1024',
+            background: 'auto', timestamp: '2026-09-29', references: [],
+        };
+        await expect(recoverArchiveMetadataFromManifests({
+            version: 1,
+            images: [image, {
+                ...image, id: 'malformed',
+                layerStack: {
+                    canvasWidth: 1024, canvasHeight: 1024, layers: [],
+                    adjustments: { brightness: 100, contrast: 100, saturation: 100, filter: ['none'] },
+                },
+            }],
+        }, {
+            version: 1,
+            steps: [{ id: 'step-1', archiveImageId: 'image-1', parentStepId: null,
+                stepType: 'generation', timestamp: image.timestamp, metadata: {} }],
+        }, {
+            metadata, lineage,
+            blobs: new InMemoryBlobs([['img_image-1', 'data:image/png;base64,image']]),
+        })).rejects.toThrow('Invalid composition adjustments');
+        expect(metadata.records.size).toBe(0);
+        expect(lineage.steps.size).toBe(0);
     });
 
     it('rejects malformed layer stack entries through the shared manifest parser', async () => {
