@@ -603,12 +603,7 @@ textarea.aura-input {
     gap: var(--spacing-16);
 }
 
-.image-model-options-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--spacing-16);
-}
-
+.image-model-options-grid,
 .autopilot-settings-grid,
 .filter-grid,
 .sidebar-grid {
@@ -1374,12 +1369,6 @@ textarea.aura-input {
     min-height: 360px;
     position: relative;
     background: var(--color-ash);
-}
-
-#editor-canvas {
-    max-width: 100%;
-    max-height: 100%;
-    border-radius: 0;
 }
 
 .editor-stage {

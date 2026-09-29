@@ -1,6 +1,6 @@
 import type { ArchiveImage } from '../db/types';
 import { DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateDraft, type GenerateLineageSource } from '../generate-session/GenerateSession';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, isStoredImageModelSlug, type StoredImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, isStoredImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
 import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 import { readLineageImageModel } from './generateLineageMetadata';
@@ -21,18 +21,7 @@ export interface EditorReplay {
     maskImage?: File;
 }
 
-interface GenerateReplayMetadata {
-    imageModel: GenerateReplayImageModel | null;
-    model: StoredImageModelSlug | null;
-    prompt: string | null;
-    style: string | null;
-    lighting: string | null;
-    palette: string | null;
-    quality: unknown;
-    aspectRatio: string | null;
-    imageSize: unknown;
-    background: unknown;
-}
+type GenerateReplayMetadata = ReturnType<typeof readAutopilotGenerateReplayMetadata>;
 
 export function isGenerateReplayable(step: ReplayableStep) {
     return step.stepType === 'generation' || step.stepType === 'reference-generation' || step.stepType === 'autopilot-iteration';

@@ -2,12 +2,10 @@ import { lineageMetadataPort } from '../db/AuraPersistence';
 import type { LineageStep, SaveLineageStepInput } from './types';
 
 interface LineageMetadataPort {
-    init(): Promise<void>;
     save(step: LineageStep): Promise<void>;
     getById(id: string): Promise<LineageStep | null>;
     getByArchiveImageId(archiveImageId: string): Promise<LineageStep[]>;
     getChildren(parentStepId: string): Promise<LineageStep[]>;
-    remove(id: string): Promise<void>;
 }
 
 interface CreateLineageStoreDeps {
@@ -17,12 +15,10 @@ interface CreateLineageStoreDeps {
 }
 
 export interface LineageStore {
-    init(): Promise<void>;
     save(input: SaveLineageStepInput): Promise<LineageStep>;
     getById(id: string): Promise<LineageStep | null>;
     getByArchiveImageId(archiveImageId: string): Promise<LineageStep[]>;
     getChildren(parentStepId: string): Promise<LineageStep[]>;
-    remove(id: string): Promise<void>;
 }
 
 class LocalLineageStore implements LineageStore {
@@ -34,10 +30,6 @@ class LocalLineageStore implements LineageStore {
         this.metadata = metadata;
         this.clock = clock;
         this.makeId = makeId;
-    }
-
-    init(): Promise<void> {
-        return this.metadata.init();
     }
 
     async save(input: SaveLineageStepInput): Promise<LineageStep> {
@@ -65,10 +57,6 @@ class LocalLineageStore implements LineageStore {
 
     getChildren(parentStepId: string): Promise<LineageStep[]> {
         return this.metadata.getChildren(parentStepId);
-    }
-
-    remove(id: string): Promise<void> {
-        return this.metadata.remove(id);
     }
 }
 

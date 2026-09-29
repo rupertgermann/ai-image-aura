@@ -95,7 +95,7 @@ describe('Editor AI transforms', () => {
             () => 'ai-layer',
         );
 
-        expect(input.resultLayerName).toBe('AI result');
+        expect(input.draft.layerStack.layers.find((layer) => layer.id === 'ai-layer')?.name).toBe('AI result');
         expect(input.draft.selectedLayerIds).toEqual(['ai-layer']);
         expect(input.draft.primarySelectedLayerId).toBe('ai-layer');
         expect(input.draft.layerStack.layers.map((layer) => [layer.id, layer.visible])).toEqual([

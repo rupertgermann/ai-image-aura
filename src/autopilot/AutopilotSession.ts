@@ -67,7 +67,7 @@ interface CreateAutopilotSessionInput extends AutopilotReasoningInput {
     initialCostLedger?: ApiCostLedger;
     maxIterations?: number;
     satisfactionThreshold?: number;
-    generate?: (input: GenerateImageInput) => Promise<string | AutopilotGeneratedImage>;
+    generate?: (input: GenerateImageInput) => Promise<AutopilotGeneratedImage>;
     lineageStore: Pick<LineageStore, 'save'>;
     callbacks?: ProgressCallbacks;
     makeRunId?: () => string;
@@ -105,11 +105,11 @@ class DefaultAutopilotSession implements AutopilotSession {
         for (let iterationNumber = 1; iterationNumber <= maxIterations; iterationNumber += 1) {
             try {
                 const iterationSettings = snapshotAutopilotSettings(runSettings);
-                const generatedImage = normalizeAutopilotGeneratedImage(await generate({
+                const generatedImage = await generate({
                     ...iterationSettings,
                     credential: this.input.imageCredential,
                     prompt: currentPrompt,
-                }));
+                });
                 const imageDataUrl = generatedImage.imageDataUrl;
 
                 const evaluation = await evaluate({
@@ -272,12 +272,6 @@ async function generateSingleImage(input: GenerateImageInput): Promise<Autopilot
         actualParameters: result.actualParameters,
         costLedger: result.costLedger,
     };
-}
-
-function normalizeAutopilotGeneratedImage(result: string | AutopilotGeneratedImage): AutopilotGeneratedImage {
-    return typeof result === 'string'
-        ? { imageDataUrl: result }
-        : result;
 }
 
 function snapshotAutopilotSettings(

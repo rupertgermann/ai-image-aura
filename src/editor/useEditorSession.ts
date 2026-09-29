@@ -6,7 +6,6 @@ import { fileToDataURL } from '../utils/file';
 import {
     addUploadedLayer,
     createEditorDraft,
-    addDraftReferences,
     deleteLayers,
     duplicateLayers,
     getEditableLayerIds,
@@ -16,7 +15,6 @@ import {
     reorderLayer,
     repairEditorDraftForImage,
     redoHistory,
-    removeDraftReferenceAt,
     undoHistory,
     updateLayer,
     type EditorDraft,
@@ -213,7 +211,7 @@ export function useEditorSession(image: ArchiveImage | null) {
         }
 
         const dataUrls = await Promise.all(files.map((file) => fileToDataURL(file)));
-        commitDraft(addDraftReferences(draft, dataUrls));
+        commitDraft({ ...draft, references: [...draft.references, ...dataUrls] });
     }, [commitDraft, draft]);
 
     const removeReferenceAt = useCallback((index: number) => {
@@ -221,7 +219,7 @@ export function useEditorSession(image: ArchiveImage | null) {
             return;
         }
 
-        commitDraft(removeDraftReferenceAt(draft, index));
+        commitDraft({ ...draft, references: draft.references.filter((_, currentIndex) => currentIndex !== index) });
     }, [commitDraft, draft]);
 
     const clearSelection = useCallback(() => {

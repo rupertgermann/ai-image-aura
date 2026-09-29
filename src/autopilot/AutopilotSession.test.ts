@@ -10,10 +10,6 @@ import type { ApiCostLedger, ApiCostLineItem } from '../db/types';
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
 
-    async init(): Promise<void> {
-        return undefined;
-    }
-
     async save(step: LineageStep): Promise<void> {
         this.steps.set(step.id, step);
     }
@@ -29,10 +25,6 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
     async getChildren(parentStepId: string): Promise<LineageStep[]> {
         return Array.from(this.steps.values()).filter((step) => step.parentStepId === parentStepId);
     }
-
-    async remove(id: string): Promise<void> {
-        this.steps.delete(id);
-    }
 }
 
 describe('AutopilotSession', () => {
@@ -41,9 +33,9 @@ describe('AutopilotSession', () => {
         const callbacks = { onIterationComplete: vi.fn(), onError: vi.fn() };
         const getProviderCredential = vi.fn(() => 'reasoning-key');
         const generate = vi.fn()
-            .mockResolvedValueOnce('data:image/png;base64,one')
-            .mockResolvedValueOnce('data:image/png;base64,two')
-            .mockResolvedValueOnce('data:image/png;base64,three');
+            .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,one' })
+            .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,two' })
+            .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,three' });
         const createResponse = vi.fn()
             .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 40, feedback: ['Needs stronger lighting.'] }) })
             .mockResolvedValueOnce({ outputText: 'prompt 2' })
@@ -123,8 +115,8 @@ describe('AutopilotSession', () => {
             maxIterations: 2,
             satisfactionThreshold: 90,
             generate: vi.fn()
-                .mockResolvedValueOnce('data:image/png;base64,one')
-                .mockResolvedValueOnce('data:image/png;base64,two'),
+                .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,one' })
+                .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,two' }),
             lineageStore: lineage,
             callbacks,
         }, { reasoningClient: { createResponse: vi.fn()
@@ -191,7 +183,7 @@ describe('AutopilotSession', () => {
             settings.controls.batchSize = 3;
             settings.referenceImages.push(new File(['external-mutation'], `external-${seenReferenceNames.length}.png`, { type: 'image/png' }));
 
-            return `data:image/png;base64,iteration-${seenReferenceNames.length}`;
+            return { imageDataUrl: `data:image/png;base64,iteration-${seenReferenceNames.length}` };
         });
 
         const result = await createAutopilotSession({
@@ -226,7 +218,7 @@ describe('AutopilotSession', () => {
 
     it('stops early when the satisfaction threshold is met', async () => {
         const lineage = createStore();
-        const generate = vi.fn().mockResolvedValueOnce('data:image/png;base64,one');
+        const generate = vi.fn().mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,one' });
         const createResponse = vi.fn().mockResolvedValueOnce({ outputText: JSON.stringify({ score: 95, feedback: ['Strong match.'] }) });
 
         const result = await createAutopilotSession({
@@ -257,7 +249,7 @@ describe('AutopilotSession', () => {
             getProviderCredential: () => 'reasoning-key',
             maxIterations: 4,
             satisfactionThreshold: 90,
-            generate: vi.fn().mockResolvedValueOnce('data:image/png;base64,one'),
+            generate: vi.fn().mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,one' }),
             lineageStore: lineage,
         }, { reasoningClient: { createResponse: vi.fn().mockImplementationOnce(async () => {
             sessionRef?.cancel();
@@ -286,7 +278,7 @@ describe('AutopilotSession', () => {
             maxIterations: 3,
             satisfactionThreshold: 90,
             generate: vi.fn()
-                .mockResolvedValueOnce('data:image/png;base64,one')
+                .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,one' })
                 .mockRejectedValueOnce(error),
             lineageStore: lineage,
             callbacks,

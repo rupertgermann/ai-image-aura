@@ -53,18 +53,12 @@ export interface GenerateDraft {
     style: string;
     lighting: string;
     palette: string;
-    gptImage: GptImageDraftControls;
-    nanoBananaPro: NanoBananaProDraftControls;
-    qwenImage2_1: QwenImage2_1DraftControls;
-    flux2Klein4b: Flux2Klein4bDraftControls;
+    gptImage: GptImageControls;
+    nanoBananaPro: NanoBananaProControls;
+    qwenImage2_1: QwenImage2_1Controls;
+    flux2Klein4b: Flux2Klein4bControls;
     isSaved: boolean;
 }
-
-export type GptImageDraftControls = GptImageControls;
-
-export type NanoBananaProDraftControls = NanoBananaProControls;
-export type QwenImage2_1DraftControls = QwenImage2_1Controls;
-export type Flux2Klein4bDraftControls = Flux2Klein4bControls;
 
 export interface GenerateLineageSource {
     archiveImageId: string;

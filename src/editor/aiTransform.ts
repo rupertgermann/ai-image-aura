@@ -36,8 +36,6 @@ export interface RenderedAiTransformEditInput {
 
 export interface AppliedAiTransformResult {
     draft: EditorDraft;
-    resultLayerId: string;
-    resultLayerName: string | null;
     provenance: AiTransformSaveProvenance | null;
 }
 
@@ -106,8 +104,6 @@ export function applyAiTransformResultToDraft(
             selectedLayerIds: [result.layerId],
             primarySelectedLayerId: result.layerId,
         },
-        resultLayerId: result.layerId,
-        resultLayerName,
         provenance: provenanceInput
             ? {
                 aiEditPrompt: provenanceInput.prompt,

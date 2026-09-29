@@ -131,26 +131,12 @@ export function addUploadedLayer(
     };
 }
 
-export function addDraftReferences(draft: EditorDraft, references: string[]): EditorDraft {
-    return {
-        ...draft,
-        references: [...draft.references, ...references],
-    };
-}
-
-export function removeDraftReferenceAt(draft: EditorDraft, index: number): EditorDraft {
-    return {
-        ...draft,
-        references: draft.references.filter((_, currentIndex) => currentIndex !== index),
-    };
-}
-
 export function insertAiResultLayer(
     layerStack: ArchiveLayerStack,
     targetLayerIds: string[],
     assetUrl: string,
     makeId: () => string,
-): { layerStack: ArchiveLayerStack; layerId: string; targetBounds: LayerBounds | null } {
+): { layerStack: ArchiveLayerStack; layerId: string } {
     const targetBounds = getCombinedLayerBounds(layerStack, targetLayerIds);
     const targetIndexes = targetLayerIds
         .map((id) => layerStack.layers.findIndex((layer) => layer.id === id))
@@ -187,7 +173,6 @@ export function insertAiResultLayer(
             layers: [...layers.slice(0, insertIndex), aiLayer, ...layers.slice(insertIndex)],
         },
         layerId,
-        targetBounds,
     };
 }
 
