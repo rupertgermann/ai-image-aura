@@ -10,7 +10,6 @@ import {
     getAiTransformSaveProvenance,
     renderAiTransformEditInput,
     type AiTransformRenderer,
-    type AiTransformSaveProvenance,
 } from './aiTransform';
 import {
     hasDurableLayerStack,
@@ -43,7 +42,6 @@ export function useEditorController({
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
-    const [aiTransformProvenance, setAiTransformProvenance] = useState<AiTransformSaveProvenance | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
         if (!draft || draftLoading || operationInProgress.current) {
@@ -55,13 +53,7 @@ export function useEditorController({
         setAiError(null);
         try {
             const dataUrl = await renderLayerStackToDataUrl(draft.layerStack, draft.adjustments);
-            await onSave(dataUrl, buildEditorSaveContext({
-                isCopy,
-                references: draft.references,
-                adjustments: draft.adjustments,
-                draft,
-                aiTransformProvenance,
-            }));
+            await onSave(dataUrl, buildEditorSaveContext({ isCopy, draft }));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
         } finally {
@@ -69,7 +61,6 @@ export function useEditorController({
             setSaving(false);
         }
     }, [
-        aiTransformProvenance,
         draft,
         draftLoading,
         onSave,
@@ -85,7 +76,7 @@ export function useEditorController({
         setAiError(null);
 
         try {
-            const result = await runEditorAiTransform({
+            const nextDraft = await runEditorAiTransform({
                 imageCredential,
                 model,
                 prompt: aiPrompt,
@@ -96,8 +87,7 @@ export function useEditorController({
                 makeId: () => crypto.randomUUID(),
             });
 
-            commitDraft(result.draft);
-            setAiTransformProvenance(result.provenance);
+            commitDraft(nextDraft);
             setAiPrompt('');
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'AI Edit failed');
@@ -210,26 +200,20 @@ export async function runEditorAiTransform({
 
 export interface BuildEditorSaveContextOptions {
     isCopy: boolean;
-    references: string[];
-    adjustments: EditorAdjustments;
-    draft: EditorDraft | null;
-    aiTransformProvenance: AiTransformSaveProvenance | null;
+    draft: EditorDraft;
 }
 
 export function buildEditorSaveContext({
     isCopy,
-    references,
-    adjustments,
     draft,
-    aiTransformProvenance,
 }: BuildEditorSaveContextOptions): EditorSaveContext {
-    const saveProvenance = getAiTransformSaveProvenance(draft, aiTransformProvenance);
+    const saveProvenance = getAiTransformSaveProvenance(draft);
 
     return {
         isCopy,
-        references,
-        adjustments,
-        layerStack: draft && hasDurableLayerStack(draft.layerStack) ? draft.layerStack : null,
+        references: draft.references,
+        adjustments: draft.adjustments,
+        layerStack: hasDurableLayerStack(draft.layerStack) ? draft.layerStack : null,
         aiEditPrompt: saveProvenance?.aiEditPrompt,
         aiEditModel: saveProvenance?.aiEditModel,
         costLedger: saveProvenance?.costLedger,

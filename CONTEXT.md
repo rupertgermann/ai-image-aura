@@ -161,7 +161,8 @@ image.
 ## Editor draft
 
 Unsaved Editor work for an archive image. An Editor draft may include a layer
-stack, but it is distinct from a **layered image** until the user saves it.
+stack and the facts of its latest AI transform, but it is distinct from a
+**layered image** until the user saves it.
 
 ## Dirty draft
 

@@ -1,8 +1,19 @@
-import { isLayerBlendMode, type ArchiveImage, type ArchiveLayer, type ArchiveLayerStack, type CompositionAdjustments } from '../db/types';
+import { isLayerBlendMode, type ApiCostLedger, type ArchiveImage, type ArchiveLayer, type ArchiveLayerStack, type CompositionAdjustments } from '../db/types';
+import type { EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
+import type { ImageModelSlug } from '../utils/openaiModels';
 
 export const DEFAULT_HISTORY_LIMIT = 50;
 
 export type EditorAdjustments = CompositionAdjustments;
+
+export interface AiTransformSaveProvenance extends AiTransformTargetMetadata {
+    aiEditPrompt: string;
+    aiEditModel: ImageModelSlug;
+    aiResultLayerId: string;
+    aiResultLayerName: string | null;
+    costLedger?: ApiCostLedger;
+    transformMask?: EditorLineageTransformMaskAsset | null;
+}
 
 export interface EditorDraft {
     layerStack: ArchiveLayerStack;
@@ -10,6 +21,7 @@ export interface EditorDraft {
     references: string[];
     selectedLayerIds: string[];
     primarySelectedLayerId: string | null;
+    aiTransformProvenance?: AiTransformSaveProvenance;
 }
 
 export interface LayerHistoryState {
