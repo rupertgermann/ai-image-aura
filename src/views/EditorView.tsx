@@ -2,11 +2,10 @@ import Modal from '../components/Modal';
 import React, { useEffect, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight, Paintbrush, Eraser } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
-import { EditorCanvas, type EditorCanvasHandle } from '../editor/EditorCanvas';
+import { EditorCanvas } from '../editor/EditorCanvas';
 import { LayerPanel } from '../editor/LayerPanel';
 import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
-import { useEditorSession } from '../editor/useEditorSession';
 import type { EditorSaveContext } from '../archive/saveArchiveImage';
 import { LOCAL_PROVIDER, OPENAI_IMAGE_MODEL, getProviderLabel, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
 import { getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
@@ -39,7 +38,6 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
     const [maskTool, setMaskTool] = useState<'brush' | 'eraser'>('brush');
     const [maskBrushSize, setMaskBrushSize] = useState(32);
     const [transformMaskFile, setTransformMaskFile] = useState<File | null>(null);
-    const canvasRef = useRef<EditorCanvasHandle>(null);
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
     const paintingMaskRef = useRef(false);
     const activeModel = resolveImageModelConfig(aiEditModel);
@@ -81,7 +79,6 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         duplicateSelectedLayers,
         deleteSelectedLayers,
         moveSelectedLayer,
-        commitDraft,
         undo,
         redo,
         canUndo,
@@ -89,10 +86,6 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         isDirty,
         revertDraft,
         resetAdjustments,
-        serializeReferences,
-    } = useEditorSession(image);
-    const isReady = !!layerStack && !draftLoading;
-    const {
         aiPrompt,
         setAiPrompt,
         aiLoading,
@@ -106,20 +99,10 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         handleDragLeave,
         handleDrop,
     } = useEditorController({
+        image,
         imageCredential,
         model: aiEditModel,
-        isCanvasReady: isReady,
-        draft,
         maskImage: supportsTransformMask ? transformMaskFile : null,
-        commitDraft,
-        referenceImages,
-        addReferenceFiles,
-        serializeReferences,
-        exportDataUrl: async () => {
-            if (!canvasRef.current) throw new Error('Canvas not ready');
-            return canvasRef.current.exportDataUrl();
-        },
-        adjustments,
         onSave,
     });
     const aiReferenceWarning = getAiTransformReferenceWarning(aiEditModel, referenceImages.length, draft);
@@ -361,7 +344,6 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                 <div className="canvas-area glass-panel" inert={draftLoading || aiLoading || saving}>
                     {layerStack && (
                         <EditorCanvas
-                            ref={canvasRef}
                             layerStack={layerStack}
                             adjustments={adjustments}
                             selectedLayerIds={selectedLayerIds}

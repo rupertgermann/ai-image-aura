@@ -1,13 +1,9 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import type { ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from './layers';
-import { buildCanvasFilter, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
-
-export interface EditorCanvasHandle {
-    exportDataUrl: () => Promise<string>;
-}
+import { buildCanvasFilter, toCompositeOperation } from './renderLayerStack';
 
 interface EditorCanvasProps {
     layerStack: ArchiveLayerStack;
@@ -18,14 +14,14 @@ interface EditorCanvasProps {
     onTransformLayer: (layerId: string, patch: { x: number; y: number; width: number; height: number; rotation: number }) => void;
 }
 
-export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
+export function EditorCanvas({
     layerStack,
     adjustments,
     selectedLayerIds,
     primarySelectedLayerId,
     onSelectLayer,
     onTransformLayer,
-}, ref) => {
+}: EditorCanvasProps) {
     const transformerRef = useRef<Konva.Transformer>(null);
     const contentLayerRef = useRef<Konva.Layer>(null);
     const layerRefs = useRef(new Map<string, Konva.Image>());
@@ -39,10 +35,6 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
     const scale = Math.max(0.001, Math.min((viewport.width - 32) / layerStack.canvasWidth, (viewport.height - 32) / layerStack.canvasHeight, 1));
     const selectedLayer = layerStack.layers.find((layer) => layer.id === primarySelectedLayerId);
     const canTransform = selectedLayer && !selectedLayer.locked;
-
-    useImperativeHandle(ref, () => ({
-        exportDataUrl: () => renderLayerStackToDataUrl(layerStack, adjustments),
-    }), [adjustments, layerStack]);
 
     const canvasFilter = buildCanvasFilter(adjustments);
     useEffect(() => {
@@ -112,7 +104,7 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
         </Stage>
         </div>
     );
-});
+}
 
 function CanvasLayerImage({
     layer,

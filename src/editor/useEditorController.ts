@@ -1,6 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
+import type { ArchiveImage } from '../db/types';
 import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import type { ImageModelSlug } from '../utils/openaiModels';
+import { useEditorSession } from './useEditorSession';
+import { renderLayerStackToDataUrl } from './renderLayerStack';
 import {
     applyAiTransformResultToDraft,
     blobToTransformMaskAsset,
@@ -17,34 +20,23 @@ import {
 import type { EditorSaveContext } from '../archive/saveArchiveImage';
 
 interface UseEditorControllerOptions {
+    image: ArchiveImage | null;
     imageCredential: string | null;
     model: ImageModelSlug;
-    isCanvasReady: boolean;
-    draft: EditorDraft | null;
-    commitDraft: (draft: EditorDraft, recordHistory?: boolean) => void;
-    referenceImages: File[];
     maskImage?: File | Blob | null;
-    addReferenceFiles: (files: File[]) => void;
-    serializeReferences: () => Promise<string[]>;
-    exportDataUrl: () => Promise<string>;
-    adjustments: EditorAdjustments;
     onSave: (updatedUrl: string, context: EditorSaveContext) => void | Promise<void>;
 }
 
 export function useEditorController({
+    image,
     imageCredential,
     model,
-    isCanvasReady,
-    draft,
-    commitDraft,
-    referenceImages,
     maskImage,
-    addReferenceFiles,
-    serializeReferences,
-    exportDataUrl,
-    adjustments,
     onSave,
 }: UseEditorControllerOptions) {
+    const { commitDraft, ...session } = useEditorSession(image);
+    const { draft, draftLoading, adjustments, referenceImages, addReferenceFiles } = session;
+    const isCanvasReady = !!draft && !draftLoading;
     const operationInProgress = useRef(false);
     const [saving, setSaving] = useState(false);
     const [aiPrompt, setAiPrompt] = useState('');
@@ -54,7 +46,7 @@ export function useEditorController({
     const [aiTransformProvenance, setAiTransformProvenance] = useState<AiTransformSaveProvenance | null>(null);
 
     const save = useCallback(async (isCopy: boolean = false) => {
-        if (!isCanvasReady || operationInProgress.current) {
+        if (!draft || draftLoading || operationInProgress.current) {
             return;
         }
 
@@ -62,12 +54,11 @@ export function useEditorController({
         setSaving(true);
         setAiError(null);
         try {
-            const dataUrl = await exportDataUrl();
-            const references = await serializeReferences();
+            const dataUrl = await renderLayerStackToDataUrl(draft.layerStack, draft.adjustments);
             await onSave(dataUrl, buildEditorSaveContext({
                 isCopy,
-                references,
-                adjustments,
+                references: draft.references,
+                adjustments: draft.adjustments,
                 draft,
                 aiTransformProvenance,
             }));
@@ -78,13 +69,10 @@ export function useEditorController({
             setSaving(false);
         }
     }, [
-        adjustments,
         aiTransformProvenance,
         draft,
-        exportDataUrl,
-        isCanvasReady,
+        draftLoading,
         onSave,
-        serializeReferences,
     ]);
 
     const applyAiEdit = useCallback(async () => {
@@ -140,6 +128,7 @@ export function useEditorController({
     }, [addReferenceFiles]);
 
     return {
+        ...session,
         saving,
         aiPrompt,
         setAiPrompt,
