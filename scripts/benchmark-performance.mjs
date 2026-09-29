@@ -113,6 +113,8 @@ try {
     await context.tracing.start({ screenshots: true, snapshots: false });
     await cdP.send('Profiler.enable');
     await cdP.send('Profiler.start');
+    const favorite = page.locator('.image-card').first().getByRole('button', { name: /favorites/ });
+    let expectedFavorite = false;
     for (let run = 0; run <= runs; run++) {
         await page.reload();
         await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
@@ -132,11 +134,11 @@ try {
         await nextPaint();
         const clearSearchMs = await now() - start;
         const before = await counts();
-        const favorite = page.locator('.image-card').first().getByRole('button', { name: /favorites/ });
-        const pressed = await favorite.getAttribute('aria-pressed');
+        assert.equal(await favorite.getAttribute('aria-pressed'), String(expectedFavorite), 'Favorite state survives reload');
+        expectedFavorite = !expectedFavorite;
         start = await now();
         await favorite.click();
-        await page.waitForFunction(old => document.querySelector('.card-favorite-toggle')?.getAttribute('aria-pressed') !== old, pressed);
+        await page.waitForFunction(expected => document.querySelector('.card-favorite-toggle')?.getAttribute('aria-pressed') === String(expected), expectedFavorite);
         await nextPaint();
         const favoriteMs = await now() - start;
         const after = await counts();
@@ -154,6 +156,10 @@ try {
             await context.tracing.stop({ path: path.join(output, 'trace.zip') });
         }
     }
+    await page.reload();
+    await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll('.image-card').length === 300);
+    assert.equal(await favorite.getAttribute('aria-pressed'), String(expectedFavorite), 'Final favorite state survives reload');
     await page.screenshot({ path: path.join(output, 'archive.png') });
     const stored = await page.evaluate(async () => {
         const { archiveStore } = await import('/assets/fixture.js');
@@ -165,7 +171,7 @@ try {
             references: image.references.length, imageUrlLength: image.url.length,
             layerUrlLengths: image.layerStack.layers.map(layer => layer.assetUrl.length) };
     });
-    assert.equal(stored.favorite, (runs + 1) % 2 === 1);
+    assert.equal(stored.favorite, expectedFavorite);
     assert.equal(stored.imageHash, originalImageHash, 'Favorite changes preserve every other metadata field and asset byte');
     assert.equal(stored.layers, 4);
     assert.equal(stored.references, 1);
