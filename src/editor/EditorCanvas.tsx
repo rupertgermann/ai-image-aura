@@ -135,8 +135,10 @@ function CanvasLayerImage({
         <KonvaImage
             ref={imageRef}
             image={image}
-            x={layer.x}
-            y={layer.y}
+            x={layer.x + layer.width / 2}
+            y={layer.y + layer.height / 2}
+            offsetX={layer.width / 2}
+            offsetY={layer.height / 2}
             width={layer.width}
             height={layer.height}
             rotation={layer.rotation}
@@ -151,8 +153,8 @@ function CanvasLayerImage({
             }}
             onDragEnd={(event) => {
                 onTransform({
-                    x: event.target.x(),
-                    y: event.target.y(),
+                    x: event.target.x() - layer.width / 2,
+                    y: event.target.y() - layer.height / 2,
                     width: layer.width,
                     height: layer.height,
                     rotation: layer.rotation,
@@ -165,8 +167,8 @@ function CanvasLayerImage({
                 node.scaleX(1);
                 node.scaleY(1);
                 onTransform({
-                    x: node.x(),
-                    y: node.y(),
+                    x: node.x() - width / 2,
+                    y: node.y() - height / 2,
                     width,
                     height,
                     rotation: node.rotation(),
