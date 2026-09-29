@@ -291,10 +291,10 @@ describe('ArchiveTransfer', () => {
         expect(archiveStore.images.get('image-2')?.actualParameters).toBeUndefined();
     });
 
-    it('round-trips layered image assets and stable layer ids', async () => {
+    it.each(['none', 'grayscale(100%)', 'sepia(100%)', 'blur(5px)', undefined])('round-trips layered assets with composition filter %s', async (filter) => {
         const sourceLineage = createStore();
         const sourceImages = [createLayeredImage()];
-        const adjustments = { brightness: 120, contrast: 90, saturation: 150, filter: 'sepia(100%)' };
+        const adjustments = filter === undefined ? undefined : { brightness: 120, contrast: 90, saturation: 150, filter };
         sourceImages[0].layerStack!.adjustments = adjustments;
         const zipBytes = await buildArchiveZip(sourceImages, { lineageStore: sourceLineage });
         const archiveStore = new InMemoryArchiveStore();
@@ -311,6 +311,29 @@ describe('ArchiveTransfer', () => {
             ['base', 'data:image/png;base64,aaaa'],
             ['upload', 'data:image/png;base64,bBBB'],
         ]);
+    });
+
+    it('rejects a non-string composition filter before importing any images or lineage', async () => {
+        const sourceLineage = createStore();
+        await seedLineage(sourceLineage);
+        const zip = await JSZip.loadAsync(await buildArchiveZip([createImages()[0]!, createLayeredImage()], {
+            lineageStore: sourceLineage,
+        }));
+        const manifest = JSON.parse(await zip.file('archive-manifest.json')!.async('text')) as {
+            images: Array<{ layerStack?: { adjustments: unknown } }>;
+        };
+        manifest.images[1].layerStack!.adjustments = {
+            brightness: 100, contrast: 100, saturation: 100, filter: ['none'],
+        };
+        zip.file('archive-manifest.json', JSON.stringify(manifest));
+        const archiveStore = new InMemoryArchiveStore();
+        const lineageStore = createStore();
+
+        await expect(importArchiveZip(await zip.generateAsync({ type: 'uint8array' }), {
+            archiveStore, lineageStore,
+        })).rejects.toThrow('Invalid composition adjustments');
+        expect(archiveStore.images.size).toBe(0);
+        await expect(lineageStore.getByArchiveImageId('image-1')).resolves.toEqual([]);
     });
 
     it('reports missing layer assets without rejecting old archive imports', async () => {
