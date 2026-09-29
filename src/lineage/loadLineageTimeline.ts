@@ -1,7 +1,7 @@
 import type { LineageStore, LineageStep } from './LineageStore';
 import type { ApiCostLedger } from '../db/types';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
-import { readAutopilotLineageImageModel, readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
+import { readAutopilotTimelineMetadata, type AutopilotTimelineMetadata } from './autopilotLineageMetadata';
 import {
     readEditorTimelineMetadata,
     readEditorLineageImageModel,
@@ -9,7 +9,7 @@ import {
     type EditorLineageLayers,
     type EditorTimelineMetadata,
 } from './editorLineageMetadata';
-import { readGenerateLineageImageModel, readGenerateLineageReferenceCount } from './generateLineageMetadata';
+import { readLineageImageModel, readGenerateLineageReferenceCount } from './generateLineageMetadata';
 import { getImageModelLabel, isStoredImageModelSlug } from '../utils/openaiModels';
 
 export interface LineageTimelineEntry {
@@ -113,11 +113,9 @@ async function countDescendants(steps: LineageStep[], store: Pick<LineageStore, 
 
 function toTimelineEntry(step: LineageStep): LineageTimelineEntry {
     const autopilotMetadata = getAutopilotTimelineMetadata(step);
-    const imageModel = step.stepType === 'autopilot-iteration'
-        ? readAutopilotLineageImageModel(step.metadata)
-        : step.stepType === 'generation' || step.stepType === 'reference-generation'
-            ? readGenerateLineageImageModel(step.metadata)
-            : readEditorLineageImageModel(step.metadata);
+    const imageModel = step.stepType === 'autopilot-iteration' || step.stepType === 'generation' || step.stepType === 'reference-generation'
+        ? readLineageImageModel(step.metadata)
+        : readEditorLineageImageModel(step.metadata);
     const model = imageModel?.slug ?? (isStoredImageModelSlug(step.metadata.model) ? step.metadata.model : null);
 
     return {

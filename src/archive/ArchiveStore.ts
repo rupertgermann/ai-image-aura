@@ -1,5 +1,5 @@
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
-import { storage, type StorageProvider } from '../services/StorageService';
+import { storage } from '../services/StorageService';
 import { archiveMetadataPort } from '../db/AuraPersistence';
 import {
     captureArchiveAssetSnapshot,
@@ -48,30 +48,6 @@ interface CreateArchiveStoreDeps {
     blobs?: ArchiveBlobPort;
     clock?: () => string;
     makeId?: () => string;
-}
-
-class StorageArchiveBlobPort implements ArchiveBlobPort {
-    private readonly provider: StorageProvider;
-
-    constructor(provider: StorageProvider) {
-        this.provider = provider;
-    }
-
-    save(key: string, data: string): Promise<void> {
-        return this.provider.save(key, data);
-    }
-
-    load(key: string): Promise<string | null> {
-        return this.provider.load(key);
-    }
-
-    remove(key: string): Promise<void> {
-        return this.provider.remove(key);
-    }
-
-    listKeys(): Promise<string[]> {
-        return this.provider.listKeys();
-    }
 }
 
 class LocalArchiveStore implements ArchiveStore {
@@ -290,7 +266,7 @@ class LocalArchiveStore implements ArchiveStore {
 export function createArchiveStore(deps: CreateArchiveStoreDeps = {}): ArchiveStore {
     return new LocalArchiveStore(
         deps.metadata ?? archiveMetadataPort,
-        deps.blobs ?? new StorageArchiveBlobPort(storage),
+        deps.blobs ?? storage,
         deps.clock ?? (() => new Date().toISOString()),
         deps.makeId ?? (() => crypto.randomUUID()),
     );

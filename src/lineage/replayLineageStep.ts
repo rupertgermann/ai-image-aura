@@ -3,7 +3,7 @@ import { DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateDraft, type
 import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, isStoredImageModelSlug, type StoredImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
 import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
-import { readGenerateLineageImageModel } from './generateLineageMetadata';
+import { readLineageImageModel } from './generateLineageMetadata';
 import { readAutopilotGenerateReplayMetadata } from './autopilotLineageMetadata';
 import {
     readEditorLineageEditPrompt,
@@ -13,7 +13,7 @@ import {
 import { dataURLtoFile } from '../utils/file';
 
 type ReplayableStep = Pick<LineageStep, 'stepType'>;
-type GenerateReplayImageModel = NonNullable<ReturnType<typeof readGenerateLineageImageModel>>;
+type GenerateReplayImageModel = NonNullable<ReturnType<typeof readLineageImageModel>>;
 
 export interface EditorReplay {
     prompt: string | null;
@@ -121,7 +121,7 @@ function readGenerateReplayMetadata(step: LineageStep): GenerateReplayMetadata {
     }
 
     return {
-        imageModel: readGenerateLineageImageModel(step.metadata),
+        imageModel: readLineageImageModel(step.metadata),
         model: isStoredImageModelSlug(step.metadata.model) ? step.metadata.model : null,
         prompt: asString(step.metadata.prompt),
         style: asString(step.metadata.style),

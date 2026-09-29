@@ -33,7 +33,7 @@ export interface GenerateLineageReferenceImages {
     ids: string[];
 }
 
-export type GenerateLineageImageModel =
+export type LineageImageModel =
     | {
         slug: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL | 'gpt-image-2';
         controls: GptImageControls;
@@ -54,7 +54,7 @@ export type GenerateLineageImageModel =
 export interface GenerateLineageMetadata extends Record<string, unknown> {
     prompt: string;
     model: ImageModelSlug;
-    imageModel: GenerateLineageImageModel;
+    imageModel: LineageImageModel;
     dimensions: GenerateLineageDimensions;
     quality: string;
     aspectRatio: string;
@@ -88,7 +88,7 @@ export function buildGenerateLineageMetadata(input: {
     return {
         prompt: input.image.prompt,
         model,
-        imageModel: buildGenerateLineageImageModel(model, controls),
+        imageModel: buildLineageImageModel(model, controls),
         dimensions: {
             width,
             height,
@@ -132,7 +132,7 @@ function getGenerateLineageControls(
     }
 }
 
-export function readGenerateLineageImageModel(metadata: Record<string, unknown>): GenerateLineageImageModel | null {
+export function readLineageImageModel(metadata: Record<string, unknown>): LineageImageModel | null {
     const imageModel = asRecord(metadata.imageModel);
     if (!imageModel || !isStoredImageModelSlug(imageModel.slug)) {
         return null;
@@ -142,7 +142,7 @@ export function readGenerateLineageImageModel(metadata: Record<string, unknown>)
         return { slug: imageModel.slug, controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, imageModel.controls) };
     }
 
-    return buildGenerateLineageImageModel(
+    return buildLineageImageModel(
         imageModel.slug,
         sanitizeImageModelControls(imageModel.slug, imageModel.controls),
     );
@@ -158,10 +158,10 @@ export function readGenerateLineageReferenceCount(metadata: Record<string, unkno
     return asFiniteNumber(metadata.referenceCount) ?? 0;
 }
 
-function buildGenerateLineageImageModel(
+export function buildLineageImageModel(
     model: ImageModelSlug,
     controls: ImageModelControls,
-): GenerateLineageImageModel {
+): LineageImageModel {
     switch (model) {
         case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };
