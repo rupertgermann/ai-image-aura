@@ -43,6 +43,7 @@ async function createScenario(browser, name, batchSize) {
     localStorage.setItem('batch-check-seeded', '1');
     localStorage.setItem('aura_local_server_url', JSON.stringify('http://batch-provider.test'));
     localStorage.setItem('aura_openapi_key', JSON.stringify('test-key-never-sent'));
+    localStorage.setItem('aura_google_api_key', JSON.stringify('google-key-never-sent'));
     localStorage.setItem('aura_generate_draft', JSON.stringify({
       model: 'qwen-image-2.1', prompt: `${name} original prompt`,
       qwenImage2_1: { aspectRatio: '4:3', imageSize: '768', background: 'auto', batchSize },
@@ -131,6 +132,10 @@ async function mixedBatch(browser) {
     assert.equal(state.batch.results[1].status, 'failed');
     await page.getByRole('button', { name: 'Clear results', exact: true }).click();
     await page.locator('.result-slot-card').waitFor({ state: 'detached' });
+    await page.waitForFunction(async () => {
+      const { generateSessionStore } = await import('/src/generate-session/GenerateSession.ts');
+      return await generateSessionStore.loadCurrentBatch() === null;
+    });
     await page.reload();
     await waitForArchiveLoad(page);
     assert.equal((await readState(page)).batch, null, 'Clear survives reload');
@@ -242,6 +247,75 @@ async function autopilot(browser, kind) {
   } finally { releaseImage(); await context.close(); }
 }
 
+async function reasoningSelection(browser, model) {
+  const { page, context, images, errors } = await createScenario(browser, model, 1);
+  const google = model === 'gemini-2.5-flash';
+  const endpoint = google
+    ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
+    : 'https://api.openai.com/v1/responses';
+  const operations = [];
+  const imageRequests = [];
+  let evaluations = 0;
+  try {
+    await page.route('http://batch-provider.test/**', route => {
+      imageRequests.push(route.request().postData());
+      return route.fulfill({ json: { data: [{ b64_json: images[imageRequests.length - 1].split(',')[1] }] } });
+    });
+    await page.route(endpoint, route => {
+      const request = route.request();
+      const body = request.postDataJSON();
+      assert.equal(request.headers()[google ? 'x-goog-api-key' : 'authorization'], google ? 'google-key-never-sent' : 'Bearer test-key-never-sent');
+      if (!google) assert.equal(body.model, model);
+      const text = JSON.stringify(body);
+      const operation = text.includes('goal-prompt-translator.v1') ? 'goal-translation'
+        : text.includes('satisfaction-evaluator.v1') ? 'satisfaction-evaluation' : 'prompt-refinement';
+      operations.push(operation);
+      const outputText = operation === 'goal-translation' ? 'A paper crane in warm light'
+        : operation === 'prompt-refinement' ? 'A paper crane in stronger warm light'
+          : JSON.stringify({ score: [40, 95][evaluations++], feedback: ['Use stronger warm light.'] });
+      return route.fulfill({ json: google
+        ? { candidates: [{ content: { parts: [{ text: outputText }] } }], usageMetadata: { promptTokenCount: 20, candidatesTokenCount: 10, totalTokenCount: 30 } }
+        : { output_text: outputText, usage: { input_tokens: 20, output_tokens: 10 } } });
+    });
+    await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+    await page.getByLabel('Reasoning model', { exact: true }).selectOption(model);
+    await page.getByLabel('Goal', { exact: true }).fill('A paper crane in warm light');
+    await page.getByRole('button', { name: 'Create starting prompt', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#generation-prompt').value === 'A paper crane in warm light');
+    const startingPrompt = google ? 'A user-edited paper crane prompt' : 'A paper crane in warm light';
+    if (google) await page.getByLabel('Starting prompt', { exact: true }).fill(startingPrompt);
+    await page.getByLabel('Max iterations').fill('2');
+    await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
+    await page.getByText('Best result selected from iteration 2.', { exact: true }).waitFor();
+    assert.deepEqual(operations, ['goal-translation', 'satisfaction-evaluation', 'prompt-refinement', 'satisfaction-evaluation']);
+    assert.equal(imageRequests.length, 2);
+    assert(imageRequests[0].includes(startingPrompt), 'First image uses the editable starting prompt');
+    assert(imageRequests[1].includes('A paper crane in stronger warm light'), 'Next image uses the selected reasoning model refinement');
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await waitForSaved(page, 1);
+    const state = await capture(page, `reasoning-${model}`, { reasoningModel: model, operations });
+    const reasoningCosts = state.images[0].costLedger.items.filter(item => item.kind === 'reasoning');
+    assert.deepEqual(reasoningCosts.map(item => item.operation), google ? operations.slice(1) : operations,
+      'Translation cost follows the existing goal-and-prompt association');
+    assert(reasoningCosts.every(item => item.provider === (google ? 'google' : 'openai') && item.model === model));
+    assert.equal(state.images[0].model, 'qwen-image-2.1', 'Image model remains independent');
+    assert.equal(state.images[0].url, images[1], 'Best image survives archive save');
+    const iterations = await page.evaluate(async stepId => {
+      const { lineageStore } = await import('/src/lineage/LineageStore.ts');
+      const best = await lineageStore.getById(stepId);
+      return [await lineageStore.getById(best.parentStepId), best];
+    }, state.batch.lineageSource.stepId);
+    assert.deepEqual(iterations.map(step => step.metadata.reasoningModel.slug), [model, model]);
+    assert.equal(state.steps[0].parentStepId, iterations[1].id);
+    await fs.writeFile(path.join(output, `reasoning-${model}-iterations.json`), JSON.stringify(iterations, null, 2));
+    assert.deepEqual(errors, []);
+  } catch (error) {
+    await capture(page, `reasoning-${model}-failure`);
+    throw error;
+  } finally { await context.close(); }
+}
+
 (async () => {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -251,6 +325,8 @@ async function autopilot(browser, kind) {
     await autopilot(browser, 'cancelled');
     await autopilot(browser, 'serialization-failure');
     await autopilot(browser, 'persistence-failure');
+    await reasoningSelection(browser, 'gpt-6-sol');
+    await reasoningSelection(browser, 'gemini-2.5-flash');
     await fs.writeFile(path.join(output, 'summary.json'), JSON.stringify(results, null, 2));
     console.log(JSON.stringify({ output, checks: results }, null, 2));
   } finally { await browser.close(); }

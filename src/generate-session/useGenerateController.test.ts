@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createAutopilotSession } from '../autopilot/AutopilotSession';
 import { saveArchiveImage, type GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -286,6 +287,7 @@ describe('Generate controller Reference image provenance', () => {
             controller.current = useGenerateController({
                 imageCredential: 'http://127.0.0.1:1234',
                 draft,
+                getProviderCredential: () => null,
                 setDraft: vi.fn(),
                 referenceImages: selectedFiles,
                 replaceReferences: vi.fn(),
@@ -396,7 +398,7 @@ describe('Generate controller Autopilot archive controls', () => {
         renderToStaticMarkup(createElement(() => {
             controller.current = useGenerateController({
                 imageCredential: 'http://127.0.0.1:1234',
-                reasoningApiKey: 'hosted-reasoning-key',
+                getProviderCredential: () => 'hosted-reasoning-key',
                 draft,
                 setDraft: vi.fn(),
                 referenceImages: [],
@@ -421,7 +423,9 @@ describe('Generate controller Autopilot archive controls', () => {
                     }]),
                     serializeReferences: vi.fn(async () => []),
                 },
-                evaluate: vi.fn(async () => ({ score: 95, feedback: ['Good.'] })),
+                createAutopilot: (input) => createAutopilotSession(input, { reasoningClient: {
+                    createResponse: vi.fn(async () => ({ outputText: JSON.stringify({ score: 95, feedback: ['Good.'] }) })),
+                } }),
             });
             return null;
         }));

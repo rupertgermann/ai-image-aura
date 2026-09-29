@@ -4,6 +4,7 @@ import type { LineageMetadataPort, LineageStep } from '../lineage/LineageStore';
 import { createLineageStore, type LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { GEMINI_FLASH_REASONING_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
+import { buildReasoningCostLedger, calculateApiCostTotals } from '../costs/apiCost';
 import type { ApiCostLedger, ApiCostLineItem } from '../db/types';
 
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
@@ -38,42 +39,44 @@ describe('AutopilotSession', () => {
     it('runs the full generate evaluate refine loop and returns the highest score', async () => {
         const lineage = createStore();
         const callbacks = { onIterationComplete: vi.fn(), onError: vi.fn() };
+        const getProviderCredential = vi.fn(() => 'reasoning-key');
         const generate = vi.fn()
             .mockResolvedValueOnce('data:image/png;base64,one')
             .mockResolvedValueOnce('data:image/png;base64,two')
             .mockResolvedValueOnce('data:image/png;base64,three');
-        const evaluate = vi.fn()
-            .mockResolvedValueOnce({ score: 40, feedback: ['Needs stronger lighting.'] })
-            .mockResolvedValueOnce({ score: 88, feedback: ['Closer, but improve composition.'] })
-            .mockResolvedValueOnce({ score: 72, feedback: ['Lost some atmosphere.'] });
-        const refine = vi.fn()
-            .mockResolvedValueOnce('prompt 2')
-            .mockResolvedValueOnce('prompt 3');
+        const createResponse = vi.fn()
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 40, feedback: ['Needs stronger lighting.'] }) })
+            .mockResolvedValueOnce({ outputText: 'prompt 2' })
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 88, feedback: ['Closer, but improve composition.'] }) })
+            .mockResolvedValueOnce({ outputText: 'prompt 3' })
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 72, feedback: ['Lost some atmosphere.'] }) });
 
         const result = await createAutopilotSession({
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential,
             reasoningModel: GEMINI_FLASH_REASONING_MODEL,
             maxIterations: 3,
             satisfactionThreshold: 90,
             generate,
-            evaluate,
-            refine,
             lineageStore: lineage,
             callbacks,
             makeRunId: () => 'run-1',
-        }).run();
+        }, { reasoningClient: { createResponse } }).run();
 
         expect(result.status).toBe('max-iterations');
         expect(result.bestIteration).toEqual(expect.objectContaining({ iterationNumber: 2, score: 88, prompt: 'prompt 2' }));
         expect(generate).toHaveBeenCalledTimes(3);
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({ credential: 'key' }));
-        expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'reasoning-key' }));
-        expect(refine).toHaveBeenCalledTimes(2);
-        expect(refine).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'reasoning-key' }));
+        expect(getProviderCredential).toHaveBeenCalledWith('google');
+        expect(createResponse).toHaveBeenCalledTimes(5);
+        expect(createResponse).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'reasoning-key' }));
+        expect(result.bestIteration?.costLedger?.items.map((item) => item.operation)).toEqual([
+            'satisfaction-evaluation', 'prompt-refinement', 'satisfaction-evaluation', 'prompt-refinement', 'satisfaction-evaluation',
+        ]);
+        expect(result.bestIteration?.costLedger?.items.every((item) => item.provider === 'google' && item.model === GEMINI_FLASH_REASONING_MODEL)).toBe(true);
         expect(callbacks.onIterationComplete).toHaveBeenCalledTimes(3);
         expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 2, 2]);
         await expect(lineage.getChildren('step-1')).resolves.toEqual([
@@ -116,19 +119,19 @@ describe('AutopilotSession', () => {
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             maxIterations: 2,
             satisfactionThreshold: 90,
             generate: vi.fn()
                 .mockResolvedValueOnce('data:image/png;base64,one')
                 .mockResolvedValueOnce('data:image/png;base64,two'),
-            evaluate: vi.fn()
-                .mockResolvedValueOnce({ score: 80, feedback: ['Good.'] })
-                .mockResolvedValueOnce({ score: 80, feedback: ['Also good.'] }),
-            refine: vi.fn().mockResolvedValueOnce('prompt 2'),
             lineageStore: lineage,
             callbacks,
-        }).run();
+        }, { reasoningClient: { createResponse: vi.fn()
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 80, feedback: ['Good.'] }) })
+            .mockResolvedValueOnce({ outputText: 'prompt 2' })
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 80, feedback: ['Also good.'] }) }),
+        } }).run();
 
         expect(result.bestIteration).toEqual(expect.objectContaining({ iterationNumber: 1 }));
         expect(callbacks.onIterationComplete.mock.calls.map(([, runningBest]) => runningBest.iterationNumber)).toEqual([1, 1]);
@@ -136,16 +139,18 @@ describe('AutopilotSession', () => {
 
     it('includes initial reasoning costs in the final best iteration total', async () => {
         const lineage = createStore();
-        const initialCostLedger = createCostLedger(createCostItem('goal-translation', 0.00055));
+        const initialCostLedger = buildReasoningCostLedger({
+            provider: 'openai', model: 'gpt-6-sol', operation: 'goal-translation', label: 'Goal translation',
+            usage: { input_tokens: 100, output_tokens: 20 },
+        });
         const imageCostLedger = createCostLedger(createCostItem('image-generation', 0.04));
-        const evaluationCostLedger = createCostLedger(createCostItem('satisfaction-evaluation', 0.005275));
 
         const result = await createAutopilotSession({
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             maxIterations: 1,
             satisfactionThreshold: 90,
             initialCostLedger,
@@ -153,22 +158,19 @@ describe('AutopilotSession', () => {
                 imageDataUrl: 'data:image/png;base64,one',
                 costLedger: imageCostLedger,
             }),
-            evaluate: vi.fn().mockResolvedValueOnce({
-                score: 95,
-                feedback: ['Strong match.'],
-                costLedger: evaluationCostLedger,
-            }),
-            refine: vi.fn(),
             lineageStore: lineage,
-        }).run();
+        }, { reasoningClient: { createResponse: vi.fn().mockResolvedValueOnce({
+            outputText: JSON.stringify({ score: 95, feedback: ['Strong match.'] }),
+            usage: { input_tokens: 100, output_tokens: 335 },
+        }) } }).run();
 
-        expect(result.bestIteration?.costLedger?.items.map((item) => item.id)).toEqual([
+        expect(result.bestIteration?.costLedger?.items.map((item) => item.operation)).toEqual([
             'goal-translation',
             'image-generation',
             'satisfaction-evaluation',
         ]);
-        expect(result.bestIteration?.costLedger?.items.reduce((sum, item) => sum + (item.amountUsd ?? 0), 0)).toBeCloseTo(0.045825);
-        expect(result.iterations[0]?.costLedger?.items.map((item) => item.id)).toEqual([
+        expect(calculateApiCostTotals(result.bestIteration?.costLedger).totalUsd).toBeCloseTo(0.045825);
+        expect(result.iterations[0]?.costLedger?.items.map((item) => item.operation)).toEqual([
             'image-generation',
             'satisfaction-evaluation',
         ]);
@@ -195,16 +197,16 @@ describe('AutopilotSession', () => {
             initialPrompt: 'prompt 1',
             settings,
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             maxIterations: 2,
             satisfactionThreshold: 90,
             generate,
-            evaluate: vi.fn()
-                .mockResolvedValueOnce({ score: 50, feedback: ['Keep going.'] })
-                .mockResolvedValueOnce({ score: 95, feedback: ['Strong match.'] }),
-            refine: vi.fn().mockResolvedValueOnce('prompt 2'),
             lineageStore: lineage,
-        }).run();
+        }, { reasoningClient: { createResponse: vi.fn()
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 50, feedback: ['Keep going.'] }) })
+            .mockResolvedValueOnce({ outputText: 'prompt 2' })
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 95, feedback: ['Strong match.'] }) }),
+        } }).run();
 
         expect(result.status).toBe('satisfied');
         expect(seenReferenceNames).toEqual([
@@ -216,26 +218,23 @@ describe('AutopilotSession', () => {
     it('stops early when the satisfaction threshold is met', async () => {
         const lineage = createStore();
         const generate = vi.fn().mockResolvedValueOnce('data:image/png;base64,one');
-        const evaluate = vi.fn().mockResolvedValueOnce({ score: 95, feedback: ['Strong match.'] });
-        const refine = vi.fn();
+        const createResponse = vi.fn().mockResolvedValueOnce({ outputText: JSON.stringify({ score: 95, feedback: ['Strong match.'] }) });
 
         const result = await createAutopilotSession({
             goal: 'A cinematic portrait',
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             maxIterations: 4,
             satisfactionThreshold: 90,
             generate,
-            evaluate,
-            refine,
             lineageStore: lineage,
-        }).run();
+        }, { reasoningClient: { createResponse } }).run();
 
         expect(result.status).toBe('satisfied');
         expect(result.iterations).toHaveLength(1);
-        expect(refine).not.toHaveBeenCalled();
+        expect(createResponse).toHaveBeenCalledTimes(1);
     });
 
     it('cancels after the current iteration completes and preserves completed lineage', async () => {
@@ -246,17 +245,15 @@ describe('AutopilotSession', () => {
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             maxIterations: 4,
             satisfactionThreshold: 90,
             generate: vi.fn().mockResolvedValueOnce('data:image/png;base64,one'),
-            evaluate: vi.fn().mockImplementationOnce(async () => {
-                sessionRef?.cancel();
-                return { score: 60, feedback: ['Keep refining.'] };
-            }),
-            refine: vi.fn(),
             lineageStore: lineage,
-        });
+        }, { reasoningClient: { createResponse: vi.fn().mockImplementationOnce(async () => {
+            sessionRef?.cancel();
+            return { outputText: JSON.stringify({ score: 60, feedback: ['Keep refining.'] }) };
+        }) } });
         sessionRef = session;
 
         const result = await session.run();
@@ -276,17 +273,18 @@ describe('AutopilotSession', () => {
             initialPrompt: 'prompt 1',
             settings: createSettings(),
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             maxIterations: 3,
             satisfactionThreshold: 90,
             generate: vi.fn()
                 .mockResolvedValueOnce('data:image/png;base64,one')
                 .mockRejectedValueOnce(error),
-            evaluate: vi.fn().mockResolvedValueOnce({ score: 55, feedback: ['Push the framing further.'] }),
-            refine: vi.fn().mockResolvedValueOnce('prompt 2'),
             lineageStore: lineage,
             callbacks,
-        }).run();
+        }, { reasoningClient: { createResponse: vi.fn()
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 55, feedback: ['Push the framing further.'] }) })
+            .mockResolvedValueOnce({ outputText: 'prompt 2' }),
+        } }).run();
 
         expect(result.status).toBe('failed');
         expect(result.error).toBe(error);

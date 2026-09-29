@@ -3,24 +3,21 @@ import { getActiveGenerateControls, getImageModelDraftKey, type GenerateBatchSna
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput, ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
-import { promptRefiner } from '../autopilot/PromptRefiner';
-import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
+import type { Provider, ReasoningModelSlug } from '../utils/openaiModels';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import type { ApiCostLedger } from '../db/types';
 
 interface RunGenerateAutopilotInput {
     goal: string;
     imageCredential: string;
-    reasoningApiKey: string;
-    reasoningModel?: string;
+    getProviderCredential: (provider: Provider) => string | null;
+    reasoningModel?: ReasoningModelSlug;
     draft: GenerateDraft;
     referenceImages: File[];
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource'>;
     lineageStore: Pick<LineageStore, 'save'>;
     createSession?: typeof createAutopilotSession;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
-    evaluate?: typeof satisfactionEvaluator.evaluate;
-    refine?: typeof promptRefiner.refine;
     initialCostLedger?: ApiCostLedger;
     maxIterations?: number;
     satisfactionThreshold?: number;
@@ -56,15 +53,13 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
             referenceImages: usedReferenceImages,
         },
         imageCredential: input.imageCredential,
-        reasoningApiKey: input.reasoningApiKey,
+        getProviderCredential: input.getProviderCredential,
         reasoningModel: input.reasoningModel,
         initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
         initialCostLedger: input.initialCostLedger,
         maxIterations: input.maxIterations,
         satisfactionThreshold: input.satisfactionThreshold,
         generate: (request) => generateSingleImage(workflow, request),
-        evaluate: input.evaluate,
-        refine: input.refine,
         lineageStore: input.lineageStore,
         callbacks: {
             onIterationComplete: input.onIterationComplete,
