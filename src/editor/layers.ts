@@ -136,14 +136,13 @@ export function insertAiResultLayer(
     targetLayerIds: string[],
     assetUrl: string,
     makeId: () => string,
+    bounds: LayerBounds,
 ): { layerStack: ArchiveLayerStack; layerId: string } {
-    const targetBounds = getCombinedLayerBounds(layerStack, targetLayerIds);
     const targetIndexes = targetLayerIds
         .map((id) => layerStack.layers.findIndex((layer) => layer.id === id))
         .filter((index) => index >= 0);
     const insertIndex = targetIndexes.length ? Math.max(...targetIndexes) + 1 : layerStack.layers.length;
     const layerId = makeId();
-    const bounds = targetBounds ?? { x: 0, y: 0, width: layerStack.canvasWidth, height: layerStack.canvasHeight };
     const aiLayer: ArchiveLayer = {
         id: layerId,
         name: 'AI result',
@@ -373,10 +372,21 @@ export function getCombinedLayerBounds(layerStack: ArchiveLayerStack, layerIds: 
         return null;
     }
 
-    const minX = Math.min(...targetLayers.map((layer) => layer.x));
-    const minY = Math.min(...targetLayers.map((layer) => layer.y));
-    const maxX = Math.max(...targetLayers.map((layer) => layer.x + layer.width));
-    const maxY = Math.max(...targetLayers.map((layer) => layer.y + layer.height));
+    const bounds = targetLayers.map((layer) => {
+        const angle = (layer.rotation * Math.PI) / 180;
+        const quarterTurn = layer.rotation % 90 === 0;
+        const cos = Math.abs(quarterTurn ? Math.round(Math.cos(angle)) : Math.cos(angle));
+        const sin = Math.abs(quarterTurn ? Math.round(Math.sin(angle)) : Math.sin(angle));
+        const halfWidth = (layer.width * cos + layer.height * sin) / 2;
+        const halfHeight = (layer.width * sin + layer.height * cos) / 2;
+        const centerX = layer.x + layer.width / 2;
+        const centerY = layer.y + layer.height / 2;
+        return { left: centerX - halfWidth, top: centerY - halfHeight, right: centerX + halfWidth, bottom: centerY + halfHeight };
+    });
+    const minX = Math.floor(Math.min(...bounds.map((bound) => bound.left)));
+    const minY = Math.floor(Math.min(...bounds.map((bound) => bound.top)));
+    const maxX = Math.ceil(Math.max(...bounds.map((bound) => bound.right)));
+    const maxY = Math.ceil(Math.max(...bounds.map((bound) => bound.bottom)));
 
     return {
         x: minX,

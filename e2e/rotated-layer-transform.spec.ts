@@ -6,6 +6,7 @@ const cases = [
     { name: 'oblique masked layer', x: 150.25, y: 120.75, rotation: 37, mask: true, whole: false },
     { name: 'composition edge', x: -40, y: 120, rotation: 90, mask: false, whole: false },
     { name: 'whole composition at edge', x: -40, y: 120, rotation: 90, mask: false, whole: true },
+    { name: 'base and rotated selection', x: -40, y: 120, rotation: 90, mask: false, whole: false },
 ];
 
 async function editorPixels(page: Page) {
@@ -106,7 +107,35 @@ for (const scenario of cases) {
         }, { message: 'Editor must use the saved center pivot' }).toBeLessThan(1500);
         await page.screenshot({ path: testInfo.outputPath('before.png'), fullPage: true });
 
-        if (!scenario.whole) await page.locator('.layer-name').filter({ hasText: 'Rotated' }).click();
+        if (!scenario.whole) await page.locator('.layer-name').filter({ hasText: 'Rotated' }).click({ modifiers: scenario.name === 'base and rotated selection' ? ['Shift'] : [] });
+        if (scenario.name === 'right angle') {
+            const stage = await page.locator('.editor-stage').boundingBox();
+            if (!stage) throw new Error('Missing Editor stage');
+            const readLayer = () => page.evaluate(async () => {
+                const modulePath = '/src/editor/editorDraftStorage.ts';
+                const { loadEditorDraft } = await import(modulePath);
+                const draft = await loadEditorDraft('rotation-test');
+                return draft?.layerStack.layers.find((layer: { id: string }) => layer.id === 'rotated');
+            });
+            await page.mouse.move(stage.x + 350, stage.y + 230);
+            await page.mouse.down();
+            await page.mouse.move(stage.x + 370, stage.y + 245, { steps: 8 });
+            await page.mouse.up();
+            await expect.poll(readLayer).toMatchObject({ x: 270, y: 135, width: 200, height: 220, rotation: 90 });
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            await expect.poll(readLayer).toMatchObject({ x: 250, y: 120 });
+            await page.mouse.move(stage.x + 240, stage.y + 330);
+            await page.mouse.down();
+            await page.mouse.move(stage.x + 218, stage.y + 350, { steps: 8 });
+            await page.mouse.up();
+            await expect.poll(async () => (await readLayer())?.width).toBeGreaterThan(210);
+            const resized = await readLayer();
+            expect(resized.width / resized.height).toBeCloseTo(200 / 220);
+            expect(resized.x + resized.width / 2 + resized.height / 2).toBeCloseTo(460);
+            expect(resized.y + resized.height / 2 - resized.width / 2).toBeCloseTo(130);
+            await page.getByRole('button', { name: 'Undo', exact: true }).click();
+            await expect.poll(readLayer).toMatchObject({ x: 250, y: 120, width: 200, height: 220, rotation: 90 });
+        }
         await page.locator('.ai-edit-section > summary').click();
         await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption('gpt-image-2.5-flare');
         let maskPixels: number[] | undefined;
@@ -144,7 +173,9 @@ for (const scenario of cases) {
             }
             return { width: image.width, height: image.height, red, blue, green };
         }, source);
-        if (scenario.rotation === 90 && !scenario.whole) {
+        if (scenario.name === 'base and rotated selection') {
+            expect(sourcePixels).toMatchObject({ width: 550, height: 500, red: 40000, blue: 2000, green: 2000 });
+        } else if (scenario.rotation === 90 && !scenario.whole) {
             expect(sourcePixels).toEqual({ width: 220, height: 200, red: 40000, blue: 2000, green: 2000 });
         } else if (scenario.whole) {
             expect(sourcePixels).toMatchObject({ width: 500, height: 500 });

@@ -93,7 +93,7 @@ export function applyAiTransformResultToDraft(
     makeId: () => string,
     provenanceInput?: AiTransformProvenanceInput,
 ): AppliedAiTransformResult {
-    const result = insertAiResultLayer(draft.layerStack, targetPlan.targetLayerIds, resultUrl, makeId);
+    const result = insertAiResultLayer(draft.layerStack, targetPlan.targetLayerIds, resultUrl, makeId, targetPlan.targetBounds);
     const resultLayer = result.layerStack.layers.find((layer) => layer.id === result.layerId);
     const resultLayerName = resultLayer?.name ?? null;
 
