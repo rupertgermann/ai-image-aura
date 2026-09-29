@@ -1,3 +1,4 @@
+import type { GenerationSaveRequest } from '../archive/saveArchiveImage';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
 import type { ApiCostLedger, ArchiveImage } from '../db/types';
@@ -46,7 +47,7 @@ interface GenerateViewProps {
     onBusyChange: (busy: boolean) => void;
     onOpenSettings: () => void;
     getProviderCredential: (provider: Provider) => string | null;
-    onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    onSaveImage: (request: GenerationSaveRequest) => ArchiveImage | Promise<ArchiveImage>;
     completionNotificationsEnabled?: boolean;
     completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
     isDocumentHidden?: () => boolean;

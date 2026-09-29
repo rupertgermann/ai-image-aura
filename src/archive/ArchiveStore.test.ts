@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { createArchiveStore } from './ArchiveStore';
+import { saveArchiveImage, type SaveArchiveImageRequest } from './saveArchiveImage';
+import type { SaveLineageStepInput } from '../lineage/LineageStore';
 
 type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
     storedUrl: string;
@@ -57,6 +59,61 @@ class InMemoryBlobPort {
         return Array.from(this.blobs.keys());
     }
 }
+
+describe('archive and lineage completion', () => {
+    it.each(['generation', 'copy', 'overwrite'] as const)('restores stored assets after %s lineage failure and retries without duplicates', async (kind) => {
+        const { store, metadata, blobs } = createStore();
+        const source = await store.save(createImageInput({
+            id: 'source', favorite: true,
+            references: ['data:image/png;base64,original-reference'],
+            layerStack: createLayerStack('original', ['base', 'retained']),
+        }));
+        const baseline = await store.list();
+        await expect(store.get('source')).resolves.toEqual(baseline[0]);
+        await expect(store.get('missing')).resolves.toBeNull();
+        const save = vi.fn(async (step: SaveLineageStepInput) => ({ ...step, id: 'new-step' }));
+        save.mockRejectedValueOnce(new Error('Lineage unavailable'));
+        const lineage = {
+            getByArchiveImageId: vi.fn(async () => [{ id: 'previous-step', archiveImageId: source.id, parentStepId: null, stepType: 'generation' as const, timestamp: source.timestamp, metadata: {} }]),
+            save,
+        };
+        const request: SaveArchiveImageRequest = kind === 'generation' ? {
+            kind, image: { ...source, id: 'generated', url: 'data:image/png;base64,new' },
+            source: { archiveImageId: source.id }, runDraft: null,
+        } : {
+            kind: 'edit', sourceImage: { ...source, url: 'data:image/png;base64,stale-source' },
+            updatedUrl: 'data:image/png;base64,new',
+            context: {
+                isCopy: kind === 'copy', references: ['data:image/png;base64,new-reference'],
+                adjustments: { brightness: 110, contrast: 95, saturation: 125, filter: 'none' },
+                layerStack: createLayerStack('edited', ['base', 'new']),
+            },
+        };
+        const deps = { archive: store, lineage, makeId: () => 'copy' };
+        await expect(saveArchiveImage(request, deps)).rejects.toThrow('Lineage unavailable');
+        const reloaded = createArchiveStore({ metadata, blobs });
+        await expect(reloaded.list()).resolves.toEqual(baseline);
+        const saved = await saveArchiveImage(request, { ...deps, archive: reloaded });
+        expect(await reloaded.list()).toHaveLength(kind === 'overwrite' ? 1 : 2);
+        expect(save.mock.calls.at(-1)?.[0]).toMatchObject({ archiveImageId: saved.id, parentStepId: 'previous-step' });
+        expect(save).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports lineage and compensation errors without claiming restoration', async () => {
+        const { store } = createStore();
+        const image = await store.save(createImageInput({ id: 'source' }));
+        const lineageError = new Error('Lineage unavailable');
+        const rollbackError = new Error('Rollback unavailable');
+        const archive = { get: async () => null, save: async () => image, remove: vi.fn(async () => { throw rollbackError; }) };
+        await expect(saveArchiveImage({ kind: 'generation', image, source: null, runDraft: null }, {
+            archive,
+            lineage: { getByArchiveImageId: async () => [], save: async () => { throw lineageError; } },
+        })).rejects.toMatchObject({
+            message: expect.stringContaining('Rollback unavailable'),
+            errors: [lineageError, rollbackError],
+        });
+    });
+});
 
 describe('ArchiveStore layer asset ownership', () => {
 

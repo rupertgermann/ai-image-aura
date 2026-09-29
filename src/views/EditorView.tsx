@@ -7,7 +7,7 @@ import { LayerPanel } from '../editor/LayerPanel';
 import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
 import { useEditorSession } from '../editor/useEditorSession';
-import type { EditorSaveContext } from '../editor/saveEditedImage';
+import type { EditorSaveContext } from '../archive/saveArchiveImage';
 import { LOCAL_PROVIDER, OPENAI_IMAGE_MODEL, getProviderLabel, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
 import { getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
 import { getImageFilesFromClipboard } from '../references/clipboard';

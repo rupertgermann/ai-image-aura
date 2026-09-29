@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
 import { downloadGeneratedImage } from '../download/download';
 import {
@@ -11,9 +11,9 @@ import {
     type GenerateResultSlot,
     type GenerateSessionStore,
 } from './GenerateSession';
-import { getFirstSuccessfulGeneratedImage, imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
+import { imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
-import { saveGeneratedImage } from './saveGeneratedImage';
+import type { GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
@@ -31,15 +31,7 @@ export type { GenerateResultSlot };
 
 interface AutopilotProgressState {
     running: boolean;
-    iterations: Array<{
-        stepId: string;
-        archiveImageId: string;
-        iterationNumber: number;
-        prompt: string;
-        imageDataUrl: string;
-        score: number;
-        feedback: string[];
-    }>;
+    iterations: AutopilotIteration[];
     status: 'idle' | 'running' | 'satisfied' | 'max-iterations' | 'cancelled' | 'failed';
     bestIterationNumber: number | null;
     lastErrorIteration: number | null;
@@ -54,7 +46,7 @@ interface UseGenerateControllerOptions {
     referenceImages: File[];
     replaceReferences: (dataUrls: string[]) => void;
     serializeReferences: () => Promise<string[]>;
-    onSaveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    onSaveImage: (request: GenerationSaveRequest) => ArchiveImage | Promise<ArchiveImage>;
     lineage?: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
     session?: Pick<GenerateSessionStore, 'loadCurrentBatch' | 'saveCurrentBatch' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
@@ -100,10 +92,8 @@ interface SaveGenerateResultSlotsInput {
     usedReferences: string[] | null;
     runLineageSource: GenerateLineageSource | null;
     serializeReferences: () => Promise<string[]>;
-    saveImage: (image: ArchiveImage) => ArchiveImage | Promise<ArchiveImage>;
+    saveImage: (request: GenerationSaveRequest) => ArchiveImage | Promise<ArchiveImage>;
     onSaved?: (results: GenerateResultSlot[]) => void | Promise<void>;
-    lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'save'>;
-    sessionStore: Pick<GenerateSessionStore, 'loadLineageSource' | 'clearLineageSource'>;
     createArchiveImageId?: () => string;
     now?: () => Date;
 }
@@ -221,8 +211,6 @@ export async function saveGenerateResultSlots({
     serializeReferences,
     saveImage,
     onSaved,
-    lineageStore,
-    sessionStore,
     createArchiveImageId = () => crypto.randomUUID(),
     now = () => new Date(),
 }: SaveGenerateResultSlotsInput): Promise<GenerateResultSlot[]> {
@@ -246,18 +234,14 @@ export async function saveGenerateResultSlots({
             costLedger: slot.costLedger,
             serializeReferences,
         });
-        await saveGeneratedImage(image, {
-            saveImage: async (image) => {
-                const savedImage = await saveImage(image);
-                nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, savedImage.id);
-                await onSaved?.(nextResults);
-                return savedImage;
-            },
-            lineageStore,
-            sessionStore,
-            lineageSource: runLineageSource,
+        const savedImage = await saveImage({
+            kind: 'generation',
+            image,
+            source: runLineageSource,
             runDraft: runDraft ?? draft,
         });
+        nextResults = markGenerateResultSlotSaved(nextResults, slot.slotIndex, savedImage.id);
+        await onSaved?.(nextResults);
     }
 
     return nextResults;
@@ -375,11 +359,11 @@ export function useGenerateController({
     completionNotificationPort = browserCompletionNotificationPort,
     isDocumentHidden = () => typeof document !== 'undefined' && document.hidden,
 }: UseGenerateControllerOptions) {
-    const [currentResult, setCurrentResult] = useState<string | null>(null);
-    const [currentBatchResults, setCurrentBatchResults] = useState<GenerateResultSlot[]>([]);
-    const [currentResultReferences, setCurrentResultReferences] = useState<string[] | null>(null);
-    const [currentRunDraft, setCurrentRunDraft] = useState<GenerateDraft | null>(null);
-    const [currentRunLineageSource, setCurrentRunLineageSource] = useState<GenerateLineageSource | null>(null);
+    const [batch, setBatch] = useState<GenerateBatchSnapshot | null>(null);
+    const [autopilotPreview, setAutopilotPreview] = useState<{
+        previousImageUrl: string | null;
+        lineageSource: GenerateLineageSource | null;
+    } | null>(null);
     const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -396,6 +380,25 @@ export function useGenerateController({
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
     const partialRunIdRef = useRef(0);
 
+    const latestIteration = autopilot.iterations.at(-1);
+    const currentBatch = useMemo<GenerateBatchSnapshot | null>(() => autopilotPreview ? {
+        results: latestIteration ? [buildAutopilotResultSlot(latestIteration)] : [],
+        references: null,
+        draft: null,
+        lineageSource: autopilotPreview.lineageSource,
+    } : batch, [autopilotPreview, batch, latestIteration]);
+    const currentBatchResults = currentBatch?.results ?? [];
+    const currentRunDraft = currentBatch?.draft ?? null;
+    const currentResult = autopilotPreview
+        ? latestIteration?.imageDataUrl ?? autopilotPreview.previousImageUrl
+        : getFirstSuccessfulResultSlot(currentBatchResults)?.imageUrl ?? null;
+
+    const adoptBatch = useCallback(async (next: GenerateBatchSnapshot, persistedDraft = next.draft) => {
+        setBatch(next);
+        setAutopilotPreview(null);
+        await session.saveCurrentBatch({ ...next, draft: persistedDraft });
+    }, [session]);
+
     const updateDraft = useCallback((patch: Partial<GenerateDraft>) => {
         setDraft((currentDraft) => ({ ...currentDraft, ...patch }));
     }, [setDraft]);
@@ -406,11 +409,7 @@ export function useGenerateController({
                 return;
             }
 
-            setCurrentResult(getFirstSuccessfulResultSlot(batch.results)?.imageUrl ?? null);
-            setCurrentBatchResults(batch.results);
-            setCurrentResultReferences(batch.references);
-            setCurrentRunDraft(batch.draft);
-            setCurrentRunLineageSource(batch.lineageSource);
+            setBatch(batch);
         });
 
         session.consumeTransferredReferences().then((references) => {
@@ -475,7 +474,6 @@ export function useGenerateController({
                 referenceImages: usedReferenceImages,
                 onPartialImage,
             });
-            const imageUrl = getFirstSuccessfulGeneratedImage(results);
             const batchResults = buildGenerateResultSlots(results);
             const batchSnapshot: GenerateBatchSnapshot = {
                 results: batchResults,
@@ -484,15 +482,10 @@ export function useGenerateController({
                 lineageSource: runLineageSource,
             };
 
-            setCurrentBatchResults(batchResults);
-            setCurrentRunDraft(runDraft);
-            setCurrentRunLineageSource(runLineageSource);
-            setCurrentResultReferences(usedReferences);
             partialPreviewRun.clear();
-            await session.saveCurrentBatch(batchSnapshot);
+            await adoptBatch(batchSnapshot);
 
-            if (!imageUrl) {
-                setCurrentResult(null);
+            if (!getFirstSuccessfulResultSlot(batchResults)) {
                 updateDraft({ isSaved: false });
                 setError('Generation failed for every batch result.');
                 completionNotification = {
@@ -502,7 +495,6 @@ export function useGenerateController({
                 return;
             }
 
-            setCurrentResult(imageUrl);
             updateDraft({ isSaved: false });
             completionNotification = {
                 title: 'Generation complete',
@@ -528,7 +520,7 @@ export function useGenerateController({
             runningRef.current = false;
             setLoading(false);
         }
-    }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
+    }, [adoptBatch, imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
     const runAutopilot = useCallback(async (input: {
         goal: string;
@@ -556,10 +548,10 @@ export function useGenerateController({
         setLoading(true);
         setError(null);
         setCurrentPartialResult(null);
-        setCurrentResultReferences(null);
-        setCurrentBatchResults([]);
-        setCurrentRunDraft(null);
-        setCurrentRunLineageSource(session.loadLineageSource());
+        setAutopilotPreview({
+            previousImageUrl: currentResult,
+            lineageSource: session.loadLineageSource(),
+        });
         setAutopilot({
             running: true,
             iterations: [],
@@ -597,8 +589,6 @@ export function useGenerateController({
                         iterations: [...current.iterations, iteration],
                         bestIterationNumber: runningBest.iterationNumber,
                     }));
-                    setCurrentResult(iteration.imageDataUrl);
-                    setCurrentBatchResults([buildAutopilotResultSlot(iteration)]);
                 },
                 onError: (error, iterationNumber) => {
                     setError(error.message);
@@ -609,31 +599,15 @@ export function useGenerateController({
                 },
             });
 
-            if (outcome.result.bestIteration) {
-                const usedReferences = outcome.usedReferences ?? await snapshotGeneratedReferenceImages({
-                    referenceImages: outcome.usedReferenceImages,
-                    serializeReferenceFiles: workflow.serializeReferences,
-                });
-                const bestSlot = buildAutopilotResultSlot(outcome.result.bestIteration);
-                const lineageSource = {
-                    archiveImageId: outcome.result.bestIteration.archiveImageId,
-                    stepId: outcome.result.bestIteration.stepId,
-                };
-                setCurrentResult(outcome.result.bestIteration.imageDataUrl);
-                setCurrentBatchResults([bestSlot]);
-                setCurrentResultReferences(usedReferences);
-                setCurrentRunDraft(outcome.runDraft);
-                setCurrentRunLineageSource(lineageSource);
+            if (outcome.batch && outcome.result.bestIteration) {
                 updateDraft({
                     prompt: outcome.result.bestIteration.prompt,
                     isSaved: false,
                 });
-                await session.saveCurrentBatch({
-                    results: [bestSlot],
-                    references: usedReferences,
-                    draft: outcome.runDraft,
-                    lineageSource,
-                });
+                await adoptBatch(outcome.batch);
+                if (outcome.batch.lineageSource) {
+                    session.saveLineageSource(outcome.batch.lineageSource);
+                }
             }
 
             if (outcome.result.status === 'failed' && outcome.result.error) {
@@ -676,51 +650,41 @@ export function useGenerateController({
             runningRef.current = false;
             setLoading(false);
         }
-    }, [imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
+    }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();
     }, []);
 
-    const persistCurrentBatch = useCallback((results: GenerateResultSlot[]) => session.saveCurrentBatch({
-        results,
-        references: currentResultReferences,
-        draft: currentRunDraft ?? draft,
-        lineageSource: currentRunLineageSource,
-    }), [currentResultReferences, currentRunDraft, currentRunLineageSource, draft, session]);
-
     const saveResults = useCallback(async (slotIndexes?: number[]) => {
-        if (savingRef.current || runningRef.current || !hasUnsavedSuccessfulResults(currentBatchResults)) return;
+        if (savingRef.current || runningRef.current || !currentBatch || !hasUnsavedSuccessfulResults(currentBatch.results)) return;
         savingRef.current = true;
         setSaving(true);
         setError(null);
         try {
-            const nextResults = await saveGenerateResultSlots({
-                results: currentBatchResults,
+            await saveGenerateResultSlots({
+                results: currentBatch.results,
                 slotIndexes,
                 draft,
-                runDraft: currentRunDraft,
-                usedReferences: currentResultReferences,
-                runLineageSource: currentRunLineageSource,
+                runDraft: currentBatch.draft,
+                usedReferences: currentBatch.references,
+                runLineageSource: currentBatch.lineageSource,
                 serializeReferences,
                 saveImage: onSaveImage,
                 onSaved: async (results) => {
-                    setCurrentBatchResults(results);
+                    session.clearLineageSource();
                     updateDraft({ isSaved: areAllSuccessfulResultsSaved(results) });
-                    await persistCurrentBatch(results);
+                    // Legacy results keep unknown run inputs in memory, but persist the draft used to save.
+                    await adoptBatch({ ...currentBatch, results }, currentBatch.draft ?? draft);
                 },
-                lineageStore: lineage,
-                sessionStore: session,
             });
-            setCurrentBatchResults(nextResults);
-            updateDraft({ isSaved: areAllSuccessfulResultsSaved(nextResults) });
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : 'Could not save. Your results are still here; try again or download them.');
         } finally {
             savingRef.current = false;
             setSaving(false);
         }
-    }, [currentBatchResults, currentResultReferences, currentRunDraft, currentRunLineageSource, draft, lineage, onSaveImage, persistCurrentBatch, serializeReferences, session, updateDraft]);
+    }, [adoptBatch, currentBatch, draft, onSaveImage, serializeReferences, session, updateDraft]);
 
     const saveResult = (slotIndex: number) => saveResults([slotIndex]);
     const saveAllResults = () => saveResults();
@@ -735,21 +699,18 @@ export function useGenerateController({
     }, [currentResult]);
 
     const downloadResult = useCallback((slotIndex: number) => {
-        const slot = currentBatchResults.find((result) => result.slotIndex === slotIndex);
+        const slot = currentBatch?.results.find((result) => result.slotIndex === slotIndex);
         if (slot?.status === 'success') {
             downloadGeneratedImage(slot.imageUrl);
         }
-    }, [currentBatchResults]);
+    }, [currentBatch]);
 
     const clear = useCallback(async () => {
         if (runningRef.current || savingRef.current) return;
         setError(null);
-        setCurrentResult(null);
+        setBatch(null);
+        setAutopilotPreview(null);
         setCurrentPartialResult(null);
-        setCurrentBatchResults([]);
-        setCurrentResultReferences(null);
-        setCurrentRunDraft(null);
-        setCurrentRunLineageSource(null);
         await session.clearCurrentResult();
     }, [session]);
 
