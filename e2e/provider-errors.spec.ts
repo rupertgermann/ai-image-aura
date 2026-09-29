@@ -7,8 +7,8 @@ const prompt = 'Four colored squares for provider error recovery';
 async function configureKey(page: Page, provider: 'OpenAI' | 'Google') {
     const navigation = page.getByRole('navigation', { name: 'Main navigation' });
     await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
-    const title = `${provider} API Key`;
-    await page.getByRole('textbox', { name: title }).fill('synthetic-provider-key');
+    const title = provider === 'Google' ? 'Google (Gemini) API Key' : 'OpenAI API Key';
+    await page.getByLabel(title, { exact: true }).fill('synthetic-provider-key');
     await page.locator('section').filter({ has: page.getByRole('heading', { name: title }) })
         .getByRole('button', { name: 'Save key' }).click();
     await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
