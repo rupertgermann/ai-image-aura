@@ -7,18 +7,16 @@ import {
     type Flux2Klein4bControls,
     type ImageModelControls,
 } from '../image-models/ImageModelControls';
-import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import type { GenerateImageSettings } from '../image-workflow/ImageWorkflow';
 import type { ActualImageParameters, ApiCostLedger } from '../db/types';
 import { getLineageImageSize } from './generateLineageMetadata';
 import {
-    DEFAULT_IMAGE_MODEL,
     NANO_BANANA_PRO_IMAGE_MODEL,
     OPENAI_IMAGE_MODEL,
     OPENAI_SUNBURST_IMAGE_MODEL,
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
-    isImageModelSlug,
     isStoredImageModelSlug,
     type StoredImageModelSlug,
     isReasoningModelSlug,
@@ -135,13 +133,12 @@ export function buildAutopilotLineageMetadata(input: {
         feedback: string[];
     };
     prompt: string;
-    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>;
+    settings: GenerateImageSettings;
     outputImageDataUrl: string;
     actualParameters?: ActualImageParameters;
     costLedger?: ApiCostLedger;
 }): AutopilotLineageMetadata {
-    const model = isImageModelSlug(input.settings.model) ? input.settings.model : DEFAULT_IMAGE_MODEL;
-    const controls = buildAutopilotImageModelControls(model, input.settings);
+    const { model, controls } = input.settings;
     const archiveFields = buildImageModelArchiveFields(model, controls);
     const runLabel = buildAutopilotRunLabel(input.goal);
     const feedback = input.evaluation.feedback.filter((entry) => entry.trim().length > 0);
@@ -257,40 +254,6 @@ export function readAutopilotLineageReasoningModel(metadata: Record<string, unkn
     }
 
     return null;
-}
-
-function buildAutopilotImageModelControls(
-    model: ImageModelSlug,
-    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>,
-): ImageModelControls {
-    switch (model) {
-        case OPENAI_SUNBURST_IMAGE_MODEL:
-        case OPENAI_IMAGE_MODEL:
-            return sanitizeImageModelControls(model, {
-                quality: settings.quality,
-                size: settings.aspectRatio,
-                background: settings.background,
-            });
-        case NANO_BANANA_PRO_IMAGE_MODEL:
-            return sanitizeImageModelControls(model, {
-                aspectRatio: settings.aspectRatio,
-                imageSize: settings.imageSize,
-            });
-        case QWEN_IMAGE_2_1_IMAGE_MODEL:
-            return sanitizeImageModelControls(model, {
-                aspectRatio: settings.aspectRatio,
-                imageSize: settings.imageSize,
-                background: settings.background,
-                batchSize: settings.batchSize,
-            });
-        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
-            return sanitizeImageModelControls(model, {
-                aspectRatio: settings.aspectRatio,
-                imageSize: settings.imageSize,
-                batchSize: settings.batchSize,
-            });
-        default: return assertNever(model);
-    }
 }
 
 function buildAutopilotLineageImageModel(

@@ -171,7 +171,8 @@ async function autopilot(browser, kind) {
     });
     if (kind === 'serialization-failure') {
       await page.evaluate(async () => {
-        const { imageWorkflow } = await import('/src/image-workflow/ImageWorkflow.ts');
+        const moduleUrl = performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname === '/src/image-workflow/ImageWorkflow.ts').name;
+        const { imageWorkflow } = await import(moduleUrl);
         const serialize = imageWorkflow.serializeReferences;
         imageWorkflow.serializeReferences = async () => {
           imageWorkflow.serializeReferences = serialize;
@@ -181,7 +182,8 @@ async function autopilot(browser, kind) {
     }
     if (kind === 'persistence-failure') {
       await page.evaluate(async () => {
-        const { generateSessionStore } = await import('/src/generate-session/GenerateSession.ts');
+        const moduleUrl = performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname === '/src/generate-session/GenerateSession.ts').name;
+        const { generateSessionStore } = await import(moduleUrl);
         const save = generateSessionStore.saveCurrentBatch.bind(generateSessionStore);
         generateSessionStore.saveCurrentBatch = async () => {
           generateSessionStore.saveCurrentBatch = save;
@@ -316,6 +318,99 @@ async function reasoningSelection(browser, model) {
   } finally { await context.close(); }
 }
 
+async function imageModelControls(browser, autopilotMode) {
+  const name = autopilotMode ? 'nano-controls' : 'gpt-controls';
+  const model = autopilotMode ? 'nano-banana-pro' : 'gpt-image-2.5-flare';
+  const { page, context, images, errors } = await createScenario(browser, name, 1);
+  const requests = [];
+  const endpoint = autopilotMode
+    ? 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent'
+    : 'https://api.openai.com/v1/images/edits';
+  const controls = autopilotMode
+    ? { aspectRatio: '16:9', imageSize: '4K', batchSize: 1 }
+    : { quality: 'high', size: '1536x1024', background: 'transparent', batchSize: 2 };
+  const draftKey = autopilotMode ? 'nanoBananaPro' : 'gptImage';
+  try {
+    await page.route(endpoint, route => {
+      const request = route.request();
+      const body = autopilotMode ? request.postDataJSON() : request.postData();
+      requests.push(body);
+      assert.equal(request.headers()[autopilotMode ? 'x-goog-api-key' : 'authorization'],
+        autopilotMode ? 'google-key-never-sent' : 'Bearer test-key-never-sent');
+      if (autopilotMode) {
+        assert.deepEqual(body.generationConfig.imageConfig, { aspectRatio: '16:9', imageSize: '4K' });
+        assert.equal(body.contents[0].parts.filter(part => part.inline_data).length, 1);
+      } else {
+        for (const [field, value] of Object.entries({ model, quality: 'high', size: '1536x1024', background: 'transparent', n: '2' })) {
+          assert(body.includes(`name="${field}"\r\n\r\n${value}`), `GPT provider receives ${field}=${value}`);
+        }
+      }
+      return route.fulfill({ json: autopilotMode
+        ? { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'image/png', data: images[requests.length - 1].split(',')[1] } }] } }] }
+        : { data: images.slice(0, 2).map(image => ({ b64_json: image.split(',')[1] })) } });
+    });
+    let evaluations = 0;
+    if (autopilotMode) await page.route('https://api.openai.com/v1/responses', route => {
+      const evaluation = JSON.stringify(route.request().postDataJSON()).includes('satisfaction-evaluator.v1');
+      return route.fulfill({ json: {
+        output_text: evaluation ? JSON.stringify({ score: [40, 95][evaluations++], feedback: ['Improve the light.'] }) : 'Refined Nano prompt',
+        usage: { input_tokens: 20, output_tokens: 10 },
+      } });
+    });
+    await page.getByLabel('Image model', { exact: true }).selectOption(model);
+    if (autopilotMode) {
+      await page.getByLabel('ASPECT RATIO', { exact: true }).selectOption('16:9');
+      await page.getByRole('button', { name: '4K', exact: true }).click();
+      await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('4');
+      await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+      await page.getByLabel('Goal', { exact: true }).fill('Nondefault Nano image controls');
+      await page.getByLabel('Max iterations').fill('2');
+      await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
+      await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
+      await page.getByText('Best result selected from iteration 2.', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    } else {
+      await page.getByLabel('QUALITY', { exact: true }).selectOption('high');
+      await page.getByLabel('SIZE', { exact: true }).selectOption('1536x1024');
+      await page.getByLabel('BACKGROUND', { exact: true }).selectOption('transparent');
+      await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('2');
+      await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
+      await page.locator('.result-slot-card').nth(1).waitFor();
+      await page.getByRole('button', { name: /Save all/i }).click();
+    }
+    await waitForSaved(page, autopilotMode ? 1 : 2);
+    const state = await capture(page, name, { model, providerCalls: requests.length });
+    assert.equal(requests.length, autopilotMode ? 2 : 1);
+    assert.equal(state.batch.draft.model, model);
+    assert.deepEqual(state.batch.draft[draftKey], controls, 'Batch retains native controls actually used');
+    assert.equal(state.images.length, autopilotMode ? 1 : 2);
+    for (const image of state.images) {
+      assert.equal(image.model, model);
+      assert.equal(image.prompt, autopilotMode ? 'Refined Nano prompt' : `${name} original prompt`);
+      assert.equal(image.aspectRatio, autopilotMode ? '16:9' : '1536x1024');
+      assert.equal(image.quality, autopilotMode ? '4K' : 'high');
+      assert.equal(image.background, autopilotMode ? 'auto' : 'transparent');
+      assert.deepEqual(image.references, [images[0]]);
+      const step = state.steps.find(step => step.archiveImageId === image.id);
+      assert(step, 'Saved image has lineage');
+      assert.equal(step.metadata.imageModel.slug, model);
+      assert.deepEqual(step.metadata.imageModel.controls, { ...controls, batchSize: 1 });
+    }
+    if (autopilotMode) {
+      const iteration = await page.evaluate(async id => {
+        const { lineageStore } = await import('/src/lineage/LineageStore.ts');
+        return lineageStore.getById(id);
+      }, state.batch.lineageSource.stepId);
+      assert.deepEqual(iteration.metadata.imageModel.controls, controls, 'Autopilot lineage records one-image native controls');
+    }
+    await fs.writeFile(path.join(output, `${name}-requests.json`), JSON.stringify(requests, null, 2));
+    assert.deepEqual(errors, []);
+  } catch (error) {
+    await capture(page, `${name}-failure`);
+    throw error;
+  } finally { await context.close(); }
+}
+
 (async () => {
   await fs.mkdir(output, { recursive: true });
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -327,6 +422,8 @@ async function reasoningSelection(browser, model) {
     await autopilot(browser, 'persistence-failure');
     await reasoningSelection(browser, 'gpt-6-sol');
     await reasoningSelection(browser, 'gemini-2.5-flash');
+    await imageModelControls(browser, false);
+    await imageModelControls(browser, true);
     await fs.writeFile(path.join(output, 'summary.json'), JSON.stringify(results, null, 2));
     console.log(JSON.stringify({ output, checks: results }, null, 2));
   } finally { await browser.close(); }

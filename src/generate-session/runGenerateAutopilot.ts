@@ -1,5 +1,5 @@
 import { createAutopilotSession, type AutopilotGeneratedImage, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
-import { getActiveGenerateControls, getImageModelDraftKey, type GenerateBatchSnapshot, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
+import { getActiveGenerateModel, getImageModelDraftKey, type GenerateBatchSnapshot, type GenerateDraft, type GenerateSessionStore } from './GenerateSession';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { GenerateImageInput, ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
@@ -34,19 +34,15 @@ export interface RunGenerateAutopilotOutcome {
 export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Promise<RunGenerateAutopilotOutcome> {
     const createSession = input.createSession ?? createAutopilotSession;
     const workflow = input.workflow ?? imageWorkflow;
-    const controls = getActiveGenerateControls(input.draft);
+    const imageModel = getActiveGenerateModel(input.draft);
+    imageModel.controls.batchSize = 1;
     const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(input.draft.model, input.referenceImages);
     const usedReferenceImages = referenceRunPlan.providerReferenceImages.slice();
     const session = createSession({
         goal: input.goal,
         initialPrompt: input.draft.prompt,
         settings: {
-            model: input.draft.model,
-            quality: controls.quality,
-            aspectRatio: controls.aspectRatio,
-            background: controls.background,
-            batchSize: 1,
-            imageSize: controls.imageSize,
+            ...imageModel,
             style: input.draft.style,
             lighting: input.draft.lighting,
             palette: input.draft.palette,
@@ -105,10 +101,7 @@ async function generateSingleImage(
     workflow: Pick<ImageWorkflow, 'generate'>,
     request: GenerateImageInput,
 ): Promise<AutopilotGeneratedImage> {
-    const results = await workflow.generate({
-        ...request,
-        batchSize: 1,
-    });
+    const results = await workflow.generate(request);
     const result = results.find((result) => result.status === 'success');
 
     if (!result) {

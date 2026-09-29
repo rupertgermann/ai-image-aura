@@ -39,3 +39,11 @@ The browser check also covers Local server images with each hosted reasoning mod
 The Clear check waits for session storage deletion before reloading. Clearing the visible results happens before that asynchronous deletion completes.
 
 Validated on 29 September 2026. The browser checks passed before and after the refactor with matching summaries across eight saved checkpoints. All 256 tests across 35 files passed, along with type checking, ESLint, and the production build. Provider responses were mocked; paid-provider availability was not tested.
+
+## Image-model controls
+
+Generation now passes a typed model/control pair into `ImageWorkflow`. The workflow maps native controls to provider requests without a flattened intermediate representation. Autopilot copies nested controls for each iteration, and its lineage writer reads those controls directly. Drafts, saved batches, archive fields, and historical replay keep their existing formats.
+
+The browser check adds GPT single-shot generation with high quality, wide size, transparent background, and two results. It also runs Nano Banana Autopilot with 16:9, 4K, and a draft batch size of four, verifying one image per iteration. Both scenarios check provider requests, saved batch controls, archive fields, and lineage. Failure injection uses the module instance loaded by the app so the checks work after Vite hot reloads.
+
+Validated on 29 September 2026. All ten browser checkpoints passed before and after the refactor with matching summaries. GPT and Nano Banana provider requests, batch drafts, saved image controls, and lineage controls matched the baseline. Multipart request comparison ignores the generated boundary. The existing tests were migrated before implementation; all 256 tests across 35 files passed, along with type checking, ESLint, and the production build. Hosted provider responses were mocked.

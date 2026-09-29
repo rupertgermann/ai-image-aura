@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL } from '../utils/openaiModels';
 import { createImageWorkflow, type ImageProvider, type ImageProviderRegistry } from './ImageWorkflow';
 import { createGoogleImageProvider, extractGoogleImageData, extractGoogleUsageMetadata } from './ImageProvider';
+import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 
 describe('ImageWorkflow', () => {
 
@@ -21,10 +22,8 @@ describe('ImageWorkflow', () => {
         const results = await workflow.generate({
             credential: 'sk-test',
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
-            batchSize: 3,
+            model: OPENAI_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 3 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -83,10 +82,8 @@ describe('ImageWorkflow', () => {
         await expect(workflow.generate({
             credential: 'sk-test',
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
-            batchSize: 3,
+            model: OPENAI_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 3 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -143,9 +140,8 @@ describe('ImageWorkflow', () => {
         const results = await workflow.generate({
             credential: 'sk-test',
             prompt: 'blue hour mountain',
-            quality: 'medium',
-            aspectRatio: 'auto',
-            background: 'transparent',
+            model: OPENAI_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'medium', size: 'auto', background: 'transparent', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -194,9 +190,8 @@ describe('ImageWorkflow', () => {
         const results = await workflow.generate({
             credential: 'sk-test',
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
+            model: OPENAI_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -238,10 +233,7 @@ describe('ImageWorkflow', () => {
             credential: 'sk-test',
             model,
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
-            batchSize: 1,
+            controls: sanitizeImageModelControls(model, { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -275,10 +267,7 @@ describe('ImageWorkflow', () => {
             credential: 'sk-test',
             model,
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
-            batchSize: 2,
+            controls: sanitizeImageModelControls(model, { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 2 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -311,11 +300,9 @@ describe('ImageWorkflow', () => {
 
         await workflow.generate({
             credential: 'google-key',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, { aspectRatio: '1024x1024', imageSize: '1K', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -398,9 +385,8 @@ describe('ImageWorkflow', () => {
         await workflow.generate({
             credential: 'sk-test',
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: 'unsupported-size',
-            background: 'transparent',
+            model: OPENAI_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'high', size: 'unsupported-size', background: 'transparent', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -427,11 +413,9 @@ describe('ImageWorkflow', () => {
 
         await workflow.generate({
             credential: 'sk-test',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
-            quality: 'high',
-            aspectRatio: '1536x1024',
-            background: 'transparent',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, { aspectRatio: '3:2', imageSize: '1K', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -455,9 +439,8 @@ describe('ImageWorkflow', () => {
         await expect(workflow.generate({
             credential: 'sk-test',
             prompt: 'blue hour mountain',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
+            model: OPENAI_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -670,11 +653,9 @@ describe('googleImageProvider', () => {
 
         await workflow.generate({
             credential: 'sk-test',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
-            quality: 'high',
-            aspectRatio: 'bad-ratio',
-            background: 'transparent',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, { aspectRatio: 'bad-ratio', imageSize: '1K', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',
@@ -707,11 +688,9 @@ describe('googleImageProvider', () => {
 
         await workflow.generate({
             credential: 'sk-test',
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
             prompt: 'teapot city',
-            quality: 'high',
-            aspectRatio: '1024x1024',
-            background: 'transparent',
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, { aspectRatio: '1024x1024', imageSize: '1K', batchSize: 1 }),
             style: 'none',
             lighting: 'none',
             palette: 'none',

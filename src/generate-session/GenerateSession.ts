@@ -4,7 +4,6 @@ import type { LineageStore } from '../lineage/LineageStore';
 import { readGenerateLineageImageModel } from '../lineage/generateLineageMetadata';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
 import {
-    buildActiveImageModelControls,
     buildImageModelArchiveFields,
     getDefaultImageModelControls,
     getImageModelDraftKey as resolveImageModelDraftKey,
@@ -12,6 +11,7 @@ import {
     sanitizeImageModelControls,
     type GptImageControls,
     type ImageModelArchiveFields,
+    type ImageModelSelection,
     type NanoBananaProControls,
     type QwenImage2_1Controls,
     type Flux2Klein4bControls,
@@ -466,17 +466,17 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
     };
 };
 
-export function getActiveGenerateControls(draft: GenerateDraft) {
+export function getActiveGenerateModel(draft: GenerateDraft): ImageModelSelection {
     switch (draft.model) {
         case OPENAI_IMAGE_MODEL:
         case OPENAI_SUNBURST_IMAGE_MODEL:
-            return buildActiveImageModelControls(draft.model, draft.gptImage);
+            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.gptImage) };
         case NANO_BANANA_PRO_IMAGE_MODEL:
-            return buildActiveImageModelControls(draft.model, draft.nanoBananaPro);
+            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.nanoBananaPro) };
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
-            return buildActiveImageModelControls(draft.model, draft.qwenImage2_1);
+            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.qwenImage2_1) };
         case FLUX_2_KLEIN_4B_IMAGE_MODEL:
-            return buildActiveImageModelControls(draft.model, draft.flux2Klein4b);
+            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.flux2Klein4b) };
         default: return assertNever(draft.model);
     }
 }
