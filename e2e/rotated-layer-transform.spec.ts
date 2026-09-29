@@ -104,10 +104,13 @@ for (const scenario of cases) {
             drawing.drawImage(image, 0, 0);
             return Array.from(drawing.getImageData(0, 0, 500, 500).data);
         }, expected);
-        await expect.poll(async () => {
-            const actual = await editorPixels(page);
-            return actual.filter((value, index) => Math.abs(value - expectedPixels[index]) > 2).length;
-        }, { message: 'Editor must use the saved center pivot' }).toBeLessThan(1500);
+        const assertPlacement = async () => {
+            await expect.poll(async () => {
+                const actual = await editorPixels(page);
+                return actual.filter((value, index) => Math.abs(value - expectedPixels[index]) > 2).length;
+            }, { message: 'Editor artwork must retain its saved composition position' }).toBeLessThan(1500);
+        };
+        await assertPlacement();
         await page.screenshot({ path: testInfo.outputPath('before.png'), fullPage: true });
 
         if (!scenario.whole) await page.locator('.layer-name').filter({ hasText: 'Rotated' }).click({ modifiers: scenario.name === 'base and rotated selection' ? ['Shift'] : [] });
@@ -152,6 +155,7 @@ for (const scenario of cases) {
                 return Array.from(element.getContext('2d')!.getImageData(0, 0, element.width, element.height).data);
             });
             await page.getByRole('button', { name: 'Apply Mask', exact: true }).click();
+            await expect(page.getByRole('dialog', { name: 'Transform mask', exact: true })).toBeHidden();
         }
         await page.getByLabel('AI transformation prompt').fill('Return selected artwork unchanged');
         await page.getByRole('button', { name: 'Transform with AI', exact: true }).click();
@@ -202,15 +206,10 @@ for (const scenario of cases) {
             expect(decoded.pixels).toEqual(maskPixels);
         }
         await page.locator('.layer-name').filter({ hasText: 'Base' }).click();
-        const assertPlacement = async () => {
-            await expect.poll(async () => {
-                const actual = await editorPixels(page);
-                return actual.filter((value, index) => Math.abs(value - expectedPixels[index]) > 2).length;
-            }, { message: 'Passthrough artwork must keep its composition position' }).toBeLessThan(1500);
-        };
         await assertPlacement();
         await page.getByRole('button', { name: 'Save changes', exact: true }).click();
-        await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
+        await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Open image: Rotated artwork', exact: true })).toBeVisible();
         await page.reload();
         await openEditor(page);
         await assertPlacement();
