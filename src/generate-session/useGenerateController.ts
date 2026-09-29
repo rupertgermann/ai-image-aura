@@ -16,7 +16,7 @@ import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import type { GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
-import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
+import { createAutopilotSession, translateAutopilotGoal, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
 import {
     browserCompletionNotificationPort,
     type CompletionNotificationPayload,
@@ -361,6 +361,12 @@ export function useGenerateController({
     const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [translatingGoal, setTranslatingGoal] = useState(false);
+    const [goalTranslationCostContext, setGoalTranslationCostContext] = useState<{
+        goal: string;
+        prompt: string;
+        ledger: ApiCostLedger;
+    } | null>(null);
     const runningRef = useRef(false);
     const savingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
@@ -511,11 +517,28 @@ export function useGenerateController({
         }
     }, [adoptBatch, imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
+    const translateGoal = useCallback(async (goal: string) => {
+        setTranslatingGoal(true);
+        try {
+            const translation = await translateAutopilotGoal({ goal, reasoningModel, getProviderCredential });
+            updateDraft({ prompt: translation.prompt, isSaved: false });
+            setGoalTranslationCostContext(translation.costLedger ? {
+                goal,
+                prompt: translation.prompt,
+                ledger: translation.costLedger,
+            } : null);
+        } catch (translationError) {
+            setGoalTranslationCostContext(null);
+            throw translationError;
+        } finally {
+            setTranslatingGoal(false);
+        }
+    }, [getProviderCredential, reasoningModel, updateDraft]);
+
     const runAutopilot = useCallback(async (input: {
         goal: string;
         maxIterations?: number;
         satisfactionThreshold?: number;
-        initialCostLedger?: ApiCostLedger;
     }) => {
         if (runningRef.current || savingRef.current) return null;
         if (!imageCredential) {
@@ -546,6 +569,11 @@ export function useGenerateController({
         let completionNotification: CompletionNotificationPayload | null = null;
 
         try {
+            const initialCostLedger = goalTranslationCostContext
+                && goalTranslationCostContext.goal === input.goal
+                && goalTranslationCostContext.prompt === draft.prompt
+                ? goalTranslationCostContext.ledger
+                : undefined;
             const runReferenceImages = referenceImages.slice();
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
@@ -558,7 +586,7 @@ export function useGenerateController({
                 lineageStore: lineage,
                 workflow,
                 createSession: createAutopilot,
-                initialCostLedger: input.initialCostLedger,
+                initialCostLedger,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
                 },
@@ -631,7 +659,7 @@ export function useGenerateController({
             runningRef.current = false;
             setLoading(false);
         }
-    }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, getProviderCredential, isDocumentHidden, lineage, reasoningModel, referenceImages, session, updateDraft, workflow]);
+    }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, getProviderCredential, goalTranslationCostContext, isDocumentHidden, lineage, reasoningModel, referenceImages, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();
@@ -704,6 +732,8 @@ export function useGenerateController({
         saving,
         error,
         autopilot,
+        translatingGoal,
+        translateGoal,
         updateDraft,
         generate,
         runAutopilot,
