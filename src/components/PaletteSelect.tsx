@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
+import Presence from './Presence';
 
 const PALETTE_COLORS: Record<string, string[]> = {
     'copper + teal + cream': ['#b87333', '#009688', '#f5f0e8'],
@@ -82,12 +83,12 @@ export default function PaletteSelect({ value, onChange }: { value: string; onCh
             onClick={() => { setActiveIndex(selectedIndex); setOpen(!open); }} onKeyDown={handleKeyDown}>
             <PalettePreview value={value} /><ChevronDown size={16} aria-hidden="true" />
         </button>
-        {open && <div id={id} className="palette-options" role="listbox" aria-label="Palette">
+        <Presence>{open && <div id={id} className="palette-options" role="listbox" aria-label="Palette">
             {PALETTES.map((palette, index) => <button key={palette} id={`${id}-${index}`} type="button"
                 role="option" aria-selected={index === activeIndex} tabIndex={-1}
                 onMouseDown={(event) => event.preventDefault()} onMouseMove={() => setActiveIndex(index)} onClick={() => select(index)}>
                 <PalettePreview value={palette} />
             </button>)}
-        </div>}
+        </div>}</Presence>
     </div>;
 }

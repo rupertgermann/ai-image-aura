@@ -9,6 +9,7 @@ import { useReferenceImageCollection } from '../references/useReferenceImageColl
 import ConfirmModal from '../components/ConfirmModal';
 import ReferenceImageModal from '../components/ReferenceImageModal';
 import PaletteSelect from '../components/PaletteSelect';
+import Presence from '../components/Presence';
 import ActualParametersPanel from '../components/ActualParametersPanel';
 import CostSummaryPanel from '../components/CostSummaryPanel';
 import { useLocalStorage } from '../hooks/useLocalStorage';
@@ -346,7 +347,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         </div>
                         <textarea
                             id="generation-prompt"
-                            placeholder="Describe what you want to see... (e.g., 'A bioluminescent forest with crystal butterflies')"
+                            placeholder="Describe an image. A subject, a setting, a little imagination…"
                             value={prompt}
                             onChange={(e) => updateDraft({ prompt: e.target.value })}
                             className="prompt-input"
@@ -376,7 +377,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         </div>
                     </div>
 
-                    {isAutopilotMode && (
+                    <Presence>{isAutopilotMode && (
                         <div className="autopilot-panel">
                             <div className="option-group">
                                 <label htmlFor="reasoning-model">Reasoning model</label>
@@ -447,7 +448,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </div>
 
                         </div>
-                    )}
+                    )}</Presence>
 
                     <div className="options-grid">
                         <div className="image-model-options-grid">
@@ -523,6 +524,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     >
                         <label>REFERENCE IMAGES (OPTIONAL) {isDragging && '- DROP TO UPLOAD'}</label>
                         <div className="reference-grid">
+                            <Presence>
                             {referencePreviews.map((url: string, idx: number) => (
                                 <div key={url} className="reference-preview glass-panel">
                                     <button className="reference-open" aria-label={`Preview reference ${idx + 1}`} onClick={() => setViewingReferenceIndex(idx)}>
@@ -541,6 +543,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     </button>
                                 </div>
                             ))}
+                            </Presence>
                             <label className="upload-ref glass-panel">
                                 <input
                                     type="file"
@@ -554,14 +557,14 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     aria-label="Add reference images"
                                 />
                                 <Upload size={20} />
-                                <span>Add / Drop</span>
+                                <span>Add image</span>
                             </label>
                         </div>
                     </div>
 
                     {isAutopilotMode ? (
                         <>
-                            {showCostDisclosure && (
+                            <Presence>{showCostDisclosure && (
                                 <div className="autopilot-confirmation glass-panel">
                                     <p>{isLocalImageModel
                                         ? `Confirm Autopilot run with up to ${maxIterations} local image calls (no API charge) and ${maxReasoningApiCalls} reasoning API calls.`
@@ -577,7 +580,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         >Confirm Run</button>
                                     </div>
                                 </div>
-                            )}
+                            )}</Presence>
                             <button
                                 className="btn-amber"
                                 onClick={() => requestAction('autopilot')}
@@ -602,7 +605,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                     {currentBatchResults.length > 0 && !loading && <button className="btn-text-link jump-to-results" onClick={() => previewRef.current?.scrollIntoView({ block: 'start' })}>View {successfulBatchResults.length === 1 ? 'result' : 'results'} ↓</button>}
 
-                    {isAutopilotMode && autopilot.running && (
+                    <Presence>{isAutopilotMode && autopilot.running && (
                         <div className="autopilot-live-panel glass-panel">
                             <div className="autopilot-live-header">
                                 <strong>Iteration {autopilot.iterations.length}/{maxIterations}</strong>
@@ -620,25 +623,25 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                 ))}
                             </div>
                         </div>
-                    )}
+                    )}</Presence>
 
-                    {!imageCredential && (
-                        <div className="error-message">{activeModel.provider === LOCAL_PROVIDER
+                    <Presence>{!imageCredential && (
+                        <div key="image-credential" className="info-message">{activeModel.provider === LOCAL_PROVIDER
                             ? 'Connect a local server to use this model.'
                             : `Add an ${getProviderLabel(activeModel.provider)} API key to use this model.`} <button className="inline-link" onClick={onOpenSettings}>Open Settings</button></div>
                     )}
                     {isAutopilotMode && !reasoningApiKey && (
-                        <div className="error-message">{activeReasoningModel.label} needs a {getProviderLabel(activeReasoningModel.provider)} API key. <button className="inline-link" onClick={onOpenSettings}>Open Settings</button></div>
+                        <div key="reasoning-credential" className="info-message">{activeReasoningModel.label} needs a {getProviderLabel(activeReasoningModel.provider)} API key. <button className="inline-link" onClick={onOpenSettings}>Open Settings</button></div>
                     )}
-                    {imageModelReferenceWarning && <div className="info-message">{imageModelReferenceWarning}</div>}
-                    {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div className="info-message">{resultReferenceCapacityMessage}</div>}
-                    {error && <div role="alert" className="error-message">{error}</div>}
-                    {autopilotNotice && <div className="info-message">{autopilotNotice}</div>}
+                    {imageModelReferenceWarning && <div key="reference-warning" className="info-message">{imageModelReferenceWarning}</div>}
+                    {resultReferenceCapacityMessage && successfulBatchResults.length > 0 && <div key="reference-capacity" className="info-message">{resultReferenceCapacityMessage}</div>}
+                    {error && <div key="error" role="alert" className="error-message">{error}</div>}
+                    {autopilotNotice && <div key="notice" className="info-message">{autopilotNotice}</div>}</Presence>
                 </section>
 
                 <section ref={previewRef} className={`preview-panel glass-panel${showBatchGrid && !currentPartialResult ? ' batch-preview-panel' : ''}`}>
-                    {currentPartialResult ? (
-                        <div className="result-container partial-result-container">
+                    <Presence>{currentPartialResult ? (
+                        <div key="partial" className="result-container partial-result-container">
                             <img src={currentPartialResult} alt="In-progress generation preview" className="result-image partial-result-image" />
                             <div className="partial-result-banner glass-panel">
                                 <Loader2 className="spin" size={18} />
@@ -647,7 +650,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </div>
                         </div>
                     ) : showBatchGrid ? (
-                        <div className="result-batch-container">
+                        <div key="batch" className="result-batch-container">
                             <div className="result-batch-grid">
                                 {currentBatchResults.map((result) => (
                                     <div key={result.slotIndex} className={`result-slot-card ${result.status}`}>
@@ -713,7 +716,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </div>
                         </div>
                     ) : currentResult ? (
-                        <div className="result-container has-result-summary">
+                        <div key="result" className="result-container has-result-summary">
                             {loading && <div className="run-status" role="status"><Loader2 size={18} className="spin" /> Generating a new image…</div>}
                             <img src={currentResult} alt="Generated result" className="result-image" />
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
@@ -749,12 +752,12 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </div>
                         </div>
                     ) : (
-                        <div className="empty-preview" role="status">
+                        <div key={loading ? 'loading' : 'empty'} className="empty-preview" role="status">
                             {loading ? <Loader2 size={36} className="spin" /> : <ImagePlus size={36} className="dim-icon" />}
-                            <h2>{loading ? 'Creating your image' : 'No image generated yet'}</h2>
-                            <p>{loading ? 'You can browse the archive while this runs.' : 'Write a prompt or choose an example to get started.'}</p>
+                            <h2>{loading ? 'Creating your image' : 'Room for your next idea'}</h2>
+                            <p>{loading ? 'You can browse the archive while this runs.' : 'Describe what you imagine. Your image will appear here.'}</p>
                         </div>
-                    )}
+                    )}</Presence>
                 </section>
             </div>
 
@@ -768,7 +771,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                 onConfirm={() => { if (pendingAction) performAction(pendingAction); }}
             />
 
-            {viewingReferenceIndex !== null && (
+            <Presence>{viewingReferenceIndex !== null && (
                 <ReferenceImageModal
                     imageUrl={referencePreviews[viewingReferenceIndex]}
                     onClose={() => setViewingReferenceIndex(null)}
@@ -777,7 +780,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                     hasNext={viewingReferenceIndex < referencePreviews.length - 1}
                     hasPrevious={viewingReferenceIndex > 0}
                 />
-            )}
+            )}</Presence>
         </div>
     );
 };

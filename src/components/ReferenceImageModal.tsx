@@ -1,4 +1,5 @@
 import Modal from './Modal';
+import Presence from './Presence';
 import React from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -31,7 +32,7 @@ const ReferenceImageModal: React.FC<ReferenceImageModalProps> = ({
 
                 <div className="modal-main centered-image">
                     <div className="modal-image-viewport">
-                        <img src={imageUrl} alt="Reference" className="modal-image reference-full-image" />
+                        <Presence><img key={imageUrl} src={imageUrl} alt="Reference" className="modal-image reference-full-image" /></Presence>
 
                         {(hasPrevious && onPrevious) && (
                             <button className="nav-arrow prev" onClick={onPrevious} title="Previous">

@@ -1,3 +1,4 @@
+import Presence from '../components/Presence';
 import { useState } from 'react';
 import { Copy, Eye, EyeOff, Lock, LockOpen, Trash2, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import { ARCHIVE_LAYER_BLEND_MODES, type ArchiveLayerBlendMode, type ArchiveLayerStack } from '../db/types';
@@ -81,7 +82,7 @@ export function LayerPanel({
                 </div>
             )}
             <div className="layer-list">
-                {[...layerStack.layers].reverse().map((layer) => {
+                <Presence>{[...layerStack.layers].reverse().map((layer) => {
                     const stackIndex = layerStack.layers.findIndex((candidate) => candidate.id === layer.id);
                     const selected = selectedLayerIds.includes(layer.id);
                     const draggable = layer.kind !== 'base' && !layer.locked;
@@ -168,7 +169,7 @@ export function LayerPanel({
                             </div>
                         </div>
                     );
-                })}
+                })}</Presence>
             </div>
             {primaryLayer && primaryLayer.kind !== 'base' && (
                 <div className="layer-detail">

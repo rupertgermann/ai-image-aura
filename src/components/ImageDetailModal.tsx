@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- Image detail helpers share this module with the modal. */
 import Modal from './Modal';
+import Presence from './Presence';
 import React, { useState } from 'react';
 import { X, Download, Edit2, Trash2, Calendar, Layout, Sparkles, Layers, ChevronRight, ChevronLeft, Copy, Check, Wand2, GitBranch, History, Star } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
@@ -127,7 +128,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                 <div className="modal-main">
                     <div className="modal-image-viewport">
                         <span className="comparison-label single-image-label">{displayedImageLabel}</span>
-                        <img src={displayedImage.url} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" />
+                        <Presence><img key={displayedImage.id} src={displayedImage.url} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" /></Presence>
 
                         {comparisonError && <div className="comparison-error">{comparisonError}</div>}
 
@@ -232,17 +233,12 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                 </button>
                             </div>
 
-                            {lineageCollapsed ? (
-                                <div className="lineage-empty">
-                                    <History size={16} />
-                                    <span>History hidden</span>
-                                </div>
-                            ) : timelineLoading ? (
-                                <div className="lineage-empty">Loading history...</div>
+                            <Presence>{lineageCollapsed ? null : timelineLoading ? (
+                                <div key="loading" className="lineage-empty">Loading history...</div>
                             ) : timelineError ? (
-                                <div className="error-message" role="alert">Could not load history. <button className="inline-link" onClick={() => setTimelineRetry((retry) => retry + 1)}>Try again</button></div>
+                                <div key="error" className="error-message" role="alert">Could not load history. <button className="inline-link" onClick={() => setTimelineRetry((retry) => retry + 1)}>Try again</button></div>
                             ) : timeline && timeline.entries.length > 0 ? (
-                                <div className="lineage-panel">
+                                <div key="history" className="lineage-panel">
                                     {timeline.parent && (
                                         <div className={`lineage-origin ${timeline.parent.missing ? 'missing' : ''}`}>
                                             <GitBranch size={14} />
@@ -304,11 +300,11 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                                     </div>
                                 </div>
                             ) : (
-                                <div className="lineage-empty">
+                                <div key="empty" className="lineage-empty">
                                     <History size={16} />
                                     <span>No history recorded</span>
                                 </div>
-                            )}
+                            )}</Presence>
                         </div>
 
                         <div className="sidebar-actions">

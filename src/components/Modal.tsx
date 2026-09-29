@@ -12,10 +12,18 @@ export default function Modal({ label, onClose, className = '', children }: {
     useLayoutEffect(() => {
         const dialog = ref.current!;
         const previousFocus = document.activeElement;
+        const restoreFocus = () => {
+            if (document.activeElement !== document.body) return;
+            const target = previousFocus instanceof HTMLElement && previousFocus.isConnected && !previousFocus.closest('[inert], [hidden]')
+                ? previousFocus : document.getElementById('main-content');
+            target?.focus({ preventScroll: true });
+        };
+        dialog.addEventListener('close', restoreFocus);
         dialog.showModal();
         return () => {
+            dialog.removeEventListener('close', restoreFocus);
             dialog.close();
-            if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+            restoreFocus();
         };
     }, []);
 
