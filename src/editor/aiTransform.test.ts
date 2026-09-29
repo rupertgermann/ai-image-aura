@@ -18,6 +18,30 @@ const adjustments: EditorAdjustments = {
 };
 
 describe('Editor AI transforms', () => {
+    it.each([
+        { x: 250, y: 120, rotation: 90, bounds: { x: 240, y: 130, width: 220, height: 200 } },
+        { x: 150.25, y: 120.75, rotation: 37, bounds: { x: 104, y: 82, width: 293, height: 297 } },
+        { x: -40, y: 120, rotation: 90, bounds: { x: -50, y: 130, width: 220, height: 200 } },
+    ])('uses the complete rotated pixel bounds for source and result at $rotation degrees, x=$x', async ({ x, y, rotation, bounds }) => {
+        const layerStack = createLayerStack();
+        Object.assign(layerStack.layers[1], { x, y, rotation });
+        const draft = createDraft(layerStack, ['layer-1']);
+        const render = createRecordingRenderer();
+        const input = await renderAiTransformEditInput({ draft, adjustments, referenceImages: [], render });
+        expect(render.mock.calls[0]?.[2]).toEqual(bounds);
+        const result = applyAiTransformResultToDraft(draft, input.targetPlan, 'data:image/png;base64,result', () => 'ai-result');
+        expect(result.draft.layerStack.layers.find((layer) => layer.id === 'ai-result')).toMatchObject({ ...bounds, rotation: 0 });
+    });
+
+    it('places a whole-composition result at the canvas bounds when a rotated layer crosses its edge', async () => {
+        const layerStack = createLayerStack();
+        Object.assign(layerStack.layers[1], { x: -40, rotation: 90 });
+        const draft = createDraft(layerStack, ['base']);
+        const input = await renderAiTransformEditInput({ draft, adjustments, referenceImages: [], render: createRecordingRenderer() });
+        const result = applyAiTransformResultToDraft(draft, input.targetPlan, 'data:image/png;base64,result', () => 'ai-result');
+        expect(result.draft.layerStack.layers.at(-1)).toMatchObject({ x: 0, y: 0, width: 1000, height: 800, rotation: 0 });
+    });
+
     it('warns for the Qwen references that will be omitted from a selected-layer edit', () => {
         const layerStack = createLayerStack();
 
