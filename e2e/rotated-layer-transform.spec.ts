@@ -10,7 +10,10 @@ const cases = [
 ];
 
 async function editorPixels(page: Page) {
-    return page.locator('.editor-stage canvas').first().evaluate((element) => {
+    const canvas = page.locator('.editor-stage canvas').first();
+    await expect(canvas).toHaveJSProperty('width', 500);
+    await expect(canvas).toHaveJSProperty('height', 500);
+    return canvas.evaluate((element) => {
         if (!(element instanceof HTMLCanvasElement)) throw new Error('Expected Editor canvas');
         const context = element.getContext('2d');
         if (!context) throw new Error('Canvas unavailable');
