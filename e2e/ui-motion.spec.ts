@@ -23,6 +23,33 @@ test.beforeEach(async ({ context, page, baseURL }) => {
     await page.getByRole('heading', { name: 'Generate', exact: true }).waitFor();
 });
 
+test('Prompt has a visible keyboard focus border', async ({ page }, testInfo) => {
+    const prompt = page.getByLabel('Prompt', { exact: true });
+    const unfocusedBorder = await prompt.evaluate((element) => getComputedStyle(element).borderBottomColor);
+    await page.getByRole('combobox', { name: 'Example prompts', exact: true }).focus();
+    await page.keyboard.press('Tab');
+    await expect(prompt).toBeFocused();
+    await expect(prompt).not.toHaveCSS('border-bottom-color', unfocusedBorder);
+    await page.screenshot({ path: testInfo.outputPath('prompt-keyboard-focus.png') });
+});
+
+test('keyboard focus skips closing disclosures', async ({ page }, testInfo) => {
+    const summary = page.locator('.style-options > summary');
+    await summary.click();
+    await settle(page);
+    await summary.click();
+    await page.keyboard.press('Tab');
+    const upload = page.getByLabel('Add reference images', { exact: true });
+    expect(await upload.evaluate((element) => element === document.activeElement)).toBe(true);
+    await settle(page);
+    await expect(upload).toBeFocused();
+    await summary.click();
+    await settle(page);
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('combobox', { name: 'Style', exact: true })).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath('disclosure-keyboard-focus.png') });
+});
+
 test('navigation, disclosures, reference dialogs and menus enter and exit without losing input', async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
