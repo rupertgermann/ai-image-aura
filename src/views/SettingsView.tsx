@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Presence from '../components/Presence';
 import { Key, Save, AlertCircle, CheckCircle2, ShieldCheck, Bell, Server } from 'lucide-react';
 import { normalizeLocalServerUrl } from '../app/providerKeys';
 import { testLocalServerConnection } from '../image-workflow/LocalImageProvider';
@@ -151,9 +152,9 @@ const LocalServerSection: React.FC<LocalServerSectionProps> = ({ localServerUrl,
                     {testing ? 'Testing…' : 'Test connection'}
                 </button>
             </div>
-            {error && <div id="local-server-url-error" className="warning-box" role="alert"><AlertCircle size={16} />{error}</div>}
+            <Presence>{error && <div key="error" id="local-server-url-error" className="warning-box" role="alert"><AlertCircle size={16} />{error}</div>}
             {connection && (
-                <div className={connection.status === 'connected' ? 'success-box' : 'warning-box'} role="status">
+                <div key="connection" className={connection.status === 'connected' ? 'success-box' : 'warning-box'} role="status">
                     {connection.status === 'connected' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
                     <span>{connection.status === 'connected'
                         ? `Connected. ${connection.modelIds.length ? `Model IDs: ${connection.modelIds.join(', ')}` : 'No model IDs reported.'}`
@@ -161,7 +162,7 @@ const LocalServerSection: React.FC<LocalServerSectionProps> = ({ localServerUrl,
                             ? `Local server returned HTTP ${connection.httpStatus}.`
                             : `Could not reach the local server at ${connection.url}.`}</span>
                 </div>
-            )}
+            )}</Presence>
         </section>
     );
 };
@@ -229,17 +230,17 @@ const ProviderKeySection: React.FC<ProviderKeySectionProps> = ({
                 </button>
             </div>
 
-            {!configured ? (
-                <div className="warning-box">
+            <Presence>{!configured ? (
+                <div key="unconfigured" className="warning-box">
                     <AlertCircle size={16} />
                     <span>Add a key when you want to use this provider.</span>
                 </div>
             ) : (
-                <div className="success-box">
+                <div key="configured" className="success-box">
                     <CheckCircle2 size={16} />
                     <span>Key saved on this device.</span>
                 </div>
-            )}
+            )}</Presence>
         </section>
     );
 };

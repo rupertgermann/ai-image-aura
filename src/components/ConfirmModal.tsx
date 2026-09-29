@@ -1,4 +1,5 @@
 import Modal from './Modal';
+import Presence from './Presence';
 import React, { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
@@ -25,7 +26,6 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    if (!isOpen) return null;
     const cancel = () => { if (!busy) { setError(null); onCancel(); } };
     const confirm = async () => {
         if (busy) return;
@@ -37,7 +37,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
     };
 
     return (
-        <Modal label={title} className="dialog-overlay" onClose={cancel}>
+        <Presence>{isOpen && <Modal label={title} className="dialog-overlay" onClose={cancel}>
             <div className="modal-content confirm-dialog" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-icon-container">
                     <div className={`modal-icon ${type}`}>
@@ -62,7 +62,7 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                     </div>
                 </div>
             </div>
-        </Modal>
+        </Modal>}</Presence>
     );
 };
 

@@ -31,7 +31,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
 
             <div className="sidebar-logo">
                 <Sparkles className="logo-icon" size={28} />
-                {!isCollapsed && <span>AURA AI</span>}
+                <span>AURA AI</span>
             </div>
 
             <nav className="sidebar-nav" aria-label="Main navigation">
@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange }) => {
             <div className="sidebar-footer">
                 <div className="status-indicator">
                     <HardDrive size={14} aria-hidden="true" />
-                    {!isCollapsed && <span>Local workspace</span>}
+                    <span>Local workspace</span>
                 </div>
             </div>
         </aside>

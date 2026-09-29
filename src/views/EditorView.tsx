@@ -1,4 +1,5 @@
 import Modal from '../components/Modal';
+import Presence from '../components/Presence';
 import React, { useEffect, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight, Paintbrush, Eraser } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
@@ -336,8 +337,8 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                         <button className="btn-amber" onClick={() => { void save(false); }} disabled={!isCanvasReady || !isDirty || aiLoading || saving}><Save size={18} /> {saving ? 'Saving…' : 'Save changes'}</button>
                     </div>
                 </div>
-                {draftError && <div className="error-message" role="alert">{draftError}</div>}
-                {aiError && <div className="error-message" role="alert">{aiError}</div>}
+                <Presence>{draftError && <div key="draft-error" className="error-message" role="alert">{draftError}</div>}
+                {aiError && <div key="ai-error" className="error-message" role="alert">{aiError}</div>}</Presence>
             </header>
 
             <div className="editor-grid">
@@ -407,7 +408,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                             {adjustmentsOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                         </button>
 
-                        <div id="editor-adjustments-panel" className="collapsible-section-body" hidden={!adjustmentsOpen}>
+                        <div id="editor-adjustments-panel" className="collapsible-section-body" hidden={!adjustmentsOpen} inert={!adjustmentsOpen}>
                             <div className="slider-group">
                                 <div className="slider-label">
                                     <span>Brightness</span>
@@ -473,7 +474,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                             <span className="section-heading">Filters</span>
                             {filtersOpen ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                         </button>
-                        <div id="editor-filters-panel" className="collapsible-section-body" hidden={!filtersOpen}>
+                        <div id="editor-filters-panel" className="collapsible-section-body" hidden={!filtersOpen} inert={!filtersOpen}>
                             <div className="filter-grid">
                                 <button
                                     className={`filter-btn ${filter === 'none' ? 'active' : ''}`}
@@ -562,7 +563,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                             >
                                 <label>Reference images (optional) {isDragging && '- DROP TO UPLOAD'}</label>
                                 <div className="reference-grid mini">
-                                    {referencePreviews.map((url: string, idx: number) => (
+                                    <Presence>{referencePreviews.map((url: string, idx: number) => (
                                         <div key={url} className="reference-preview mini glass-panel">
                                             <img src={url} alt="Reference" />
                                             <button
@@ -573,7 +574,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                                                 <X size={12} />
                                             </button>
                                         </div>
-                                    ))}
+                                    ))}</Presence>
                                     <label className="upload-ref mini glass-panel">
                                         <input
                                             type="file"
@@ -605,7 +606,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                     </div>
                 </fieldset>
             </div>
-            {maskEditorOpen && (
+            <Presence>{maskEditorOpen && (
                 <Modal label="Transform mask" className="transform-mask-modal" onClose={() => setMaskEditorOpen(false)}>
                     <div className="modal-content transform-mask-dialog">
                         <div className="transform-mask-toolbar">
@@ -687,7 +688,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                         {maskError && <div className="error-message mini">{maskError}</div>}
                     </div>
                 </Modal>
-            )}
+            )}</Presence>
         </div>
     );
 };

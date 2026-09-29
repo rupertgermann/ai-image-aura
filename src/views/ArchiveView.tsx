@@ -1,5 +1,6 @@
 import React from 'react';
 import ImageCard from '../components/ImageCard';
+import Presence from '../components/Presence';
 import type { ArchiveImage } from '../db/types';
 import { Image as ImageIcon, Search, Download, Trash2, X, Loader2, Star } from 'lucide-react';
 
@@ -101,10 +102,10 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
             </header>
 
             {error && <div className="error-message" role="alert">{error.message} <button className="inline-link" onClick={onRetry}>Try again</button></div>}
-            {loading && images.length === 0 ? (
-                <div className="empty-state" role="status"><Loader2 className="spin" size={28} /><p>Loading your archive…</p></div>
+            <div className="archive-results"><Presence>{loading && images.length === 0 ? (
+                <div key="loading" className="empty-state" role="status"><Loader2 className="spin" size={28} /><p>Loading your archive…</p></div>
             ) : error && images.length === 0 ? null : images.length === 0 ? (
-                <div className="empty-archive">
+                <div key="empty" className="empty-archive">
                     <div className="empty-state glass-panel">
                         <ImageIcon size={48} className="dim-icon" />
                         <h3>No images yet</h3>
@@ -113,7 +114,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                     </div>
                 </div>
             ) : filteredImages.length === 0 ? (
-                <div className="empty-archive">
+                <div key="no-matches" className="empty-archive">
                     <div className="empty-state glass-panel">
                         <Search size={48} className="dim-icon" />
                         <h3>No matches</h3>
@@ -124,7 +125,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                     </div>
                 </div>
             ) : (
-                <div className="image-grid">
+                <div key="images" className="image-grid"><Presence>
                     {filteredImages.map(img => (
                         <ImageCard
                             key={img.id}
@@ -137,10 +138,10 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                             onSelect={() => onToggleSelection(img.id)}
                         />
                     ))}
-                </div>
-            )}
+                </Presence></div>
+            )}</Presence></div>
 
-            {selectedIds.size > 0 && (
+            <Presence>{selectedIds.size > 0 && (
                 <div className="bulk-action-bar glass-panel active">
                     <div className="bulk-info">
                         <span className="selection-count">{selectedIds.size}</span>
@@ -164,7 +165,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
                         </button>
                     </div>
                 </div>
-            )}
+            )}</Presence>
         </div>
     );
 };

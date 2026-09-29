@@ -7,6 +7,7 @@ const EditorView = lazy(() => import('./views/EditorView'))
 import ImageDetailModal from './components/ImageDetailModal'
 import Toast from './components/Toast'
 import ConfirmModal from './components/ConfirmModal'
+import Presence from './components/Presence'
 import { useAppController } from './app/useAppController'
 
 function App() {
@@ -37,11 +38,11 @@ function App() {
             case 'generate':
                 return null;
             case 'archive':
-                return <ArchiveView {...archiveViewProps} />;
+                return <div key="archive" className="view-panel"><ArchiveView {...archiveViewProps} /></div>;
             case 'editor':
                 return null;
             case 'settings':
-                return <SettingsView {...settingsViewProps} />;
+                return <div key="settings" className="view-panel"><SettingsView {...settingsViewProps} /></div>;
             default:
                 return <div>View not found</div>;
         }
@@ -56,19 +57,21 @@ function App() {
             />
             <main id="main-content" ref={mainRef} className="main-content" tabIndex={-1}>
                 <div className="view-wrapper">
-                    <div hidden={currentView !== 'generate'}>
-                        <GenerateView key={generateTransferKey} {...generateViewProps} />
+                    <div className="view-stack">
+                        <div className="view-panel" hidden={currentView !== 'generate'} inert={currentView !== 'generate'}>
+                            <GenerateView key={generateTransferKey} {...generateViewProps} />
+                        </div>
+                        {(currentView === 'editor' || editorViewProps.image) && <div className="view-panel" hidden={currentView !== 'editor'} inert={currentView !== 'editor'}>
+                            <Suspense fallback={<p role="status">Loading editor…</p>}>
+                                <EditorView key={editorViewProps.image?.id ?? 'empty-editor'} isActive={currentView === 'editor'} {...editorViewProps} />
+                            </Suspense>
+                        </div>}
+                        <Presence>{renderView()}</Presence>
                     </div>
-                    {(currentView === 'editor' || editorViewProps.image) && <div hidden={currentView !== 'editor'}>
-                        <Suspense fallback={<p role="status">Loading editor…</p>}>
-                            <EditorView key={editorViewProps.image?.id ?? 'empty-editor'} isActive={currentView === 'editor'} {...editorViewProps} />
-                        </Suspense>
-                    </div>}
-                    {renderView()}
                 </div>
             </main>
 
-            {archiveController.selectedImage && (
+            <Presence>{archiveController.selectedImage && (
                 <ImageDetailModal
                     image={archiveController.selectedImage}
                     images={archiveViewProps.images}
@@ -97,7 +100,7 @@ function App() {
                     onNext={archiveController.showNextImage}
                     onPrevious={archiveController.showPreviousImage}
                 />
-            )}
+            )}</Presence>
 
             <ConfirmModal
                 isOpen={archiveController.pendingDeleteIds.length > 0}
@@ -112,9 +115,11 @@ function App() {
             />
 
             <div className="toast-container">
-                {toasts.map(toast => (
-                    <Toast key={toast.id} {...toast} onClose={() => removeToast(toast.id)} />
-                ))}
+                <Presence>
+                    {toasts.map(toast => (
+                        <Toast key={toast.id} {...toast} onClose={() => removeToast(toast.id)} />
+                    ))}
+                </Presence>
             </div>
         </div>
     )
