@@ -26,3 +26,7 @@ public/recovery/
 .claude/skills/
 .agents/skills/
 .env
+
+# Browser E2E artifacts
+test-results/
+playwright-report/

@@ -263,6 +263,33 @@ The app calls provider APIs directly from the browser.
 - Image responses are consumed as base64 payloads and converted into browser-safe data URLs for preview and persistence
 - Actual generation parameters contain only values reported by the provider or measured by AURA; Qwen runs record elapsed time only
 
+## Browser E2E test
+
+```bash
+npm install
+npx playwright install chromium
+npm run test:e2e
+```
+
+The single Chromium test configures a fake OpenAI key in Settings, generates the
+known `e2e/fixtures/four-colors.png`, saves through the UI, reloads, and reopens
+it in Archive. It verifies the restored pixels, prompt, and Image model against
+fixed expectations. Only provider HTTP responses are mocked; SQLocal, OPFS and
+IndexedDB run normally in a fresh browser context with no personal data.
+Unexpected external requests are blocked, so no paid API calls are made.
+
+Playwright starts and stops its own temporary Vite instance at
+`http://127.0.0.1:5183`. Port 5183 must be free: the runner refuses to reuse an
+existing server or switch ports. Existing development and preview instances are
+unaffected. `npm run typecheck` includes the E2E files; `npm test` collects only
+`src/**/*.test.ts`.
+
+Each successful run retains `trace.zip` and `restored-image.png` in the test's
+subdirectory under ignored `test-results/`. The screenshot shows the reopened
+archive detail after reload. Inspect the trace with
+`npx playwright show-trace test-results/<test-directory>/trace.zip`.
+These outputs are replaced by the next run; copy them first to retain a run.
+
 ## Privacy and Security
 
 - The project is designed for local use in the browser
