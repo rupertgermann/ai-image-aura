@@ -90,14 +90,12 @@ export function buildCostTotalRows(
         });
     }
 
-    if (reasoningItems.length > 0) {
-        rows.push({
-            id: 'reasoning',
-            label: 'Reasoning',
-            amountUsd: totals.reasoningTotalUsd,
-            unavailableLabel: getUnavailableLabel(reasoningItems),
-        });
-    }
+    rows.push({
+        id: 'reasoning',
+        label: 'Reasoning',
+        amountUsd: totals.reasoningTotalUsd,
+        unavailableLabel: getUnavailableLabel(reasoningItems),
+    });
 
     return rows;
 }
@@ -143,10 +141,6 @@ function formatLineItemCost(item: ApiCostLineItem) {
 }
 
 function getUnavailableLabel(items: ApiCostLineItem[]) {
-    if (items.length === 0) {
-        return undefined;
-    }
-
     return items.every((item) => item.status === 'unavailable') ? 'Unavailable' : 'Partial';
 }
 

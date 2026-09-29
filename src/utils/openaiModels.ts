@@ -40,7 +40,6 @@ export interface ImageModelConfig {
         generate: string;
         edit: string;
     };
-    parameters: Partial<Record<'size' | 'quality' | 'background' | 'aspectRatio' | 'imageSize', string>>;
     capabilities: {
         transformMask: boolean;
         partialImageStreaming: boolean;
@@ -60,11 +59,6 @@ const OPENAI_IMAGE_CONFIG = {
     endpoints: {
         generate: 'https://api.openai.com/v1/images/generations',
         edit: 'https://api.openai.com/v1/images/edits',
-    },
-    parameters: {
-        size: 'size',
-        quality: 'quality',
-        background: 'background',
     },
     capabilities: {
         transformMask: true,
@@ -94,10 +88,6 @@ export const IMAGE_MODEL_REGISTRY = {
             generate: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
             edit: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent',
         },
-        parameters: {
-            aspectRatio: 'generationConfig.imageConfig.aspectRatio',
-            imageSize: 'generationConfig.imageConfig.imageSize',
-        },
         capabilities: {
             transformMask: false,
             partialImageStreaming: false,
@@ -112,9 +102,6 @@ export const IMAGE_MODEL_REGISTRY = {
             generate: '/v1/images/generations',
             edit: '/v1/images/edits',
         },
-        parameters: {
-            size: 'size',
-        },
         capabilities: {
             transformMask: false,
             partialImageStreaming: false,
@@ -128,9 +115,6 @@ export const IMAGE_MODEL_REGISTRY = {
         endpoints: {
             generate: '/v1/images/generations',
             edit: '/v1/images/edits',
-        },
-        parameters: {
-            size: 'size',
         },
         capabilities: {
             transformMask: false,

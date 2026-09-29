@@ -171,7 +171,7 @@ async function runTransform(draft: EditorDraft) {
         adjustments,
         referenceImages: [],
         makeId: () => 'ai-layer',
-        editImage: vi.fn(async () => 'data:image/png;base64,ai-result'),
+        editImage: vi.fn(async () => ({ imageUrl: 'data:image/png;base64,ai-result' })),
         render: createRecordingRenderer(),
     });
 }

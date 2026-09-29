@@ -167,19 +167,23 @@ describe('GenerateSession draft migration', () => {
             'data:image/png;base64,used-ref-1',
         ];
 
-        await store.saveCurrentResult('data:image/png;base64,result', references);
+        const batch: GenerateBatchSnapshot = {
+            results: [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,result', isSaved: false }],
+            references,
+            draft: null,
+            lineageSource: null,
+        };
+        await store.saveCurrentBatch(batch);
 
-        await expect(store.loadCurrentResult()).resolves.toBe('data:image/png;base64,result');
-        await expect(store.loadCurrentResultReferences()).resolves.toEqual(references);
+        await expect(store.loadCurrentBatch()).resolves.toEqual(batch);
 
-        await store.saveCurrentResult('data:image/png;base64,legacy-result');
+        await store.saveCurrentBatch({ ...batch, references: null });
 
-        await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
+        expect((await store.loadCurrentBatch())?.references).toBeNull();
 
         await store.clearCurrentResult();
 
-        await expect(store.loadCurrentResult()).resolves.toBeNull();
-        await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
+        await expect(store.loadCurrentBatch()).resolves.toBeNull();
     });
 
     it('clears stale current generation results when transferring an archive image into Generate', async () => {
@@ -213,8 +217,6 @@ describe('GenerateSession draft migration', () => {
         });
 
         await expect(store.loadCurrentBatch()).resolves.toBeNull();
-        await expect(store.loadCurrentResult()).resolves.toBeNull();
-        await expect(store.loadCurrentResultReferences()).resolves.toBeNull();
         await expect(store.consumeTransferredReferences()).resolves.toEqual(['data:image/png;base64,archive-ref']);
     });
 
@@ -276,8 +278,6 @@ describe('GenerateSession draft migration', () => {
         await store.saveCurrentBatch(batch);
 
         await expect(store.loadCurrentBatch()).resolves.toEqual(batch);
-        await expect(store.loadCurrentResult()).resolves.toBe('data:image/png;base64,result-0');
-        await expect(store.loadCurrentResultReferences()).resolves.toEqual(['data:image/png;base64,used-ref']);
     });
 
     it('migrates legacy single-result storage into a one-item generation batch', async () => {
@@ -315,10 +315,6 @@ class InMemoryStorageProvider implements StorageProvider {
 
     async remove(key: string): Promise<void> {
         this.values.delete(key);
-    }
-
-    async clearAll(): Promise<void> {
-        this.values.clear();
     }
 
     async listKeys(): Promise<string[]> {

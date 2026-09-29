@@ -117,8 +117,8 @@ export function buildEditorLineageMetadata(input: {
     const editorAdjustment = buildEditorAdjustment(input.adjustments);
     const aiTransformTarget = {
         mode: normalizeTargetMode(input.targetMode),
-        layerCount: normalizeNullableNumber(input.targetLayerCount),
-        includesBaseLayer: normalizeNullableBoolean(input.targetIncludesBaseLayer),
+        layerCount: asFiniteNumber(input.targetLayerCount),
+        includesBaseLayer: asBoolean(input.targetIncludesBaseLayer),
     };
     const layers = buildEditorLayers({
         layerStack,
@@ -343,14 +343,6 @@ function normalizeString(value: unknown): string | null {
 
 function normalizeTargetMode(value: unknown): EditorLineageTargetMode | null {
     return value === 'whole-composition' || value === 'selected-layers' ? value : null;
-}
-
-function normalizeNullableNumber(value: unknown) {
-    return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-function normalizeNullableBoolean(value: unknown) {
-    return typeof value === 'boolean' ? value : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

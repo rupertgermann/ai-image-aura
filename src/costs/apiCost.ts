@@ -141,7 +141,6 @@ export function calculateApiCostTotals(ledger: ApiCostLedger | null | undefined)
     }
 
     const calculatedItems = items.filter((item) => item.status === 'calculated' && typeof item.amountUsd === 'number' && Number.isFinite(item.amountUsd));
-    const unavailableItems = items.filter((item) => item.status !== 'calculated' || typeof item.amountUsd !== 'number' || !Number.isFinite(item.amountUsd));
 
     if (calculatedItems.length === 0) {
         return { status: 'unavailable', currency: 'USD' };
@@ -152,7 +151,7 @@ export function calculateApiCostTotals(ledger: ApiCostLedger | null | undefined)
     const reasoningItems = calculatedItems.filter((item) => item.kind === 'reasoning');
 
     return {
-        status: unavailableItems.length > 0 ? 'partial' : 'calculated',
+        status: calculatedItems.length < items.length ? 'partial' : 'calculated',
         currency: 'USD',
         totalUsd: sum(calculatedItems),
         ...(imageItems.length > 0 ? { imageGenerationTotalUsd: sum(imageItems) } : {}),
@@ -529,6 +528,8 @@ function sanitizeApiCostLineItem(value: unknown): ApiCostLineItem | null {
         return null;
     }
 
+    const amountUsd = optionalFiniteNumber(record.amountUsd);
+    const pricing = sanitizePricing(record.pricing);
     return {
         id: typeof record.id === 'string' && record.id ? record.id : buildCostLineItemId(String(record.operation), String(record.provider), String(record.model)),
         kind,
@@ -538,9 +539,9 @@ function sanitizeApiCostLineItem(value: unknown): ApiCostLineItem | null {
         label: typeof record.label === 'string' ? record.label : titleizeOperation(kind),
         status,
         currency: 'USD',
-        ...(optionalFiniteNumber(record.amountUsd) !== null ? { amountUsd: optionalFiniteNumber(record.amountUsd) ?? undefined } : {}),
+        ...(amountUsd !== null ? { amountUsd } : {}),
         ...(isFiniteNumberRecord(record.usage) ? { usage: record.usage } : {}),
-        ...(sanitizePricing(record.pricing) ? { pricing: sanitizePricing(record.pricing) } : {}),
+        ...(pricing ? { pricing } : {}),
         ...(typeof record.note === 'string' ? { note: record.note } : {}),
     };
 }

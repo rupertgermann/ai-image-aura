@@ -103,9 +103,6 @@ export interface GenerateSessionStore {
     clearLineageSource(): void;
     loadCurrentBatch(): Promise<GenerateBatchSnapshot | null>;
     saveCurrentBatch(batch: GenerateBatchSnapshot): Promise<void>;
-    loadCurrentResult(): Promise<string | null>;
-    loadCurrentResultReferences(): Promise<string[] | null>;
-    saveCurrentResult(result: string, usedReferences?: string[] | null): Promise<void>;
     clearCurrentResult(): Promise<void>;
     consumeTransferredReferences(): Promise<string[]>;
 }
@@ -242,29 +239,6 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             this.blobStorage.remove(GENERATE_CURRENT_RESULT_KEY),
             this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY),
         ]);
-    }
-
-    async loadCurrentResult(): Promise<string | null> {
-        const batch = await this.loadCurrentBatch();
-        return getFirstSuccessfulResultSlot(batch?.results ?? [])?.imageUrl ?? null;
-    }
-
-    async loadCurrentResultReferences(): Promise<string[] | null> {
-        return (await this.loadCurrentBatch())?.references ?? null;
-    }
-
-    async saveCurrentResult(result: string, usedReferences: string[] | null = null): Promise<void> {
-        await this.saveCurrentBatch({
-            results: [{
-                slotIndex: 0,
-                status: 'success',
-                imageUrl: result,
-                isSaved: false,
-            }],
-            references: usedReferences,
-            draft: null,
-            lineageSource: null,
-        });
     }
 
     async clearCurrentResult(): Promise<void> {
@@ -482,18 +456,7 @@ export function getActiveGenerateModel(draft: GenerateDraft): ImageModelSelectio
 }
 
 export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModelArchiveFields {
-    switch (draft.model) {
-        case OPENAI_IMAGE_MODEL:
-        case OPENAI_SUNBURST_IMAGE_MODEL:
-            return buildImageModelArchiveFields(draft.model, draft.gptImage);
-        case NANO_BANANA_PRO_IMAGE_MODEL:
-            return buildImageModelArchiveFields(draft.model, draft.nanoBananaPro);
-        case QWEN_IMAGE_2_1_IMAGE_MODEL:
-            return buildImageModelArchiveFields(draft.model, draft.qwenImage2_1);
-        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
-            return buildImageModelArchiveFields(draft.model, draft.flux2Klein4b);
-        default: return assertNever(draft.model);
-    }
+    return buildImageModelArchiveFields(draft.model, draft[resolveImageModelDraftKey(draft.model)]);
 }
 
 export const getImageModelDraftKey = resolveImageModelDraftKey;

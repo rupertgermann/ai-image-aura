@@ -1,6 +1,6 @@
 # AURA AI
 
-AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI, Google, and a user-run Qwen Image 2.1 server.
+AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI, Google, and user-run Qwen Image 2.1 or FLUX.2 klein 4B servers.
 
 The app runs entirely in the browser. Provider API keys, the local server URL, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
 
@@ -48,7 +48,7 @@ npm install
 npm run dev
 ```
 
-Open the app in your browser, go to **Settings**, and configure the providers for the models you want to use. OpenAI powers `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst` for images, and `gpt-6-sol` for reasoning; Google powers `nano-banana-pro` and `gemini-2.5-flash`. Qwen Image 2.1 uses a Local server URL instead of an API key.
+Open the app in your browser, go to **Settings**, and configure the providers for the models you want to use. OpenAI powers `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst` for images, and `gpt-6-sol` for reasoning; Google powers `nano-banana-pro` and `gemini-2.5-flash`. Qwen Image 2.1 and FLUX.2 klein 4B use a Local server URL instead of an API key.
 
 ### Qwen Image 2.1 local server
 
@@ -74,7 +74,7 @@ From the stable-diffusion.cpp repository root, adjust the paths and launch the s
 
 The [Qwen Image 2.1 guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/qwen_image_2.1.md) recommends CFG scale 6, Euler sampling, verbose logging, and CPU offloading; the [server guide](https://github.com/leejet/stable-diffusion.cpp/blob/master/examples/server/README.md) documents flash attention and the default address `http://127.0.0.1:1234`. Enter that address in **Settings → Local server (stable-diffusion.cpp)**, save it, and use **Test connection**. AURA sends requests directly to its OpenAI-compatible images API without an API key.
 
-If `sd-server` runs behind [llama-swap](https://github.com/mostlygeek/llama-swap/blob/main/docs/configuration.md), enter the llama-swap URL instead and name the model `qwen-image-2.1` in its config, or add that exact alias. AURA sends `qwen-image-2.1` as the model ID for every local image request.
+If `sd-server` runs behind [llama-swap](https://github.com/mostlygeek/llama-swap/blob/main/docs/configuration.md), enter the llama-swap URL instead and name the model `qwen-image-2.1` in its config, or add that exact alias. AURA sends `qwen-image-2.1` as the model ID for Qwen image requests.
 
 ## Available scripts
 
@@ -252,8 +252,8 @@ The app calls provider APIs directly from the browser.
 - Google image generation and editing use Gemini `generateContent`
 - Google Autopilot reasoning uses Gemini `generateContent`
 - Local server generation uses `POST /v1/images/generations`; reference-based generation and Editor AI transforms use `POST /v1/images/edits`; the Settings connection test uses `GET /v1/models`
-- Local image requests send the model ID `qwen-image-2.1` with no Authorization header or hosted-provider key
-- Image models: `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `nano-banana-pro`, `qwen-image-2.1`
+- Local image requests send the selected model ID, `qwen-image-2.1` or `flux-2-klein-4b`, with no Authorization header or hosted-provider key
+- Image models: `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, `nano-banana-pro`, `qwen-image-2.1`, `flux-2-klein-4b`
 - Reasoning models: `gpt-6-sol`, `gemini-2.5-flash`
 - Shared image-model control facts drive UI choices, default values, validation, provider request mapping, reference limits, mask capability, streaming capability, and archive metadata
 - The app requests between one and four images per generation, fanning `Nano Banana Pro` batches out into isolated parallel requests

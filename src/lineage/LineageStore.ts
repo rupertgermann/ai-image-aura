@@ -1,5 +1,4 @@
 import { lineageMetadataPort } from '../db/AuraPersistence';
-import { SQLiteLineageMetadataPort } from './SQLiteLineageMetadataPort';
 import type { LineageStep, SaveLineageStepInput } from './types';
 
 interface LineageMetadataPort {
@@ -83,6 +82,5 @@ export function createLineageStore(deps: CreateLineageStoreDeps = {}): LineageSt
 
 export const lineageStore = createLineageStore();
 
-export { SQLiteLineageMetadataPort };
 export type { LineageMetadataPort };
 export type { LineageStep, SaveLineageStepInput };
