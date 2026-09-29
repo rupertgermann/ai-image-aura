@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAutopilotSession } from './AutopilotSession';
 import type { LineageMetadataPort, LineageStep } from '../lineage/LineageStore';
 import { createLineageStore, type LineageStore } from '../lineage/LineageStore';
-import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import type { GenerateImageInput, GenerateImageSettings } from '../image-workflow/ImageWorkflow';
 import { GEMINI_FLASH_REASONING_MODEL, OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { buildReasoningCostLedger, calculateApiCostTotals } from '../costs/apiCost';
 import type { ApiCostLedger, ApiCostLineItem } from '../db/types';
@@ -180,13 +180,15 @@ describe('AutopilotSession', () => {
         const lineage = createStore();
         const firstReference = new File(['reference-0'], 'ref-0.png', { type: 'image/png' });
         const secondReference = new File(['reference-1'], 'ref-1.png', { type: 'image/png' });
-        const settings = createSettings({
-            referenceImages: [firstReference, secondReference],
-        });
+        const settings = createSettings([firstReference, secondReference]);
         const seenReferenceNames: string[][] = [];
+        const seenBatchSizes: number[] = [];
         const generate = vi.fn(async (input: GenerateImageInput) => {
             seenReferenceNames.push(input.referenceImages.map((file) => file.name));
+            seenBatchSizes.push(input.controls.batchSize);
+            input.controls.batchSize = 4;
             input.referenceImages.push(new File(['request-mutation'], `request-mutated-${seenReferenceNames.length}.png`, { type: 'image/png' }));
+            settings.controls.batchSize = 3;
             settings.referenceImages.push(new File(['external-mutation'], `external-${seenReferenceNames.length}.png`, { type: 'image/png' }));
 
             return `data:image/png;base64,iteration-${seenReferenceNames.length}`;
@@ -213,6 +215,13 @@ describe('AutopilotSession', () => {
             ['ref-0.png', 'ref-1.png'],
             ['ref-0.png', 'ref-1.png'],
         ]);
+        expect(seenBatchSizes).toEqual([1, 1]);
+        await expect(lineage.getById('step-1')).resolves.toMatchObject({
+            metadata: { imageModel: { controls: { batchSize: 1 } } },
+        });
+        await expect(lineage.getById('step-2')).resolves.toMatchObject({
+            metadata: { imageModel: { controls: { batchSize: 1 } } },
+        });
     });
 
     it('stops early when the satisfaction threshold is met', async () => {
@@ -306,19 +315,14 @@ function createStore(): LineageStore {
     });
 }
 
-function createSettings(
-    overrides: Partial<Omit<GenerateImageInput, 'credential' | 'prompt'>> = {},
-): Omit<GenerateImageInput, 'credential' | 'prompt'> {
+function createSettings(referenceImages: File[] = []): GenerateImageSettings {
     return {
         model: OPENAI_IMAGE_MODEL,
-        quality: 'high' as const,
-        aspectRatio: '1024x1024',
-        background: 'transparent' as const,
         style: 'risograph poster',
         lighting: 'golden hour',
         palette: 'copper + teal + cream',
-        referenceImages: [],
-        ...overrides,
+        referenceImages,
+        controls: { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 1 },
     };
 }
 

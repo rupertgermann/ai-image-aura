@@ -1,14 +1,12 @@
 import { dataURLtoFile, fileToDataURL } from '../utils/file';
 import type { ActualImageParameters } from '../db/types';
-import {
-    type ImageBackground,
-    type ImageQuality,
-} from '../utils/openai';
+import type { ImageQuality } from '../utils/openai';
 import {
     mapImageModelEditProviderRequest,
     mapImageModelGenerateProviderRequest,
+    type ImageModelSelection,
 } from '../image-models/ImageModelControls';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, resolveImageModelConfig, type ImageModelSlug, type LocalImageSize, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
+import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, resolveImageModelConfig, type ImageModelSlug, type NanoBananaAspectRatio, type NanoBananaImageSize } from '../utils/openaiModels';
 import { imageProviderRegistry, type ImageProvider, type ImageProviderRegistry, type ImageProviderResponse } from './ImageProvider';
 import { buildImageCostLedger } from '../costs/apiCost';
 import type { ApiCostLedger } from '../db/types';
@@ -16,21 +14,18 @@ import type { ApiCostLedger } from '../db/types';
 export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
 export { NANO_REFERENCE_LIMIT } from '../image-models/ImageModelControls';
 
-export interface GenerateImageInput {
-    credential: string;
-    model?: ImageModelSlug;
-    prompt: string;
-    quality: ImageQuality;
-    aspectRatio: string;
-    background: ImageBackground;
-    batchSize?: number;
-    imageSize?: NanoBananaImageSize | LocalImageSize;
+export type GenerateImageSettings = ImageModelSelection & {
     style: string;
     lighting: string;
     palette: string;
     referenceImages: File[];
     onPartialImage?: (imageUrl: string) => void;
-}
+};
+
+export type GenerateImageInput = GenerateImageSettings & {
+    credential: string;
+    prompt: string;
+};
 
 export interface EditImageInput {
     credential: string;
@@ -85,15 +80,8 @@ export function createImageWorkflow(
 
     return {
         async generate(input) {
-            const { model, modelSlug, provider } = resolveImageProvider(input.model, providers);
-            const providerRequest = mapImageModelGenerateProviderRequest(modelSlug, {
-                quality: input.quality,
-                aspectRatio: input.aspectRatio,
-                background: input.background,
-                batchSize: input.batchSize,
-                imageSize: input.imageSize,
-                referenceImages: input.referenceImages,
-            });
+            const { model, provider } = resolveImageProvider(input.model, providers);
+            const providerRequest = mapImageModelGenerateProviderRequest(input, input.referenceImages);
 
             const batchSize = providerRequest.batchSize ?? 1;
             const onPartialImage = batchSize === 1 && model.capabilities.partialImageStreaming
@@ -105,7 +93,7 @@ export function createImageWorkflow(
                 const responses = await provider.generate({
                     credential: input.credential,
                     model,
-                    prompt: buildGenerationPrompt(modelSlug, input),
+                    prompt: buildGenerationPrompt(input),
                     ...providerRequest,
                     ...(onPartialImage ? { onPartialImage } : {}),
                 });
@@ -176,20 +164,20 @@ export function createImageWorkflow(
 
 export const imageWorkflow = createImageWorkflow();
 
-const buildGenerationPrompt = (model: ImageModelSlug, input: GenerateImageInput) => {
+const buildGenerationPrompt = (input: GenerateImageInput) => {
     const modifiers: string[] = [];
 
     if (input.style !== 'none') modifiers.push(input.style);
     if (input.lighting !== 'none') modifiers.push(input.lighting);
     if (input.palette !== 'none') modifiers.push(`color palette: ${input.palette}`);
 
-    const transparentQwen = model === QWEN_IMAGE_2_1_IMAGE_MODEL && input.background === 'transparent';
+    const transparentQwen = input.model === QWEN_IMAGE_2_1_IMAGE_MODEL && input.controls.background === 'transparent';
     const userPrompt = transparentQwen ? input.prompt.trim().replace(/[.!?]+$/, '') : input.prompt;
     const prompt = modifiers.length > 0
         ? `${userPrompt}, ${modifiers.join(', ')}`
         : userPrompt;
 
-    switch (model) {
+    switch (input.model) {
         case OPENAI_IMAGE_MODEL:
         case OPENAI_SUNBURST_IMAGE_MODEL:
         case NANO_BANANA_PRO_IMAGE_MODEL:
@@ -199,7 +187,7 @@ const buildGenerationPrompt = (model: ImageModelSlug, input: GenerateImageInput)
             return transparentQwen
                 ? `This is an RGBA image with transparency. ${prompt.trim().replace(/[.!?]+$/, '')}. The image has alpha channel and the background is transparent.`
                 : prompt;
-        default: return assertNever(model);
+        default: return assertNever(input);
     }
 };
 

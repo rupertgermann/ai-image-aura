@@ -47,15 +47,13 @@ export type Flux2Klein4bControls = {
 
 export type ImageModelControls = GptImageControls | NanoBananaProControls | QwenImage2_1Controls | Flux2Klein4bControls;
 
-export type ImageModelControlId = 'quality' | 'size' | 'background' | 'batchSize' | 'aspectRatio' | 'imageSize';
+export type ImageModelSelection =
+    | { model: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL; controls: GptImageControls }
+    | { model: typeof NANO_BANANA_PRO_IMAGE_MODEL; controls: NanoBananaProControls }
+    | { model: typeof QWEN_IMAGE_2_1_IMAGE_MODEL; controls: QwenImage2_1Controls }
+    | { model: typeof FLUX_2_KLEIN_4B_IMAGE_MODEL; controls: Flux2Klein4bControls };
 
-export interface ActiveImageModelControls {
-    quality: ImageQuality;
-    aspectRatio: string;
-    background: ImageBackground;
-    batchSize: number;
-    imageSize?: NanoBananaImageSize | LocalImageSize;
-}
+export type ImageModelControlId = 'quality' | 'size' | 'background' | 'batchSize' | 'aspectRatio' | 'imageSize';
 
 export interface ImageModelArchiveFields {
     quality: string;
@@ -485,57 +483,6 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
     }
 }
 
-export function getActiveImageModelGenerateControls(model: ImageModelSlug, controls: ImageModelControls): ActiveImageModelControls {
-    switch (model) {
-        case OPENAI_IMAGE_MODEL:
-        case OPENAI_SUNBURST_IMAGE_MODEL: {
-            const sanitized = sanitizeImageModelControls(model, controls);
-            return {
-                aspectRatio: sanitized.size,
-                imageSize: undefined,
-                quality: sanitized.quality,
-                background: sanitized.background,
-                batchSize: sanitized.batchSize,
-            };
-        }
-        case NANO_BANANA_PRO_IMAGE_MODEL: {
-            const sanitized = sanitizeImageModelControls(model, controls);
-            const gptDefaults = getDefaultImageModelControls(OPENAI_IMAGE_MODEL);
-            return {
-                aspectRatio: sanitized.aspectRatio,
-                imageSize: sanitized.imageSize,
-                quality: gptDefaults.quality,
-                background: gptDefaults.background,
-                batchSize: sanitized.batchSize,
-            };
-        }
-        case QWEN_IMAGE_2_1_IMAGE_MODEL: {
-            const sanitized = sanitizeImageModelControls(model, controls);
-            return {
-                aspectRatio: sanitized.aspectRatio,
-                imageSize: sanitized.imageSize,
-                quality: getDefaultImageModelControls(OPENAI_IMAGE_MODEL).quality,
-                background: sanitized.background,
-                batchSize: sanitized.batchSize,
-            };
-        }
-        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
-            const sanitized = sanitizeImageModelControls(model, controls);
-            const gptDefaults = getDefaultImageModelControls(OPENAI_IMAGE_MODEL);
-            return {
-                aspectRatio: sanitized.aspectRatio,
-                imageSize: sanitized.imageSize,
-                quality: gptDefaults.quality,
-                background: gptDefaults.background,
-                batchSize: sanitized.batchSize,
-            };
-        }
-        default: return assertNever(model);
-    }
-}
-
-export const buildActiveImageModelControls = getActiveImageModelGenerateControls;
-
 export function buildImageModelArchiveFields(model: ImageModelSlug, controls: unknown): ImageModelArchiveFields {
     switch (model) {
         case OPENAI_IMAGE_MODEL:
@@ -588,48 +535,26 @@ export function buildImageModelArchiveFields(model: ImageModelSlug, controls: un
 }
 
 export function mapImageModelGenerateProviderRequest(
-    model: ImageModelSlug,
-    input: {
-        quality: ImageQuality;
-        aspectRatio: string;
-        background: ImageBackground;
-        batchSize?: number;
-        imageSize?: NanoBananaImageSize | LocalImageSize;
-        referenceImages: File[];
-    },
+    input: ImageModelSelection,
+    referenceImages: File[],
 ) {
-    const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(model, input.referenceImages);
+    const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(input.model, referenceImages);
 
-    switch (model) {
+    switch (input.model) {
         case OPENAI_IMAGE_MODEL:
         case OPENAI_SUNBURST_IMAGE_MODEL:
             return {
-                quality: coerceImageQuality(input.quality, 'medium'),
-                size: coerceGptImageSize(input.aspectRatio, '1024x1024'),
-                background: coerceImageBackground(input.background, 'auto'),
-                batchSize: coerceGptBatchSize(input.batchSize, 1),
+                ...sanitizeImageModelControls(input.model, input.controls),
                 referenceImages: referenceRunPlan.providerReferenceImages,
             };
         case NANO_BANANA_PRO_IMAGE_MODEL: {
-            const controls = sanitizeImageModelControls(model, {
-                aspectRatio: input.aspectRatio,
-                imageSize: input.imageSize,
-                batchSize: input.batchSize,
-            });
             return {
-                aspectRatio: controls.aspectRatio,
-                imageSize: controls.imageSize,
-                batchSize: controls.batchSize,
+                ...sanitizeImageModelControls(input.model, input.controls),
                 referenceImages: referenceRunPlan.providerReferenceImages,
             };
         }
         case QWEN_IMAGE_2_1_IMAGE_MODEL: {
-            const controls = sanitizeImageModelControls(model, {
-                aspectRatio: input.aspectRatio,
-                imageSize: input.imageSize,
-                background: input.background,
-                batchSize: input.batchSize,
-            });
+            const controls = sanitizeImageModelControls(input.model, input.controls);
             return {
                 size: LOCAL_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
                 batchSize: controls.batchSize,
@@ -637,18 +562,14 @@ export function mapImageModelGenerateProviderRequest(
             };
         }
         case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
-            const controls = sanitizeImageModelControls(model, {
-                aspectRatio: input.aspectRatio,
-                imageSize: input.imageSize,
-                batchSize: input.batchSize,
-            });
+            const controls = sanitizeImageModelControls(input.model, input.controls);
             return {
                 size: LOCAL_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
                 batchSize: controls.batchSize,
                 referenceImages: referenceRunPlan.providerReferenceImages,
             };
         }
-        default: return assertNever(model);
+        default: return assertNever(input);
     }
 }
 

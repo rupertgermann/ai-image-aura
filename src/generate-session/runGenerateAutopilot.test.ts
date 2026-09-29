@@ -192,10 +192,7 @@ describe('runGenerateAutopilot', () => {
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
             credential: 'http://127.0.0.1:1234',
             model: QWEN_IMAGE_2_1_IMAGE_MODEL,
-            aspectRatio: '16:9',
-            imageSize: '2K',
-            background: 'transparent',
-            batchSize: 1,
+            controls: { aspectRatio: '16:9', imageSize: '2K', background: 'transparent', batchSize: 1 },
         }));
         expect(createResponse).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'hosted-reasoning-key' }));
         expect(save).toHaveBeenCalledWith(expect.objectContaining({

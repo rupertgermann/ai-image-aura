@@ -5,7 +5,7 @@ import { resolveReasoningClient, type ReasoningClient } from './ReasoningClient'
 import { getProviderLabel, OPENAI_RESPONSES_MODEL, resolveReasoningModelConfig, type Provider, type ReasoningModelSlug } from '../utils/openaiModels';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { ActualImageParameters, ApiCostLedger } from '../db/types';
-import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
+import type { GenerateImageInput, GenerateImageSettings } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import { buildAutopilotLineageMetadata } from '../lineage/autopilotLineageMetadata';
 import { mergeApiCostLedgers } from '../costs/apiCost';
@@ -61,7 +61,7 @@ interface AutopilotReasoningDeps {
 interface CreateAutopilotSessionInput extends AutopilotReasoningInput {
     goal: string;
     initialPrompt: string;
-    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>;
+    settings: GenerateImageSettings;
     imageCredential: string;
     initialParentStepId?: string | null;
     initialCostLedger?: ApiCostLedger;
@@ -258,10 +258,9 @@ function resolveAutopilotReasoning(input: AutopilotReasoningInput, deps: Autopil
 }
 
 async function generateSingleImage(input: GenerateImageInput): Promise<AutopilotGeneratedImage> {
-    const results = await imageWorkflow.generate({
-        ...input,
-        batchSize: 1,
-    });
+    const request = { ...input };
+    request.controls = { ...input.controls, batchSize: 1 };
+    const results = await imageWorkflow.generate(request);
     const result = results.find((result) => result.status === 'success');
 
     if (!result) {
@@ -282,10 +281,10 @@ function normalizeAutopilotGeneratedImage(result: string | AutopilotGeneratedIma
 }
 
 function snapshotAutopilotSettings(
-    settings: Omit<GenerateImageInput, 'credential' | 'prompt'>,
-): Omit<GenerateImageInput, 'credential' | 'prompt'> {
-    return {
-        ...settings,
-        referenceImages: settings.referenceImages.slice(),
-    };
+    settings: GenerateImageSettings,
+): GenerateImageSettings {
+    const snapshot = { ...settings };
+    snapshot.controls = { ...settings.controls };
+    snapshot.referenceImages = settings.referenceImages.slice();
+    return snapshot;
 }

@@ -1,26 +1,39 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createImageWorkflow, type GenerateImageInput } from './ImageWorkflow';
 import { createLocalImageProvider, testLocalServerConnection } from './LocalImageProvider';
+import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
+import { FLUX_2_KLEIN_4B_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 
 const SERVER_URL = 'http://127.0.0.1:1234';
 const imageResponse = (images = ['image']) => new Response(JSON.stringify({
     data: images.map((b64_json) => ({ b64_json })),
 }));
 
-function generateInput(overrides: Partial<GenerateImageInput> = {}): GenerateImageInput {
+function generateInput(overrides: {
+    model?: typeof QWEN_IMAGE_2_1_IMAGE_MODEL | typeof FLUX_2_KLEIN_4B_IMAGE_MODEL;
+    credential?: string;
+    prompt?: string;
+    aspectRatio?: string;
+    imageSize?: string;
+    background?: 'auto' | 'transparent';
+    batchSize?: number;
+    style?: string;
+    lighting?: string;
+    palette?: string;
+    referenceImages?: File[];
+} = {}): GenerateImageInput {
+    const model = overrides.model ?? QWEN_IMAGE_2_1_IMAGE_MODEL;
+    const controls = { ...overrides, imageSize: overrides.imageSize ?? '1K' };
     return {
-        credential: SERVER_URL,
-        model: 'qwen-image-2.1',
-        prompt: 'a fox',
-        quality: 'medium',
-        aspectRatio: '1:1',
-        background: 'auto',
-        imageSize: '1K',
-        style: 'none',
-        lighting: 'none',
-        palette: 'none',
-        referenceImages: [],
-        ...overrides,
+        credential: overrides.credential ?? SERVER_URL,
+        prompt: overrides.prompt ?? 'a fox',
+        ...(model === FLUX_2_KLEIN_4B_IMAGE_MODEL
+            ? { model, controls: sanitizeImageModelControls(model, controls) }
+            : { model, controls: sanitizeImageModelControls(model, controls) }),
+        style: overrides.style ?? 'none',
+        lighting: overrides.lighting ?? 'none',
+        palette: overrides.palette ?? 'none',
+        referenceImages: overrides.referenceImages ?? [],
     };
 }
 
@@ -181,7 +194,7 @@ describe('local image workflow', () => {
     ])('requests Qwen %s at %s as %s', async (aspectRatio, imageSize, size) => {
         const fetchImpl = vi.fn<typeof fetch>(async () => imageResponse());
         const workflow = createImageWorkflow({ local: createLocalImageProvider(fetchImpl) });
-        await workflow.generate(generateInput({ aspectRatio, imageSize: imageSize as '1K' | '2K' }));
+        await workflow.generate(generateInput({ aspectRatio, imageSize }));
 
         const request = fetchImpl.mock.calls[0]?.[1] as RequestInit;
         expect(JSON.parse(String(request.body)).size).toBe(size);
@@ -192,7 +205,7 @@ describe('local image workflow', () => {
         const workflow = createImageWorkflow({ local: createLocalImageProvider(fetchImpl) });
 
         const results = await workflow.generate(generateInput({
-            model: 'flux-2-klein-4b',
+            model: FLUX_2_KLEIN_4B_IMAGE_MODEL,
             aspectRatio: '16:9',
             imageSize: '2K',
             background: 'transparent',

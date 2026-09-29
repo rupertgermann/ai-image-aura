@@ -21,9 +21,7 @@ describe('Image model controls', () => {
             expect(buildImageModelArchiveFields(model, controls)).toEqual({
                 quality, aspectRatio: '1536x1024', background: 'transparent', width: 1536, height: 1024,
             });
-            expect(mapImageModelGenerateProviderRequest(model, {
-                ...controls, aspectRatio: controls.size, referenceImages: [],
-            })).toEqual({ ...controls, referenceImages: [] });
+            expect(mapImageModelGenerateProviderRequest({ model, controls }, [])).toEqual({ ...controls, referenceImages: [] });
             expect(mapImageModelEditProviderRequest(model, {
                 quality, sourceImage: new File(['source'], 'source.png'), referenceImages: [],
             }).quality).toBe(quality);
@@ -149,27 +147,20 @@ describe('Image model controls', () => {
             new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
         );
 
-        expect(mapImageModelGenerateProviderRequest(OPENAI_IMAGE_MODEL, {
-            quality: 'high',
-            aspectRatio: ' 1536x1024 ',
-            background: 'transparent',
-            batchSize: 3,
-            referenceImages: references,
-        })).toEqual({
+        expect(mapImageModelGenerateProviderRequest({
+            model: OPENAI_IMAGE_MODEL,
+            controls: { quality: 'high', size: ' 1536x1024 ', background: 'transparent', batchSize: 3 },
+        }, references)).toEqual({
             quality: 'high',
             size: '1536x1024',
             background: 'transparent',
             batchSize: 3,
             referenceImages: references,
         });
-        expect(mapImageModelGenerateProviderRequest(NANO_BANANA_PRO_IMAGE_MODEL, {
-            quality: 'high',
-            aspectRatio: '1024x1536',
-            background: 'transparent',
-            batchSize: 4,
-            imageSize: '4K',
-            referenceImages: references,
-        })).toEqual({
+        expect(mapImageModelGenerateProviderRequest({
+            model: NANO_BANANA_PRO_IMAGE_MODEL,
+            controls: sanitizeImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, { aspectRatio: '1024x1536', imageSize: '4K', batchSize: 4 }),
+        }, references)).toEqual({
             aspectRatio: '2:3',
             imageSize: '4K',
             batchSize: 4,

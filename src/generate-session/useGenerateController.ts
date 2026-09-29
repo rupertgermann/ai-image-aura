@@ -4,7 +4,7 @@ import { downloadGeneratedImage } from '../download/download';
 import {
     generateSessionStore,
     getActiveGenerateArchiveFields,
-    getActiveGenerateControls,
+    getActiveGenerateModel,
     type GenerateBatchSnapshot,
     type GenerateDraft,
     type GenerateLineageSource,
@@ -442,7 +442,7 @@ export function useGenerateController({
         let completionNotification: CompletionNotificationPayload | null = null;
 
         try {
-            const controls = getActiveGenerateControls(draft);
+            const imageModel = getActiveGenerateModel(draft);
             const usedReferenceImages = buildImageModelGenerateReferenceRunPlan(draft.model, referenceImages).providerReferenceImages.slice();
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
@@ -455,13 +455,8 @@ export function useGenerateController({
             });
             const results = await workflow.generate({
                 credential: imageCredential,
-                model: draft.model,
+                ...imageModel,
                 prompt: draft.prompt,
-                quality: controls.quality,
-                aspectRatio: controls.aspectRatio,
-                background: controls.background,
-                batchSize: controls.batchSize,
-                imageSize: controls.imageSize,
                 style: draft.style,
                 lighting: draft.lighting,
                 palette: draft.palette,
@@ -724,7 +719,7 @@ export function useGenerateController({
 
 export function shouldStreamGeneratePartials(draft: GenerateDraft) {
     const model = resolveImageModelConfig(draft.model);
-    const controls = getActiveGenerateControls(draft);
+    const { controls } = getActiveGenerateModel(draft);
 
     return model.capabilities.partialImageStreaming && controls.batchSize === 1;
 }
