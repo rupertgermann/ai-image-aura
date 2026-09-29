@@ -75,7 +75,7 @@ function App() {
                     hasPrevious={archiveController.hasPreviousImage}
                     hasNext={archiveController.hasNextImage}
                     onClose={archiveController.closeImage}
-                    onEdit={() => archiveController.selectedImage && archiveController.editImage(archiveController.selectedImage)}
+                    onEdit={archiveController.editImage}
                     onDelete={() => archiveController.selectedImage && archiveController.requestDelete([archiveController.selectedImage.id])}
                     onCreateSimilar={archiveController.createSimilar}
                     onToggleFavorite={() => {

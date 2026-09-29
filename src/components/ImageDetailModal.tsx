@@ -23,7 +23,7 @@ interface ImageDetailModalProps {
     hasNext: boolean;
     hasPrevious: boolean;
     onClose: () => void;
-    onEdit: () => void;
+    onEdit: (image: ArchiveImage) => void;
     onDelete: () => void;
     onCreateSimilar: () => void;
     onToggleFavorite: () => void;
@@ -66,10 +66,6 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
         }
     };
 
-    const downloadImage = () => {
-        downloadArchiveImage(image);
-    };
-
     React.useEffect(() => {
         let cancelled = false;
 
@@ -105,7 +101,13 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
 
     const selectedEntry = timeline?.entries.find((entry) => entry.id === selectedStepId) ?? null;
     const selectedImage = selectedEntry ? images.find((entryImage) => entryImage.id === selectedEntry.archiveImageId) ?? null : null;
-    const displayedImageUrl = selectedImage?.url ?? selectedEntry?.replayImageDataUrl ?? image.url;
+    const displayedImage: ArchiveImage = selectedImage ?? (selectedEntry?.replayImageDataUrl ? {
+        ...image,
+        id: selectedEntry.archiveImageId,
+        url: selectedEntry.replayImageDataUrl,
+        timestamp: selectedEntry.timestamp,
+        layerStack: undefined,
+    } : image);
     const displayedImageLabel = selectedEntry?.label ?? 'Current Image';
     const comparisonError = selectedEntry && !selectedImage && !selectedEntry.replayImageDataUrl
         ? 'Selected step image is no longer available locally.'
@@ -125,7 +127,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                 <div className="modal-main">
                     <div className="modal-image-viewport">
                         <span className="comparison-label single-image-label">{displayedImageLabel}</span>
-                        <img src={displayedImageUrl} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" />
+                        <img src={displayedImage.url} alt={selectedEntry?.summary ?? image.prompt} className="modal-image" />
 
                         {comparisonError && <div className="comparison-error">{comparisonError}</div>}
 
@@ -147,10 +149,10 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             >
                                 <Star size={18} /> {image.favorite ? 'Favorited' : 'Favorite'}
                             </button>
-                            <button className="btn-primary" onClick={downloadImage}>
+                            <button className="btn-primary" onClick={() => downloadArchiveImage(displayedImage)}>
                                 <Download size={18} /> Download
                             </button>
-                            <button className="btn-ghost" onClick={onEdit}>
+                            <button className="btn-ghost" onClick={() => onEdit(displayedImage)}>
                                 <Edit2 size={18} /> Edit
                             </button>
                         </div>
