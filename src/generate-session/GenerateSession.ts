@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
 import type { LineageStore } from '../lineage/LineageStore';
-import { readGenerateLineageImageModel } from '../lineage/generateLineageMetadata';
+import { readLineageImageModel } from '../lineage/generateLineageMetadata';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
 import {
     buildImageModelArchiveFields,
@@ -383,7 +383,7 @@ export async function transferSimilarFromArchive(
     while (step && !visited.has(step.id)) {
         visited.add(step.id);
         if (step.stepType === 'generation' || step.stepType === 'reference-generation') {
-            const imageModel = readGenerateLineageImageModel(step.metadata);
+            const imageModel = readLineageImageModel(step.metadata);
             if (imageModel?.slug === QWEN_IMAGE_2_1_IMAGE_MODEL) {
                 await sessionStore.transferFromArchive(image, undefined, { qwenImage2_1: imageModel.controls });
                 return;
