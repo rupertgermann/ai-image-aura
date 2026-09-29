@@ -142,10 +142,7 @@ export function readLineageImageModel(metadata: Record<string, unknown>): Lineag
         return { slug: imageModel.slug, controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, imageModel.controls) };
     }
 
-    return buildLineageImageModel(
-        imageModel.slug,
-        sanitizeImageModelControls(imageModel.slug, imageModel.controls),
-    );
+    return buildLineageImageModel(imageModel.slug, imageModel.controls);
 }
 
 export function readGenerateLineageReferenceCount(metadata: Record<string, unknown>): number {
@@ -160,7 +157,7 @@ export function readGenerateLineageReferenceCount(metadata: Record<string, unkno
 
 export function buildLineageImageModel(
     model: ImageModelSlug,
-    controls: ImageModelControls,
+    controls: unknown,
 ): LineageImageModel {
     switch (model) {
         case OPENAI_SUNBURST_IMAGE_MODEL:

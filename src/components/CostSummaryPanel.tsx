@@ -6,13 +6,11 @@ import { calculateApiCostTotals, formatUsd } from '../costs/apiCost';
 interface CostSummaryPanelProps {
     ledger?: ApiCostLedger;
     compact?: boolean;
-    showBreakdown?: boolean;
 }
 
 const CostSummaryPanel: React.FC<CostSummaryPanelProps> = ({
     ledger,
     compact = false,
-    showBreakdown = true,
 }) => {
     if (!hasApiCostLedger(ledger)) {
         return null;
@@ -35,7 +33,7 @@ const CostSummaryPanel: React.FC<CostSummaryPanelProps> = ({
                 ))}
             </div>
 
-            {!compact && showBreakdown && (
+            {!compact && (
                 <div className="cost-breakdown-list">
                     {ledger.items.map((item) => (
                         <div key={item.id} className={`cost-line-item ${item.status}`}>

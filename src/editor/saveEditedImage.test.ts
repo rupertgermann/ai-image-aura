@@ -8,10 +8,6 @@ import { OPENAI_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiM
 class InMemoryLineageMetadataPort implements LineageMetadataPort {
     private readonly steps = new Map<string, LineageStep>();
 
-    async init(): Promise<void> {
-        return undefined;
-    }
-
     async save(step: LineageStep): Promise<void> {
         this.steps.set(step.id, step);
     }
@@ -30,10 +26,6 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
         return Array.from(this.steps.values())
             .filter((step) => step.parentStepId === parentStepId)
             .sort(compareSteps);
-    }
-
-    async remove(id: string): Promise<void> {
-        this.steps.delete(id);
     }
 }
 

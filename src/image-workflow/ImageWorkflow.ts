@@ -12,7 +12,6 @@ import { buildImageCostLedger } from '../costs/apiCost';
 import type { ApiCostLedger } from '../db/types';
 
 export type { ImageProvider, ImageProviderRegistry } from './ImageProvider';
-export { NANO_REFERENCE_LIMIT } from '../image-models/ImageModelControls';
 
 export type GenerateImageSettings = ImageModelSelection & {
     style: string;
@@ -103,7 +102,7 @@ export function createImageWorkflow(
                     model: model.apiModel,
                 });
 
-                if (!hasSuccessfulGeneratedImage(results) && batchSize === 1) {
+                if (!results.some((result) => result.status === 'success') && batchSize === 1) {
                     const [result] = results;
                     throw new Error(result?.status === 'failed'
                         ? result.error
@@ -229,14 +228,6 @@ const resolveImageProvider = (slug: ImageModelSlug = DEFAULT_IMAGE_MODEL, provid
 
     return { model, modelSlug: slug, provider };
 };
-
-export function getFirstSuccessfulGeneratedImage(results: GenerateBatchResult[]): string | null {
-    return results.find((result) => result.status === 'success')?.imageUrl ?? null;
-}
-
-function hasSuccessfulGeneratedImage(results: GenerateBatchResult[]): boolean {
-    return getFirstSuccessfulGeneratedImage(results) !== null;
-}
 
 function mapGenerateBatchResults(
     responses: ImageProviderResponse[],

@@ -191,23 +191,6 @@ export function readAutopilotGenerateReplayMetadata(metadata: Record<string, unk
     };
 }
 
-export function readAutopilotLineageReasoningModel(metadata: Record<string, unknown>): AutopilotLineageReasoningModel | null {
-    const reasoningModel = asRecord(metadata.reasoningModel);
-    if (reasoningModel && (isReasoningModelSlug(reasoningModel.slug) || reasoningModel.slug === 'gpt-5.4')) {
-        return {
-            slug: reasoningModel.slug,
-        };
-    }
-
-    if (isReasoningModelSlug(metadata.reasoningModel) || metadata.reasoningModel === 'gpt-5.4') {
-        return {
-            slug: metadata.reasoningModel,
-        };
-    }
-
-    return null;
-}
-
 function buildAutopilotReasoningModel(reasoningModel: string | undefined): AutopilotLineageReasoningModel | null {
     return isReasoningModelSlug(reasoningModel)
         ? { slug: reasoningModel }

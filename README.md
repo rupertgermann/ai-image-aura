@@ -324,7 +324,6 @@ docs/
   screens/         App screenshots
   DESIGN.md
   product-polish-validation.md
-  todo.md
 ```
 
 ## Documentation

@@ -92,11 +92,6 @@ export class SQLiteLineageMetadataPort {
 
         return (result as LineageStepRow[]).map(hydrateLineageStep);
     }
-
-    async remove(id: string): Promise<void> {
-        await this.init();
-        await this.sql.sql`DELETE FROM lineage_steps WHERE id = ${id}`;
-    }
 }
 
 function hydrateLineageStep(row: LineageStepRow): LineageStep {
