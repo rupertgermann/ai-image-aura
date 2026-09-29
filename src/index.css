@@ -418,8 +418,7 @@ textarea {
 .generate-container,
 .archive-container,
 .settings-container,
-.editor-container,
-.placeholder-view {
+.editor-container {
     display: flex;
     flex-direction: column;
     gap: var(--section-gap);
@@ -864,17 +863,7 @@ textarea.aura-input {
     flex-wrap: wrap;
 }
 
-.actual-parameters-panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--element-gap);
-    margin: 0 var(--spacing-16);
-    padding: var(--card-padding);
-    border: 1px solid var(--color-steel);
-    background: var(--color-snow);
-    color: var(--color-charcoal);
-}
-
+.actual-parameters-panel,
 .cost-summary-panel {
     display: flex;
     flex-direction: column;
@@ -1155,10 +1144,6 @@ textarea.aura-input {
     fill: currentColor;
 }
 
-.search-icon {
-    color: var(--color-muted);
-}
-
 .archive-search-icon {
     position: absolute;
     top: 50%;
@@ -1423,15 +1408,10 @@ textarea.aura-input {
     gap: var(--element-gap);
 }
 
-.layer-panel-actions,
-.history-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--element-gap);
-}
-
 .layer-panel-actions {
+    display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--element-gap);
 }
 
 .layer-selection-summary {
@@ -1990,22 +1970,6 @@ textarea.aura-input {
     font-size: var(--text-caption);
 }
 
-.comparison-view {
-    width: 100%;
-    height: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--spacing-24);
-}
-
-.comparison-pane {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-16);
-}
-
 .single-image-label {
     position: absolute;
     top: var(--spacing-16);
@@ -2189,16 +2153,6 @@ textarea.aura-input {
     }
 }
 
-@keyframes modal-bg-fade {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
-}
-
 @keyframes toast-in {
     from {
         transform: translateX(100%);
@@ -2237,10 +2191,6 @@ textarea.aura-input {
         width: 100%;
         height: auto;
         padding: 8px 12px;
-    }
-
-    .sidebar.collapsed {
-        width: 100%;
     }
 
     .sidebar-collapse-btn,

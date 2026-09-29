@@ -736,10 +736,6 @@ function coerceGptBatchSize(value: unknown, fallback: number): number {
 }
 
 function coerceNanoAspectRatio(value: unknown, fallback: NanoBananaAspectRatio): NanoBananaAspectRatio {
-    if (value === '1024x1024' || value === 'auto') return '1:1';
-    if (value === '1536x1024') return '3:2';
-    if (value === '1024x1536') return '2:3';
-
     if (typeof value !== 'string') {
         return fallback;
     }

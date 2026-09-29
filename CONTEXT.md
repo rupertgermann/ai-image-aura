@@ -12,7 +12,7 @@ and per AI transform in the Editor view. It is recorded on every saved image and
 every lineage step.
 
 Current values: `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`,
-`nano-banana-pro`, `qwen-image-2.1`.
+`nano-banana-pro`, `qwen-image-2.1`, `flux-2-klein-4b`.
 
 `gpt-image-2` is retired and appears only as a historical label,
 **GPT Image 2 (retired)**.

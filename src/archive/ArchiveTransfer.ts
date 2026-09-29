@@ -3,6 +3,7 @@ import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage, ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { LineageStep } from '../lineage/types';
 import type { LineageStore } from '../lineage/LineageStore';
+import { readEditorLineageTransformMask, type EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 import {
     ARCHIVE_MANIFEST_FILE,
     LINEAGE_MANIFEST_FILE,
@@ -221,7 +222,7 @@ async function addLayerStackToZip(zip: JSZip, imageId: string, layerStack: Archi
 async function addLineageAssetsToZip(zip: JSZip, steps: LineageStep[]): Promise<LineageStep[]> {
     return Promise.all(steps.map(async (step) => {
         const nextStep = cloneLineageStep(step);
-        const transformMask = getTransformMaskAsset(nextStep.metadata);
+        const transformMask = readEditorLineageTransformMask(nextStep.metadata);
 
         if (!transformMask?.dataUrl) {
             return nextStep;
@@ -241,7 +242,7 @@ async function addLineageAssetsToZip(zip: JSZip, steps: LineageStep[]): Promise<
 
 async function hydrateLineageAssetsFromZip(zip: JSZip, step: LineageStep, missingAssetFiles: string[]): Promise<LineageStep> {
     const nextStep = cloneLineageStep(step);
-    const transformMask = getTransformMaskAsset(nextStep.metadata);
+    const transformMask = readEditorLineageTransformMask(nextStep.metadata);
 
     if (!transformMask?.fileName || transformMask.dataUrl) {
         return nextStep;
@@ -320,13 +321,6 @@ async function imageUrlToBytes(url: string) {
     return Uint8Array.from(binary, (char) => char.charCodeAt(0));
 }
 
-interface TransferTransformMaskAsset {
-    assetId: string | null;
-    dataUrl?: string;
-    fileName?: string;
-    mimeType: string;
-}
-
 function cloneLineageStep(step: LineageStep): LineageStep {
     return {
         ...step,
@@ -334,37 +328,12 @@ function cloneLineageStep(step: LineageStep): LineageStep {
     };
 }
 
-function getTransformMaskAsset(metadata: Record<string, unknown>): TransferTransformMaskAsset | null {
-    const aiEdit = asRecord(metadata.aiEdit);
-    return readTransformMaskAsset(aiEdit?.transformMask) ?? readTransformMaskAsset(metadata.transformMaskAsset);
-}
-
-function setTransformMaskAsset(metadata: Record<string, unknown>, asset: TransferTransformMaskAsset) {
+function setTransformMaskAsset(metadata: Record<string, unknown>, asset: EditorLineageTransformMaskAsset) {
     const aiEdit = asRecord(metadata.aiEdit);
     if (aiEdit) {
         aiEdit.transformMask = asset;
     }
     metadata.transformMaskAsset = asset;
-}
-
-function readTransformMaskAsset(value: unknown): TransferTransformMaskAsset | null {
-    const asset = asRecord(value);
-    if (!asset) {
-        return null;
-    }
-
-    const dataUrl = typeof asset.dataUrl === 'string' ? asset.dataUrl : undefined;
-    const fileName = typeof asset.fileName === 'string' ? asset.fileName : undefined;
-    if (!dataUrl && !fileName) {
-        return null;
-    }
-
-    return {
-        assetId: typeof asset.assetId === 'string' ? asset.assetId : null,
-        ...(dataUrl ? { dataUrl } : {}),
-        ...(fileName ? { fileName } : {}),
-        mimeType: typeof asset.mimeType === 'string' ? asset.mimeType : 'image/png',
-    };
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

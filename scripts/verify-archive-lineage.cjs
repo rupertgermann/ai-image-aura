@@ -98,7 +98,8 @@ async function scenario(browser, kind) {
       await page.getByText('Changes not yet saved to archive', { exact: true }).waitFor();
     }
     await page.evaluate(async () => {
-      const { lineageStore } = await import('/src/lineage/LineageStore.ts');
+      const moduleUrl = performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname === '/src/lineage/LineageStore.ts').name;
+      const { lineageStore } = await import(moduleUrl);
       const save = lineageStore.save.bind(lineageStore);
       lineageStore.save = async () => {
         lineageStore.save = save;

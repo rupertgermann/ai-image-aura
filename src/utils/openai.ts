@@ -468,9 +468,10 @@ export const openAiResponsesClient: OpenAiResponsesClient = {
             throw new Error('No text response returned from OpenAI');
         }
 
+        const usage = extractResponseUsage(data);
         return {
             outputText,
-            ...(extractResponseUsage(data) !== undefined ? { usage: extractResponseUsage(data) } : {}),
+            ...(usage !== undefined ? { usage } : {}),
         };
     },
 };

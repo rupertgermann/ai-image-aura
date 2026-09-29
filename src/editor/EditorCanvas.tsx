@@ -3,11 +3,10 @@ import { Image as KonvaImage, Layer, Rect, Stage, Transformer } from 'react-konv
 import type Konva from 'konva';
 import type { ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { EditorAdjustments } from './layers';
-import { buildCanvasFilter, renderLayerStackToBlob, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
+import { buildCanvasFilter, renderLayerStackToDataUrl, toCompositeOperation } from './renderLayerStack';
 
 export interface EditorCanvasHandle {
     exportDataUrl: () => Promise<string>;
-    exportBlob: () => Promise<Blob>;
 }
 
 interface EditorCanvasProps {
@@ -43,7 +42,6 @@ export const EditorCanvas = forwardRef<EditorCanvasHandle, EditorCanvasProps>(({
 
     useImperativeHandle(ref, () => ({
         exportDataUrl: () => renderLayerStackToDataUrl(layerStack, adjustments),
-        exportBlob: () => renderLayerStackToBlob(layerStack, adjustments),
     }), [adjustments, layerStack]);
 
     const canvasFilter = buildCanvasFilter(adjustments);

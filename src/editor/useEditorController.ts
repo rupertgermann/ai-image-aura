@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { imageWorkflow, type EditImageInput, type EditImageResult } from '../image-workflow/ImageWorkflow';
+import { imageWorkflow, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
 import type { ImageModelSlug } from '../utils/openaiModels';
 import {
     applyAiTransformResultToDraft,
@@ -64,13 +64,13 @@ export function useEditorController({
         try {
             const dataUrl = await exportDataUrl();
             const references = await serializeReferences();
-            await Promise.resolve(onSave(dataUrl, buildEditorSaveContext({
+            await onSave(dataUrl, buildEditorSaveContext({
                 isCopy,
                 references,
                 adjustments,
                 draft,
                 aiTransformProvenance,
-            })));
+            }));
         } catch (err: unknown) {
             setAiError(err instanceof Error ? err.message : 'Failed to save image');
         } finally {
@@ -155,8 +155,6 @@ export function useEditorController({
     };
 }
 
-type EditImage = (input: EditImageInput) => Promise<string | EditImageResult>;
-
 export interface RunEditorAiTransformOptions {
     imageCredential: string;
     model: ImageModelSlug;
@@ -166,7 +164,7 @@ export interface RunEditorAiTransformOptions {
     referenceImages: File[];
     maskImage?: File | Blob | null;
     makeId: () => string;
-    editImage?: EditImage;
+    editImage?: ImageWorkflow['edit'];
     render?: AiTransformRenderer;
 }
 
@@ -189,7 +187,7 @@ export async function runEditorAiTransform({
         referenceImages,
         render,
     });
-    const editResult = normalizeEditImageResult(await editImage({
+    const editResult = await editImage({
         credential: imageCredential,
         model,
         prompt: trimmedPrompt,
@@ -202,7 +200,7 @@ export async function runEditorAiTransform({
         referenceImages: editInput.referenceImages,
         maskImage,
         quality: 'medium',
-    }));
+    });
     const transformMask = maskImage
         ? await blobToTransformMaskAsset(maskImage)
         : null;
@@ -253,10 +251,4 @@ export function buildEditorSaveContext({
         aiResultLayerId: saveProvenance?.aiResultLayerId,
         aiResultLayerName: saveProvenance?.aiResultLayerName,
     };
-}
-
-function normalizeEditImageResult(result: string | EditImageResult): EditImageResult {
-    return typeof result === 'string'
-        ? { imageUrl: result }
-        : result;
 }

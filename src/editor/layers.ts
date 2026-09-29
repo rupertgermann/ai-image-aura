@@ -317,26 +317,6 @@ export function duplicateLayers(
     return { layerStack: { ...layerStack, layers }, duplicatedIds };
 }
 
-export function selectTopmostVisibleLayer(layerStack: ArchiveLayerStack, point: { x: number; y: number }): string | null {
-    for (let index = layerStack.layers.length - 1; index >= 0; index -= 1) {
-        const layer = layerStack.layers[index];
-        if (!layer || !layer.visible || layer.kind === 'base') {
-            continue;
-        }
-
-        if (
-            point.x >= layer.x
-            && point.x <= layer.x + layer.width
-            && point.y >= layer.y
-            && point.y <= layer.y + layer.height
-        ) {
-            return layer.id;
-        }
-    }
-
-    return null;
-}
-
 export interface LayerBounds {
     x: number;
     y: number;
