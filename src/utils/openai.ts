@@ -143,7 +143,7 @@ async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiI
 
     if (!response.ok) {
         const errorData = await response.json().catch((): { error?: { message?: string } } | null => null);
-        throw new Error(errorData.error?.message || `OpenAI API Error: ${response.status}`);
+        throw new Error(errorData?.error?.message || `OpenAI API Error: ${response.status}`);
     }
 
     if (streamPartialImages && isEventStreamResponse(response)) {
