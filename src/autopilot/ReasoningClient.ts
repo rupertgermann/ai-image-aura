@@ -97,22 +97,34 @@ export function extractGeminiReasoningText(data: unknown) {
         return null;
     }
 
-    const record = data as {
-        candidates?: Array<{
-            content?: {
-                parts?: Array<{ text?: unknown }>;
-            };
-        }>;
-    };
+    if (!('candidates' in data) || data.candidates === undefined) {
+        return null;
+    }
+    if (!Array.isArray(data.candidates)) {
+        throw new Error('Malformed response from Google Gemini');
+    }
 
-    const text = record.candidates
-        ?.flatMap((candidate) => candidate.content?.parts ?? [])
-        .map((part) => typeof part.text === 'string' ? part.text.trim() : '')
-        .filter(Boolean)
-        .join('\n')
-        .trim();
+    const textParts: string[] = [];
+    for (const candidate of data.candidates) {
+        if (!isRecord(candidate)) throw new Error('Malformed response from Google Gemini');
+        if (candidate.content === undefined) continue;
+        if (!isRecord(candidate.content)) throw new Error('Malformed response from Google Gemini');
+        const parts = candidate.content.parts;
+        if (parts === undefined) continue;
+        if (!Array.isArray(parts)) throw new Error('Malformed response from Google Gemini');
+        for (const part of parts) {
+            if (!isRecord(part)) throw new Error('Malformed response from Google Gemini');
+            if (typeof part.text === 'string' && part.text.trim()) {
+                textParts.push(part.text.trim());
+            }
+        }
+    }
 
-    return text || null;
+    return textParts.join('\n') || null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function extractGeminiReasoningUsage(data: unknown): Record<string, number> | null {

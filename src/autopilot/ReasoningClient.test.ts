@@ -7,6 +7,20 @@ import {
 } from './ReasoningClient';
 
 describe('ReasoningClient', () => {
+    it.each([
+        { candidates: {} },
+        { candidates: [null] },
+        { candidates: [{ content: 'invalid' }] },
+        { candidates: [{ content: { parts: {} } }] },
+        { candidates: [{ content: { parts: [null] } }] },
+        { candidates: [{ content: { parts: [{ text: 'usable' }] } }, null] },
+    ])('rejects malformed Gemini candidates deliberately: %j', async (payload) => {
+        const client = createGeminiReasoningClient(vi.fn(async () => new Response(JSON.stringify(payload))));
+        await expect(client.createResponse({
+            apiKey: 'google-key', systemPrompt: 'system', userText: 'user',
+        })).rejects.toThrow('Malformed response from Google Gemini');
+    });
+
     it('builds a Gemini reasoning request with vision input and JSON schema', () => {
         const body = buildGeminiReasoningRequest({
             apiKey: 'google-key',

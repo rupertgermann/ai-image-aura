@@ -4,6 +4,19 @@ import { openAiResponsesClient } from './openai';
 import { OPENAI_IMAGE_MODEL } from './openaiModels';
 
 describe('openAiImageClient', () => {
+    it.each(['createImage', 'createImages'] as const)('%s preserves HTTP errors for generation and editing', async (method) => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream unavailable', { status: 502 })));
+        try {
+            for (const referenceImages of [[], [new File(['source'], 'source.png', { type: 'image/png' })]]) {
+                await expect(openAiImageClient[method]({
+                    apiKey: 'sk-test', prompt: 'a cat', referenceImages,
+                })).rejects.toThrow('OpenAI API Error: 502');
+            }
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('sends %s quality and single-image streaming for generations and masked edits', async (model) => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ b64_json: 'result' }] })));
         const reference = new File(['source'], 'source.png', { type: 'image/png' });
