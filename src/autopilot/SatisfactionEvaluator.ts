@@ -1,4 +1,4 @@
-import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
+import type { ReasoningClient } from './ReasoningClient';
 import { buildReasoningCostLedger } from '../costs/apiCost';
 import type { ApiCostLedger } from '../db/types';
 
@@ -31,7 +31,7 @@ export interface SatisfactionEvaluator {
     evaluate(input: { imageDataUrl: string; goal: string; apiKey: string }): Promise<SatisfactionEvaluation>;
 }
 
-export function createSatisfactionEvaluator(client: ReasoningClient = openAiReasoningClient): SatisfactionEvaluator {
+export function createSatisfactionEvaluator(client: ReasoningClient): SatisfactionEvaluator {
     return {
         async evaluate(input) {
             const response = await client.createResponse({
@@ -100,8 +100,6 @@ function normalizeFeedback(value: unknown) {
         .filter(Boolean)
         .slice(0, 4);
 }
-
-export const satisfactionEvaluator = createSatisfactionEvaluator();
 
 function buildReasoningCost(client: ReasoningClient, usage: unknown): { costLedger?: ApiCostLedger } {
     if (!client.provider || !client.model) {

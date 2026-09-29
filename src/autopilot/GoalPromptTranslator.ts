@@ -1,4 +1,4 @@
-import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
+import type { ReasoningClient } from './ReasoningClient';
 import { buildReasoningCostLedger } from '../costs/apiCost';
 import type { ApiCostLedger } from '../db/types';
 
@@ -20,7 +20,7 @@ export interface GoalPromptTranslation {
     costLedger?: ApiCostLedger;
 }
 
-export function createGoalPromptTranslator(client: ReasoningClient = openAiReasoningClient): GoalPromptTranslator {
+export function createGoalPromptTranslator(client: ReasoningClient): GoalPromptTranslator {
     return {
         async translate(input) {
             const response = await client.createResponse({
@@ -41,8 +41,6 @@ export function createGoalPromptTranslator(client: ReasoningClient = openAiReaso
         },
     };
 }
-
-export const goalPromptTranslator = createGoalPromptTranslator();
 
 function buildReasoningCost(client: ReasoningClient, usage: unknown): { costLedger?: ApiCostLedger } {
     if (!client.provider || !client.model) {

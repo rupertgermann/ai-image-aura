@@ -16,11 +16,7 @@ import {
     buildActualParameterDetails,
     getRequestedGenerateParameters,
 } from '../generate-session/actualParameters';
-import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS } from '../autopilot/AutopilotSession';
-import { createGoalPromptTranslator } from '../autopilot/GoalPromptTranslator';
-import { createPromptRefiner } from '../autopilot/PromptRefiner';
-import { createSatisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
-import { resolveReasoningClient } from '../autopilot/ReasoningClient';
+import { DEFAULT_AUTOPILOT_MAX_ITERATIONS, DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD, MAX_AUTOPILOT_ITERATIONS, translateAutopilotGoal } from '../autopilot/AutopilotSession';
 import type { CompletionNotificationPort } from '../app/CompletionNotificationPort';
 import {
     buildImageModelGenerateReferenceRunPlan,
@@ -139,10 +135,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const imageCredential = getProviderCredential(activeModel.provider);
     const activeReasoningModel = resolveReasoningModelConfig(reasoningModel);
     const reasoningApiKey = getProviderCredential(activeReasoningModel.provider);
-    const reasoningClient = useMemo(() => resolveReasoningClient(reasoningModel), [reasoningModel]);
-    const goalPromptTranslator = useMemo(() => createGoalPromptTranslator(reasoningClient), [reasoningClient]);
-    const satisfactionEvaluator = useMemo(() => createSatisfactionEvaluator(reasoningClient), [reasoningClient]);
-    const promptRefiner = useMemo(() => createPromptRefiner(reasoningClient), [reasoningClient]);
     const referenceCollection = useReferenceImageCollection();
     const referenceImages = referenceCollection.files;
     const referenceRunPlan = useMemo(
@@ -173,7 +165,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         clear,
     } = useGenerateController({
         imageCredential,
-        reasoningApiKey,
+        getProviderCredential,
         reasoningModel,
         draft,
         setDraft,
@@ -181,8 +173,6 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         replaceReferences: referenceCollection.replaceWithDataUrls,
         serializeReferences: referenceCollection.serialize,
         onSaveImage,
-        evaluate: satisfactionEvaluator.evaluate,
-        refine: promptRefiner.refine,
         completionNotificationsEnabled,
         completionNotificationPort,
         isDocumentHidden,
@@ -241,7 +231,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         setTranslatingGoal(true);
         setAutopilotNotice(null);
         try {
-            const translation = await goalPromptTranslator.translate({ goal, apiKey: reasoningApiKey });
+            const translation = await translateAutopilotGoal({ goal, reasoningModel, getProviderCredential });
             updateDraft({ prompt: translation.prompt, isSaved: false });
             setGoalTranslationCostContext(translation.costLedger ? {
                 goal,

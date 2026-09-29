@@ -1,5 +1,8 @@
-import { promptRefiner } from './PromptRefiner';
-import { satisfactionEvaluator } from './SatisfactionEvaluator';
+import { createPromptRefiner } from './PromptRefiner';
+import { createSatisfactionEvaluator } from './SatisfactionEvaluator';
+import { createGoalPromptTranslator } from './GoalPromptTranslator';
+import { resolveReasoningClient, type ReasoningClient } from './ReasoningClient';
+import { getProviderLabel, OPENAI_RESPONSES_MODEL, resolveReasoningModelConfig, type Provider, type ReasoningModelSlug } from '../utils/openaiModels';
 import type { LineageStore } from '../lineage/LineageStore';
 import type { ActualImageParameters, ApiCostLedger } from '../db/types';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
@@ -46,20 +49,25 @@ export interface AutopilotSession {
     cancel(): void;
 }
 
-interface CreateAutopilotSessionInput {
+interface AutopilotReasoningInput {
+    reasoningModel?: ReasoningModelSlug;
+    getProviderCredential: (provider: Provider) => string | null;
+}
+
+interface AutopilotReasoningDeps {
+    reasoningClient?: Pick<ReasoningClient, 'createResponse'>;
+}
+
+interface CreateAutopilotSessionInput extends AutopilotReasoningInput {
     goal: string;
     initialPrompt: string;
     settings: Omit<GenerateImageInput, 'credential' | 'prompt'>;
     imageCredential: string;
-    reasoningApiKey: string;
-    reasoningModel?: string;
     initialParentStepId?: string | null;
     initialCostLedger?: ApiCostLedger;
     maxIterations?: number;
     satisfactionThreshold?: number;
     generate?: (input: GenerateImageInput) => Promise<string | AutopilotGeneratedImage>;
-    evaluate?: (input: { imageDataUrl: string; goal: string; apiKey: string }) => Promise<{ score: number; feedback: string[]; costLedger?: ApiCostLedger }>;
-    refine?: (input: { goal: string; currentPrompt: string; feedback: string[]; apiKey: string }) => Promise<string | { prompt: string; costLedger?: ApiCostLedger }>;
     lineageStore: Pick<LineageStore, 'save'>;
     callbacks?: ProgressCallbacks;
     makeRunId?: () => string;
@@ -67,10 +75,12 @@ interface CreateAutopilotSessionInput {
 
 class DefaultAutopilotSession implements AutopilotSession {
     private readonly input: CreateAutopilotSessionInput;
+    private readonly reasoning: ReturnType<typeof resolveAutopilotReasoning>;
     private cancelled = false;
 
-    constructor(input: CreateAutopilotSessionInput) {
+    constructor(input: CreateAutopilotSessionInput, deps: AutopilotReasoningDeps) {
         this.input = input;
+        this.reasoning = resolveAutopilotReasoning(input, deps);
     }
 
     cancel(): void {
@@ -79,11 +89,11 @@ class DefaultAutopilotSession implements AutopilotSession {
 
     async run(): Promise<AutopilotSessionResult> {
         const generate = this.input.generate ?? generateSingleImage;
-        const evaluate = this.input.evaluate ?? ((input) => satisfactionEvaluator.evaluate(input));
-        const refine = this.input.refine ?? ((input) => promptRefiner.refine(input));
+        const { evaluate } = createSatisfactionEvaluator(this.reasoning.client);
+        const { refine } = createPromptRefiner(this.reasoning.client);
         const maxIterations = Math.max(1, Math.min(MAX_AUTOPILOT_ITERATIONS, this.input.maxIterations ?? DEFAULT_AUTOPILOT_MAX_ITERATIONS));
         const satisfactionThreshold = Math.max(0, Math.min(100, this.input.satisfactionThreshold ?? DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD));
-        const reasoningApiKey = this.input.reasoningApiKey;
+        const reasoningApiKey = this.reasoning.apiKey;
         const iterations: AutopilotIteration[] = [];
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
         const runSettings = snapshotAutopilotSettings(this.input.settings);
@@ -121,7 +131,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                     timestamp: new Date().toISOString(),
                     metadata: buildAutopilotLineageMetadata({
                         goal: this.input.goal,
-                        reasoningModel: this.input.reasoningModel,
+                        reasoningModel: this.reasoning.model,
                         iterationNumber,
                         evaluation,
                         prompt: currentPrompt,
@@ -161,12 +171,12 @@ class DefaultAutopilotSession implements AutopilotSession {
                     return buildResult('max-iterations', iterations, null, runCostLedger);
                 }
 
-                const refinement = normalizePromptRefinement(await refine({
+                const refinement = await refine({
                     goal: this.input.goal,
                     currentPrompt,
                     feedback: evaluation.feedback,
                     apiKey: reasoningApiKey,
-                }));
+                });
                 runCostLedger = mergeApiCostLedgers(runCostLedger, refinement.costLedger);
                 currentPrompt = refinement.prompt;
             } catch (error) {
@@ -219,8 +229,32 @@ function pickBetterIteration(best: AutopilotIteration | null, candidate: Autopil
     return best;
 }
 
-export function createAutopilotSession(input: CreateAutopilotSessionInput): AutopilotSession {
-    return new DefaultAutopilotSession(input);
+export function createAutopilotSession(input: CreateAutopilotSessionInput, deps: AutopilotReasoningDeps = {}): AutopilotSession {
+    return new DefaultAutopilotSession(input, deps);
+}
+
+export async function translateAutopilotGoal(input: AutopilotReasoningInput & { goal: string }) {
+    const { client, apiKey } = resolveAutopilotReasoning(input);
+    return createGoalPromptTranslator(client).translate({ goal: input.goal, apiKey });
+}
+
+function resolveAutopilotReasoning(input: AutopilotReasoningInput, deps: AutopilotReasoningDeps = {}) {
+    const model = input.reasoningModel ?? OPENAI_RESPONSES_MODEL;
+    const config = resolveReasoningModelConfig(model);
+    const apiKey = input.getProviderCredential(config.provider);
+    if (!apiKey) {
+        throw new Error(`Please set the ${getProviderLabel(config.provider)} API key for the reasoning model in Settings first.`);
+    }
+
+    return {
+        model,
+        apiKey,
+        client: {
+            provider: config.provider,
+            model: config.apiModel,
+            createResponse: deps.reasoningClient?.createResponse ?? resolveReasoningClient(model).createResponse,
+        },
+    };
 }
 
 async function generateSingleImage(input: GenerateImageInput): Promise<AutopilotGeneratedImage> {
@@ -244,12 +278,6 @@ async function generateSingleImage(input: GenerateImageInput): Promise<Autopilot
 function normalizeAutopilotGeneratedImage(result: string | AutopilotGeneratedImage): AutopilotGeneratedImage {
     return typeof result === 'string'
         ? { imageDataUrl: result }
-        : result;
-}
-
-function normalizePromptRefinement(result: string | { prompt: string; costLedger?: ApiCostLedger }) {
-    return typeof result === 'string'
-        ? { prompt: result }
         : result;
 }
 

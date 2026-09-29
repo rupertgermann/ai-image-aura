@@ -17,15 +17,13 @@ import type { GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { createAutopilotSession, type AutopilotIteration, type AutopilotSession, type AutopilotSessionResult } from '../autopilot/AutopilotSession';
-import { promptRefiner } from '../autopilot/PromptRefiner';
-import { satisfactionEvaluator } from '../autopilot/SatisfactionEvaluator';
 import {
     browserCompletionNotificationPort,
     type CompletionNotificationPayload,
     type CompletionNotificationPort,
 } from '../app/CompletionNotificationPort';
 import { dataURLtoFile } from '../utils/file';
-import { getProviderLabel, isReasoningModelSlug, LOCAL_PROVIDER, resolveImageModelConfig, resolveReasoningModelConfig } from '../utils/openaiModels';
+import { getProviderLabel, LOCAL_PROVIDER, resolveImageModelConfig, type Provider, type ReasoningModelSlug } from '../utils/openaiModels';
 
 export type { GenerateResultSlot };
 
@@ -39,8 +37,8 @@ interface AutopilotProgressState {
 
 interface UseGenerateControllerOptions {
     imageCredential: string | null;
-    reasoningApiKey?: string | null;
-    reasoningModel?: string;
+    getProviderCredential: (provider: Provider) => string | null;
+    reasoningModel?: ReasoningModelSlug;
     draft: GenerateDraft;
     setDraft: Dispatch<SetStateAction<GenerateDraft>>;
     referenceImages: File[];
@@ -51,8 +49,6 @@ interface UseGenerateControllerOptions {
     session?: Pick<GenerateSessionStore, 'loadCurrentBatch' | 'saveCurrentBatch' | 'clearCurrentResult' | 'consumeTransferredReferences' | 'loadLineageSource' | 'saveLineageSource' | 'clearLineageSource'>;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     createAutopilot?: typeof createAutopilotSession;
-    evaluate?: typeof satisfactionEvaluator.evaluate;
-    refine?: typeof promptRefiner.refine;
     completionNotificationsEnabled?: boolean;
     completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
     isDocumentHidden?: () => boolean;
@@ -341,7 +337,7 @@ function createAutopilotCompletionNotification(result: AutopilotSessionResult): 
 
 export function useGenerateController({
     imageCredential,
-    reasoningApiKey,
+    getProviderCredential,
     reasoningModel,
     draft,
     setDraft,
@@ -353,8 +349,6 @@ export function useGenerateController({
     session = generateSessionStore,
     workflow = imageWorkflow,
     createAutopilot = createAutopilotSession,
-    evaluate,
-    refine,
     completionNotificationsEnabled = false,
     completionNotificationPort = browserCompletionNotificationPort,
     isDocumentHidden = () => typeof document !== 'undefined' && document.hidden,
@@ -534,12 +528,6 @@ export function useGenerateController({
             return null;
         }
 
-        if (!reasoningApiKey) {
-            const provider = resolveReasoningModelConfig(isReasoningModelSlug(reasoningModel) ? reasoningModel : undefined).provider;
-            setError(`Please set the ${getProviderLabel(provider)} API key for the reasoning model in Settings first.`);
-            return null;
-        }
-
         if (!draft.prompt.trim() || !input.goal.trim()) {
             return null;
         }
@@ -567,7 +555,7 @@ export function useGenerateController({
             const outcome = await runGenerateAutopilot({
                 goal: input.goal,
                 imageCredential,
-                reasoningApiKey,
+                getProviderCredential,
                 reasoningModel,
                 draft,
                 referenceImages: runReferenceImages,
@@ -575,8 +563,6 @@ export function useGenerateController({
                 lineageStore: lineage,
                 workflow,
                 createSession: createAutopilot,
-                evaluate,
-                refine,
                 initialCostLedger: input.initialCostLedger,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
@@ -650,7 +636,7 @@ export function useGenerateController({
             runningRef.current = false;
             setLoading(false);
         }
-    }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, evaluate, isDocumentHidden, lineage, reasoningApiKey, reasoningModel, referenceImages, refine, session, updateDraft, workflow]);
+    }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, getProviderCredential, isDocumentHidden, lineage, reasoningModel, referenceImages, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
         autopilotSessionRef.current?.cancel();

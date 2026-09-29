@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runGenerateAutopilot } from './runGenerateAutopilot';
+import { createAutopilotSession } from '../autopilot/AutopilotSession';
 import { NANO_BANANA_PRO_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import type { LineageStep, SaveLineageStepInput } from '../lineage/LineageStore';
@@ -55,7 +56,7 @@ describe('runGenerateAutopilot', () => {
         const outcome = await runGenerateAutopilot({
             goal: 'A cinematic portrait',
             imageCredential: 'key',
-            reasoningApiKey: 'reasoning-key',
+            getProviderCredential: () => 'reasoning-key',
             draft: {
                 model: NANO_BANANA_PRO_IMAGE_MODEL,
                 prompt: 'prompt 1',
@@ -88,10 +89,12 @@ describe('runGenerateAutopilot', () => {
                 generate,
                 serializeReferences,
             },
-            evaluate: vi.fn()
-                .mockResolvedValueOnce({ score: 45, feedback: ['Needs stronger lighting.'] })
-                .mockResolvedValueOnce({ score: 88, feedback: ['Best so far.'] }),
-            refine: vi.fn().mockResolvedValueOnce('best prompt'),
+            createSession: (input) => createAutopilotSession(input, { reasoningClient: {
+                createResponse: vi.fn()
+                    .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 45, feedback: ['Needs stronger lighting.'] }) })
+                    .mockResolvedValueOnce({ outputText: 'best prompt' })
+                    .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 88, feedback: ['Best so far.'] }) }),
+            } }),
             maxIterations: 2,
             satisfactionThreshold: 90,
         });
@@ -107,6 +110,7 @@ describe('runGenerateAutopilot', () => {
                 status: 'success',
                 imageUrl: 'data:image/png;base64,iteration-2',
                 isSaved: false,
+                costLedger: expect.any(Object),
                 actualParameters: {
                     elapsedMs: 200,
                     size: '4096x2304',
@@ -143,28 +147,16 @@ describe('runGenerateAutopilot', () => {
                 note: 'Local inference — no API charge.',
             }],
         };
-        const reasoningCost: ApiCostLedger = {
-            version: 1,
-            currency: 'USD',
-            items: [{
-                id: 'reasoning',
-                kind: 'reasoning',
-                operation: 'evaluation',
-                provider: 'openai',
-                model: 'gpt-6-sol',
-                label: 'Satisfaction evaluation',
-                status: 'calculated',
-                currency: 'USD',
-                amountUsd: 0.003,
-            }],
-        };
         const generate = vi.fn(async () => [{
             slotIndex: 0,
             status: 'success' as const,
             imageUrl: 'data:image/png;base64,qwen-result',
             costLedger: imageCost,
         }]);
-        const evaluate = vi.fn(async () => ({ score: 95, feedback: ['Good.'], costLedger: reasoningCost }));
+        const createResponse = vi.fn(async () => ({
+            outputText: JSON.stringify({ score: 95, feedback: ['Good.'] }),
+            usage: { input_tokens: 600, output_tokens: 100 },
+        }));
         const save = vi.fn(async (step: SaveLineageStepInput): Promise<LineageStep> => ({
             ...step,
             id: 'qwen-step',
@@ -173,7 +165,7 @@ describe('runGenerateAutopilot', () => {
         const outcome = await runGenerateAutopilot({
             goal: 'A paper crane',
             imageCredential: 'http://127.0.0.1:1234',
-            reasoningApiKey: 'hosted-reasoning-key',
+            getProviderCredential: () => 'hosted-reasoning-key',
             reasoningModel: 'gpt-6-sol',
             draft: {
                 ...DEFAULT_GENERATE_DRAFT,
@@ -192,7 +184,7 @@ describe('runGenerateAutopilot', () => {
             },
             lineageStore: { save },
             workflow: { generate, serializeReferences: vi.fn(async () => []) },
-            evaluate,
+            createSession: (input) => createAutopilotSession(input, { reasoningClient: { createResponse } }),
             maxIterations: 1,
             satisfactionThreshold: 90,
         });
@@ -205,7 +197,7 @@ describe('runGenerateAutopilot', () => {
             background: 'transparent',
             batchSize: 1,
         }));
-        expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'hosted-reasoning-key' }));
+        expect(createResponse).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'hosted-reasoning-key' }));
         expect(save).toHaveBeenCalledWith(expect.objectContaining({
             metadata: expect.objectContaining({
                 imageModel: {

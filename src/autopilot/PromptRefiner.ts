@@ -1,4 +1,4 @@
-import { openAiReasoningClient, type ReasoningClient } from './ReasoningClient';
+import type { ReasoningClient } from './ReasoningClient';
 import { buildReasoningCostLedger } from '../costs/apiCost';
 import type { ApiCostLedger } from '../db/types';
 
@@ -20,7 +20,7 @@ export interface PromptRefinement {
     costLedger?: ApiCostLedger;
 }
 
-export function createPromptRefiner(client: ReasoningClient = openAiReasoningClient): PromptRefiner {
+export function createPromptRefiner(client: ReasoningClient): PromptRefiner {
     return {
         async refine(input) {
             const response = await client.createResponse({
@@ -45,8 +45,6 @@ export function createPromptRefiner(client: ReasoningClient = openAiReasoningCli
         },
     };
 }
-
-export const promptRefiner = createPromptRefiner();
 
 function buildReasoningCost(client: ReasoningClient, usage: unknown): { costLedger?: ApiCostLedger } {
     if (!client.provider || !client.model) {
