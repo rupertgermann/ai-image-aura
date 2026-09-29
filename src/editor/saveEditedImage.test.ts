@@ -341,6 +341,7 @@ describe('saveArchiveImage edit', () => {
     it('does not write provenance when archive save fails', async () => {
         const lineage = createStore();
         await seedSourceLineage(lineage);
+        const sourceSteps = structuredClone(await lineage.getByArchiveImageId('source-image'));
         const error = new Error('disk full');
 
         await expect(saveArchiveImage({ kind: 'edit', sourceImage: createArchiveImage(), updatedUrl: 'data:image/png;base64,failed', context: {
@@ -349,10 +350,9 @@ describe('saveArchiveImage edit', () => {
             aiEditPrompt: 'make it cinematic',
         } }, { archive: { get: async () => null, save: vi.fn(async () => {
                 throw error;
-            }), remove: vi.fn() }, lineage: lineage })).rejects.toThrow(error);
+            }), remove: vi.fn() }, lineage: lineage, makeId: () => 'failed-copy' })).rejects.toThrow(error);
 
-        const steps = await lineage.getByArchiveImageId('source-image');
-        expect(steps).toHaveLength(2);
+        await expect(lineage.getByArchiveImageId('source-image')).resolves.toEqual(sourceSteps);
         await expect(lineage.getByArchiveImageId('failed-copy')).resolves.toEqual([]);
     });
 });

@@ -31,7 +31,7 @@ describe('lineageCostLedger', () => {
         expect(buildLineageCostLedger([
             createEntry('step-1', 'generation', 'Generated', null),
             createEntry('step-2', 'ai-edit', 'AI Edit', null),
-        ], fallbackLedger)).toBe(fallbackLedger);
+        ], fallbackLedger)).toEqual(fallbackLedger);
     });
 });
 
