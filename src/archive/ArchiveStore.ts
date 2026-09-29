@@ -27,6 +27,7 @@ export interface ArchiveStore {
     list(): Promise<ArchiveImage[]>;
     get(id: string): Promise<ArchiveImage | null>;
     save(input: SaveArchiveImageInput): Promise<ArchiveImage>;
+    setFavorite(id: string, favorite: boolean): Promise<void>;
     remove(id: string): Promise<void>;
 }
 
@@ -40,6 +41,7 @@ interface ArchiveMetadataPort {
     list(): Promise<ArchiveMetadataRecord[]>;
     get(id: string): Promise<ArchiveMetadataRecord | null>;
     save(record: ArchiveMetadataRecord): Promise<void>;
+    setFavorite(id: string, favorite: boolean): Promise<void>;
     remove(id: string): Promise<void>;
 }
 
@@ -147,6 +149,10 @@ class LocalArchiveStore implements ArchiveStore {
             costLedger: input.costLedger,
             layerStack: input.layerStack,
         };
+    }
+
+    async setFavorite(id: string, favorite: boolean): Promise<void> {
+        await this.metadata.setFavorite(id, favorite);
     }
 
     async remove(id: string): Promise<void> {

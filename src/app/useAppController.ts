@@ -33,7 +33,7 @@ export function useAppController() {
     const handleArchiveError = useCallback((error: Error, operation: 'load' | 'save' | 'delete') => {
         notifyError(error, `Archive ${operation} failed`);
     }, [notifyError]);
-    const { images, loading: archiveLoading, error: archiveError, addImage, publishSavedImage, deleteImage, refresh } = useImageArchive({
+    const { images, loading: archiveLoading, error: archiveError, setFavorite, publishSavedImage, deleteImage, refresh } = useImageArchive({
         onError: handleArchiveError,
     });
     const [generateTransferKey, setGenerateTransferKey] = useState(0);
@@ -130,13 +130,9 @@ export function useAppController() {
 
     const toggleFavorite = useCallback(async (image: ArchiveImage) => {
         const nextFavorite = !image.favorite;
-        const savedImage = await addImage({
-            ...image,
-            favorite: nextFavorite ? true : undefined,
-        });
+        await setFavorite(image.id, nextFavorite);
         addToast(nextFavorite ? 'Added to favorites' : 'Removed from favorites', 'info');
-        return savedImage;
-    }, [addImage, addToast]);
+    }, [setFavorite, addToast]);
 
     const editImage = useCallback((image: ArchiveImage) => {
         if (editorBusy) {

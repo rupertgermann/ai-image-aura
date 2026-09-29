@@ -20,15 +20,24 @@ type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
 
 export class SQLiteArchiveMetadataPort {
     private sql: SQLocal;
-    private initialized: boolean = false;
+    private initializationPromise: Promise<void> | null = null;
 
     constructor() {
         this.sql = new SQLocal('aura_database.sqlite3');
     }
 
-    async init(): Promise<void> {
-        if (this.initialized) return;
+    init(): Promise<void> {
+        if (!this.initializationPromise) {
+            this.initializationPromise = this.initializeSchema().catch((error) => {
+                this.initializationPromise = null;
+                throw error;
+            });
+        }
 
+        return this.initializationPromise;
+    }
+
+    private async initializeSchema(): Promise<void> {
         await this.sql.sql`
             CREATE TABLE IF NOT EXISTS images (
                 id TEXT PRIMARY KEY,
@@ -55,8 +64,6 @@ export class SQLiteArchiveMetadataPort {
         await this.sql.sql`ALTER TABLE images ADD COLUMN favorite INTEGER`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN actual_parameters TEXT`.catch(() => null);
         await this.sql.sql`ALTER TABLE images ADD COLUMN cost_ledger TEXT`.catch(() => null);
-
-        this.initialized = true;
     }
 
     async save(record: ArchiveMetadataRecord): Promise<void> {
@@ -143,6 +150,14 @@ export class SQLiteArchiveMetadataPort {
             referenceIds: parseReferenceIds(row.ref_ids),
             layerStack: parseLayerStack(row.layer_stack),
         };
+    }
+
+    async setFavorite(id: string, favorite: boolean): Promise<void> {
+        await this.init();
+        const rows = await this.sql.sql`UPDATE images SET favorite = ${favorite ? 1 : null} WHERE id = ${id} RETURNING id`;
+        if (rows.length === 0) {
+            throw new Error('Archive image no longer exists');
+        }
     }
 
     async remove(id: string): Promise<void> {

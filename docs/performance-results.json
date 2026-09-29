@@ -1,0 +1,1035 @@
+{
+  "recordedOn": "2026-09-29",
+  "baselineCommit": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+  "runs": [
+    {
+      "label": "baseline",
+      "head": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+      "browser": "153.0.8010.12",
+      "platform": "darwin arm64",
+      "cpu": "Apple M2 Max",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "runs": 7,
+      "fixture": {
+        "images": 300,
+        "canvas": [
+          1024,
+          1024
+        ],
+        "layers": 4,
+        "references": 1,
+        "thumbnailBytes": 62370,
+        "artworkBytes": 3141746
+      },
+      "samples": [
+        {
+          "run": 1,
+          "archiveReadyMs": 294.43999993801117,
+          "searchMs": 47.87000000476837,
+          "clearSearchMs": 82.46000003814697,
+          "favoriteMs": 126.80499994754791,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 2,
+          "archiveReadyMs": 276.6099998950958,
+          "searchMs": 49.269999980926514,
+          "clearSearchMs": 82.16500008106232,
+          "favoriteMs": 144.59500002861023,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 3,
+          "archiveReadyMs": 276.4500000476837,
+          "searchMs": 48.84999990463257,
+          "clearSearchMs": 87.24500000476837,
+          "favoriteMs": 122.18999993801117,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 4,
+          "archiveReadyMs": 259.06499993801117,
+          "searchMs": 50.52499997615814,
+          "clearSearchMs": 82.875,
+          "favoriteMs": 129.875,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 5,
+          "archiveReadyMs": 577.1899999380112,
+          "searchMs": 49.139999985694885,
+          "clearSearchMs": 83.49000000953674,
+          "favoriteMs": 128.11000001430511,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 6,
+          "archiveReadyMs": 292.49000000953674,
+          "searchMs": 49.735000014305115,
+          "clearSearchMs": 82.76999998092651,
+          "favoriteMs": 128.40500009059906,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 7,
+          "archiveReadyMs": 558.960000038147,
+          "searchMs": 50.239999890327454,
+          "clearSearchMs": 82.43499994277954,
+          "favoriteMs": 128.40000009536743,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        }
+      ],
+      "summary": {
+        "archiveReadyMs": {
+          "median": 292.49000000953674,
+          "min": 259.06499993801117,
+          "max": 577.1899999380112
+        },
+        "searchMs": {
+          "median": 49.269999980926514,
+          "min": 47.87000000476837,
+          "max": 50.52499997615814
+        },
+        "clearSearchMs": {
+          "median": 82.76999998092651,
+          "min": 82.16500008106232,
+          "max": 87.24500000476837
+        },
+        "favoriteMs": {
+          "median": 128.40000009536743,
+          "min": 122.18999993801117,
+          "max": 144.59500002861023
+        },
+        "favoriteReads": {
+          "median": 6,
+          "min": 6,
+          "max": 6
+        },
+        "favoriteWrites": {
+          "median": 6,
+          "min": 6,
+          "max": 6
+        },
+        "favoriteWriteCharacters": {
+          "median": 18850476,
+          "min": 18850476,
+          "max": 18850476
+        },
+        "longTaskMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "domNodes": {
+          "median": 10719,
+          "min": 10719,
+          "max": 10719
+        }
+      },
+      "checks": {
+        "stored": {
+          "favorite": false,
+          "layers": 4,
+          "references": 1,
+          "imageUrlLength": 3141746,
+          "layerUrlLengths": [
+            3141746,
+            3141746,
+            3141746,
+            3141746
+          ]
+        },
+        "editorDraftSurvivesReload": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "label": "baseline-repeat",
+      "head": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+      "browser": "153.0.8010.12",
+      "platform": "darwin arm64",
+      "cpu": "Apple M2 Max",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "runs": 7,
+      "fixture": {
+        "images": 300,
+        "canvas": [
+          1024,
+          1024
+        ],
+        "layers": 4,
+        "references": 1,
+        "thumbnailBytes": 62370,
+        "artworkBytes": 3141746
+      },
+      "samples": [
+        {
+          "run": 1,
+          "archiveReadyMs": 261.61500000953674,
+          "searchMs": 48.355000019073486,
+          "clearSearchMs": 84.45500004291534,
+          "favoriteMs": 125.62000000476837,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 2,
+          "archiveReadyMs": 262.8899999856949,
+          "searchMs": 49.825000047683716,
+          "clearSearchMs": 82.51499998569489,
+          "favoriteMs": 128.92499995231628,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 3,
+          "archiveReadyMs": 562.4950000047684,
+          "searchMs": 49.47000002861023,
+          "clearSearchMs": 83.08500003814697,
+          "favoriteMs": 127.75,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 4,
+          "archiveReadyMs": 260.289999961853,
+          "searchMs": 49.74500000476837,
+          "clearSearchMs": 83.45500004291534,
+          "favoriteMs": 127.58500003814697,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 5,
+          "archiveReadyMs": 560.1299999952316,
+          "searchMs": 49.46000003814697,
+          "clearSearchMs": 83.26999998092651,
+          "favoriteMs": 128.32500004768372,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 6,
+          "archiveReadyMs": 576.3899999856949,
+          "searchMs": 49.674999952316284,
+          "clearSearchMs": 66.41000008583069,
+          "favoriteMs": 127.875,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 7,
+          "archiveReadyMs": 559.9650000333786,
+          "searchMs": 50.06000006198883,
+          "clearSearchMs": 83.15500009059906,
+          "favoriteMs": 128.0199999809265,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        }
+      ],
+      "summary": {
+        "archiveReadyMs": {
+          "median": 559.9650000333786,
+          "min": 260.289999961853,
+          "max": 576.3899999856949
+        },
+        "searchMs": {
+          "median": 49.674999952316284,
+          "min": 48.355000019073486,
+          "max": 50.06000006198883
+        },
+        "clearSearchMs": {
+          "median": 83.15500009059906,
+          "min": 66.41000008583069,
+          "max": 84.45500004291534
+        },
+        "favoriteMs": {
+          "median": 127.875,
+          "min": 125.62000000476837,
+          "max": 128.92499995231628
+        },
+        "favoriteReads": {
+          "median": 6,
+          "min": 6,
+          "max": 6
+        },
+        "favoriteWrites": {
+          "median": 6,
+          "min": 6,
+          "max": 6
+        },
+        "favoriteWriteCharacters": {
+          "median": 18850476,
+          "min": 18850476,
+          "max": 18850476
+        },
+        "longTaskMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "domNodes": {
+          "median": 10719,
+          "min": 10719,
+          "max": 10719
+        }
+      },
+      "checks": {
+        "stored": {
+          "favorite": false,
+          "imageHash": "955c7e50787ff662a7413d07be87e9314811b3417336c49e8fca7d75ec377bc0",
+          "layers": 4,
+          "references": 1,
+          "imageUrlLength": 3141746,
+          "layerUrlLengths": [
+            3141746,
+            3141746,
+            3141746,
+            3141746
+          ]
+        },
+        "editorDraftSurvivesReload": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "label": "baseline-init",
+      "head": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+      "browser": "153.0.8010.12",
+      "platform": "darwin arm64",
+      "cpu": "Apple M2 Max",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "runs": 3,
+      "fixture": {
+        "images": 300,
+        "canvas": [
+          1024,
+          1024
+        ],
+        "layers": 4,
+        "references": 1,
+        "thumbnailBytes": 62370,
+        "artworkBytes": 3141746
+      },
+      "samples": [
+        {
+          "run": 1,
+          "archiveReadyMs": 260.80999994277954,
+          "searchMs": 49.45999991893768,
+          "clearSearchMs": 82.93999993801117,
+          "favoriteMs": 126.94500005245209,
+          "archiveInitStatements": 18,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 2,
+          "archiveReadyMs": 275.83000004291534,
+          "searchMs": 49.78999996185303,
+          "clearSearchMs": 83.98500001430511,
+          "favoriteMs": 126.87999999523163,
+          "archiveInitStatements": 18,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 3,
+          "archiveReadyMs": 294.2350000143051,
+          "searchMs": 49.63499999046326,
+          "clearSearchMs": 83.45499992370605,
+          "favoriteMs": 124.16499996185303,
+          "archiveInitStatements": 18,
+          "favoriteReads": 6,
+          "favoriteWrites": 6,
+          "favoriteWriteCharacters": 18850476,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        }
+      ],
+      "summary": {
+        "archiveReadyMs": {
+          "median": 275.83000004291534,
+          "min": 260.80999994277954,
+          "max": 294.2350000143051
+        },
+        "searchMs": {
+          "median": 49.63499999046326,
+          "min": 49.45999991893768,
+          "max": 49.78999996185303
+        },
+        "clearSearchMs": {
+          "median": 83.45499992370605,
+          "min": 82.93999993801117,
+          "max": 83.98500001430511
+        },
+        "favoriteMs": {
+          "median": 126.87999999523163,
+          "min": 124.16499996185303,
+          "max": 126.94500005245209
+        },
+        "archiveInitStatements": {
+          "median": 18,
+          "min": 18,
+          "max": 18
+        },
+        "favoriteReads": {
+          "median": 6,
+          "min": 6,
+          "max": 6
+        },
+        "favoriteWrites": {
+          "median": 6,
+          "min": 6,
+          "max": 6
+        },
+        "favoriteWriteCharacters": {
+          "median": 18850476,
+          "min": 18850476,
+          "max": 18850476
+        },
+        "longTaskMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "domNodes": {
+          "median": 10719,
+          "min": 10719,
+          "max": 10719
+        }
+      },
+      "checks": {
+        "stored": {
+          "favorite": false,
+          "imageHash": "955c7e50787ff662a7413d07be87e9314811b3417336c49e8fca7d75ec377bc0",
+          "layers": 4,
+          "references": 1,
+          "imageUrlLength": 3141746,
+          "layerUrlLengths": [
+            3141746,
+            3141746,
+            3141746,
+            3141746
+          ]
+        },
+        "editorDraftSurvivesReload": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "label": "favorite",
+      "head": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+      "browser": "153.0.8010.12",
+      "platform": "darwin arm64",
+      "cpu": "Apple M2 Max",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "runs": 7,
+      "fixture": {
+        "images": 300,
+        "canvas": [
+          1024,
+          1024
+        ],
+        "layers": 4,
+        "references": 1,
+        "thumbnailBytes": 62370,
+        "artworkBytes": 3141746
+      },
+      "samples": [
+        {
+          "run": 1,
+          "archiveReadyMs": 594.4000000953674,
+          "searchMs": 49.0699999332428,
+          "clearSearchMs": 83.0699999332428,
+          "favoriteMs": 94.95000004768372,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 2,
+          "archiveReadyMs": 559.4749999046326,
+          "searchMs": 49.360000014305115,
+          "clearSearchMs": 83.00499999523163,
+          "favoriteMs": 95.45999991893768,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 3,
+          "archiveReadyMs": 594.875,
+          "searchMs": 47.74000000953674,
+          "clearSearchMs": 83.43499994277954,
+          "favoriteMs": 91.47500002384186,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 4,
+          "archiveReadyMs": 575.9650000333786,
+          "searchMs": 51.00499999523163,
+          "clearSearchMs": 65.75999999046326,
+          "favoriteMs": 95.44000005722046,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 5,
+          "archiveReadyMs": 559.0400000810623,
+          "searchMs": 49.15499997138977,
+          "clearSearchMs": 83.53999996185303,
+          "favoriteMs": 95.49000000953674,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 6,
+          "archiveReadyMs": 260.8949999809265,
+          "searchMs": 49.75499999523163,
+          "clearSearchMs": 66.58500003814697,
+          "favoriteMs": 94.37999999523163,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 7,
+          "archiveReadyMs": 276.92000007629395,
+          "searchMs": 49.795000076293945,
+          "clearSearchMs": 83.14999997615814,
+          "favoriteMs": 94.45000004768372,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        }
+      ],
+      "summary": {
+        "archiveReadyMs": {
+          "median": 559.4749999046326,
+          "min": 260.8949999809265,
+          "max": 594.875
+        },
+        "searchMs": {
+          "median": 49.360000014305115,
+          "min": 47.74000000953674,
+          "max": 51.00499999523163
+        },
+        "clearSearchMs": {
+          "median": 83.0699999332428,
+          "min": 65.75999999046326,
+          "max": 83.53999996185303
+        },
+        "favoriteMs": {
+          "median": 94.95000004768372,
+          "min": 91.47500002384186,
+          "max": 95.49000000953674
+        },
+        "favoriteReads": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "favoriteWrites": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "favoriteWriteCharacters": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "longTaskMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "domNodes": {
+          "median": 10719,
+          "min": 10719,
+          "max": 10719
+        }
+      },
+      "checks": {
+        "stored": {
+          "favorite": false,
+          "imageHash": "955c7e50787ff662a7413d07be87e9314811b3417336c49e8fca7d75ec377bc0",
+          "layers": 4,
+          "references": 1,
+          "imageUrlLength": 3141746,
+          "layerUrlLengths": [
+            3141746,
+            3141746,
+            3141746,
+            3141746
+          ]
+        },
+        "editorDraftSurvivesReload": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "label": "after",
+      "build": {
+        "head": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+        "sourceDiffSha256": "522429e65f0743fd00ee72b30fd0b8f9536cb558f8b58d84ba8a2fa6a82fe83d",
+        "fixtureSha256": "564747e4eedb81e41184e158c5423bc1e81c30f1c77e25e51fd32d642e368bad"
+      },
+      "browser": "153.0.8010.12",
+      "platform": "darwin arm64",
+      "cpu": "Apple M2 Max",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "runs": 7,
+      "fixture": {
+        "images": 300,
+        "canvas": [
+          1024,
+          1024
+        ],
+        "layers": 4,
+        "references": 1,
+        "thumbnailBytes": 62370,
+        "artworkBytes": 3141746
+      },
+      "samples": [
+        {
+          "run": 1,
+          "archiveReadyMs": 561.9100000858307,
+          "searchMs": 49.05499994754791,
+          "clearSearchMs": 82.7849999666214,
+          "favoriteMs": 95.9449999332428,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 2,
+          "archiveReadyMs": 280.1949999332428,
+          "searchMs": 48.97500002384186,
+          "clearSearchMs": 83.73500001430511,
+          "favoriteMs": 93.83999991416931,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 3,
+          "archiveReadyMs": 559.8249999284744,
+          "searchMs": 48.980000019073486,
+          "clearSearchMs": 83.87000000476837,
+          "favoriteMs": 94.64499998092651,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 4,
+          "archiveReadyMs": 561.5600000619888,
+          "searchMs": 50.12999999523163,
+          "clearSearchMs": 81.93499994277954,
+          "favoriteMs": 94.62000000476837,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 5,
+          "archiveReadyMs": 244.63499999046326,
+          "searchMs": 49.18499994277954,
+          "clearSearchMs": 86.42499995231628,
+          "favoriteMs": 101.43500006198883,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 6,
+          "archiveReadyMs": 245.83500003814697,
+          "searchMs": 49.14999997615814,
+          "clearSearchMs": 81.82500004768372,
+          "favoriteMs": 95.71999990940094,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 7,
+          "archiveReadyMs": 561.0150001049042,
+          "searchMs": 47.830000042915344,
+          "clearSearchMs": 85.18499994277954,
+          "favoriteMs": 92.59500002861023,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        }
+      ],
+      "summary": {
+        "archiveReadyMs": {
+          "median": 559.8249999284744,
+          "min": 244.63499999046326,
+          "max": 561.9100000858307
+        },
+        "searchMs": {
+          "median": 49.05499994754791,
+          "min": 47.830000042915344,
+          "max": 50.12999999523163
+        },
+        "clearSearchMs": {
+          "median": 83.73500001430511,
+          "min": 81.82500004768372,
+          "max": 86.42499995231628
+        },
+        "favoriteMs": {
+          "median": 94.64499998092651,
+          "min": 92.59500002861023,
+          "max": 101.43500006198883
+        },
+        "archiveInitStatements": {
+          "median": 9,
+          "min": 9,
+          "max": 9
+        },
+        "favoriteReads": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "favoriteWrites": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "favoriteWriteCharacters": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "longTaskMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "domNodes": {
+          "median": 10719,
+          "min": 10719,
+          "max": 10719
+        }
+      },
+      "checks": {
+        "stored": {
+          "favorite": false,
+          "imageHash": "955c7e50787ff662a7413d07be87e9314811b3417336c49e8fca7d75ec377bc0",
+          "layers": 4,
+          "references": 1,
+          "imageUrlLength": 3141746,
+          "layerUrlLengths": [
+            3141746,
+            3141746,
+            3141746,
+            3141746
+          ]
+        },
+        "editorDraftSurvivesReload": true,
+        "pageErrors": []
+      }
+    },
+    {
+      "label": "after-repeat",
+      "build": {
+        "head": "8b6ca483d1af2a1f9a41996af204576468e4cea4",
+        "sourceDiffSha256": "522429e65f0743fd00ee72b30fd0b8f9536cb558f8b58d84ba8a2fa6a82fe83d",
+        "fixtureSha256": "564747e4eedb81e41184e158c5423bc1e81c30f1c77e25e51fd32d642e368bad"
+      },
+      "browser": "153.0.8010.12",
+      "platform": "darwin arm64",
+      "cpu": "Apple M2 Max",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "runs": 7,
+      "fixture": {
+        "images": 300,
+        "canvas": [
+          1024,
+          1024
+        ],
+        "layers": 4,
+        "references": 1,
+        "thumbnailBytes": 62370,
+        "artworkBytes": 3141746
+      },
+      "samples": [
+        {
+          "run": 1,
+          "archiveReadyMs": 260.54500007629395,
+          "searchMs": 50.34500002861023,
+          "clearSearchMs": 82.3050000667572,
+          "favoriteMs": 94.45499992370605,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 2,
+          "archiveReadyMs": 559.335000038147,
+          "searchMs": 49.84500002861023,
+          "clearSearchMs": 66.5900000333786,
+          "favoriteMs": 94.33500003814697,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 3,
+          "archiveReadyMs": 259.7549999952316,
+          "searchMs": 50.00999999046326,
+          "clearSearchMs": 83.1800000667572,
+          "favoriteMs": 93.66000008583069,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 4,
+          "archiveReadyMs": 258.9599999189377,
+          "searchMs": 49.830000042915344,
+          "clearSearchMs": 84.375,
+          "favoriteMs": 94.80999994277954,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 5,
+          "archiveReadyMs": 293.60000002384186,
+          "searchMs": 49.360000014305115,
+          "clearSearchMs": 83.46000003814697,
+          "favoriteMs": 94.56500005722046,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 6,
+          "archiveReadyMs": 731.420000076294,
+          "searchMs": 60.519999980926514,
+          "clearSearchMs": 83.40000009536743,
+          "favoriteMs": 92.57999992370605,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        },
+        {
+          "run": 7,
+          "archiveReadyMs": 260.99000000953674,
+          "searchMs": 47.700000047683716,
+          "clearSearchMs": 83.21000003814697,
+          "favoriteMs": 96.3199999332428,
+          "archiveInitStatements": 9,
+          "favoriteReads": 0,
+          "favoriteWrites": 0,
+          "favoriteWriteCharacters": 0,
+          "longTaskMs": 0,
+          "domNodes": 10719
+        }
+      ],
+      "summary": {
+        "archiveReadyMs": {
+          "median": 260.99000000953674,
+          "min": 258.9599999189377,
+          "max": 731.420000076294
+        },
+        "searchMs": {
+          "median": 49.84500002861023,
+          "min": 47.700000047683716,
+          "max": 60.519999980926514
+        },
+        "clearSearchMs": {
+          "median": 83.21000003814697,
+          "min": 66.5900000333786,
+          "max": 84.375
+        },
+        "favoriteMs": {
+          "median": 94.45499992370605,
+          "min": 92.57999992370605,
+          "max": 96.3199999332428
+        },
+        "archiveInitStatements": {
+          "median": 9,
+          "min": 9,
+          "max": 9
+        },
+        "favoriteReads": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "favoriteWrites": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "favoriteWriteCharacters": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "longTaskMs": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "domNodes": {
+          "median": 10719,
+          "min": 10719,
+          "max": 10719
+        }
+      },
+      "checks": {
+        "stored": {
+          "favorite": false,
+          "imageHash": "955c7e50787ff662a7413d07be87e9314811b3417336c49e8fca7d75ec377bc0",
+          "layers": 4,
+          "references": 1,
+          "imageUrlLength": 3141746,
+          "layerUrlLengths": [
+            3141746,
+            3141746,
+            3141746,
+            3141746
+          ]
+        },
+        "editorDraftSurvivesReload": true,
+        "pageErrors": []
+      }
+    }
+  ]
+}
