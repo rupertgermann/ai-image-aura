@@ -470,6 +470,11 @@ export function useGenerateController({
                 onPartialImage,
             });
             const batchResults = buildGenerateResultSlots(results);
+            const successfulResult = getFirstSuccessfulResultSlot(batchResults);
+            if (!successfulResult && getFirstSuccessfulResultSlot(currentBatch?.results ?? [])) {
+                const failure = batchResults.find((result) => result.status === 'failed');
+                throw new Error(failure?.error ?? 'Generation failed for every batch result.');
+            }
             const batchSnapshot: GenerateBatchSnapshot = {
                 results: batchResults,
                 references: usedReferences,
@@ -480,7 +485,7 @@ export function useGenerateController({
             partialPreviewRun.clear();
             await adoptBatch(batchSnapshot);
 
-            if (!getFirstSuccessfulResultSlot(batchResults)) {
+            if (!successfulResult) {
                 updateDraft({ isSaved: false });
                 setError('Generation failed for every batch result.');
                 completionNotification = {
@@ -515,7 +520,7 @@ export function useGenerateController({
             runningRef.current = false;
             setLoading(false);
         }
-    }, [adoptBatch, imageCredential, completionNotificationPort, completionNotificationsEnabled, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
+    }, [adoptBatch, imageCredential, completionNotificationPort, completionNotificationsEnabled, currentBatch, draft, isDocumentHidden, referenceImages, session, updateDraft, workflow]);
 
     const translateGoal = useCallback(async (goal: string) => {
         setTranslatingGoal(true);

@@ -50,6 +50,7 @@ test('a failed generation preserves completed batch results and can be retried',
     await expect(page.getByRole('button', { name: 'Save all', exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
     await page.getByRole('dialog', { name: 'Replace unsaved results?' }).getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Generate 2 images', exact: true })).toBeEnabled();
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
     await expect(page.getByRole('img', { name: 'Generated result 1', exact: true })).toHaveJSProperty('naturalWidth', 128);
