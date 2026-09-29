@@ -37,18 +37,47 @@ test('a failed generation preserves completed batch results and can be retried',
     await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('2');
     await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
     await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
-    await page.getByRole('button', { name: 'Save all', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Saved', exact: true })).toHaveCount(2);
-    await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('1');
-    await page.getByRole('button', { name: 'Generate image', exact: true }).click();
-    await expect(page.getByRole('alert')).toHaveText('OpenAI API Error: 502');
+    await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Replace unsaved results?' }).getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('generation-failure.png'), fullPage: true });
     await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
+    await expect(page.getByRole('alert')).toHaveText('OpenAI API Error: 502');
+    await expect(page.getByRole('button', { name: 'Save all', exact: true })).toBeEnabled();
     await page.screenshot({ path: testInfo.outputPath('generation-error-retained-batch.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+    await page.reload();
+    await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Save all', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Replace unsaved results?' }).getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByRole('alert')).toHaveCount(0);
-    await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
+    await expect(page.getByRole('img', { name: 'Generated result 1', exact: true })).toHaveJSProperty('naturalWidth', 128);
     expect(requests).toBe(3);
     await page.screenshot({ path: testInfo.outputPath('generation-retry.png'), fullPage: true });
+});
+
+test('a first failed batch shows slot errors and a partial retry keeps its successful result', async ({ page }, testInfo) => {
+    let requests = 0;
+    await page.route('https://api.openai.com/v1/images/generations', async (route) => {
+        requests += 1;
+        await route.fulfill(requests === 1
+            ? { status: 502, contentType: 'text/plain', body: 'upstream unavailable' }
+            : { json: { data: [{ b64_json: imageBase64 }, { error: 'Second result unavailable' }] } });
+    });
+    await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('2');
+    await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
+    await expect(page.getByRole('alert')).toHaveText('Generation failed for every batch result.');
+    await expect(page.getByText('OpenAI API Error: 502', { exact: true })).toHaveCount(2);
+    await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('first-batch-failure.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Generate 2 images', exact: true }).click();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.getByRole('img', { name: 'Generated result 1', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByText('Second result unavailable', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save all', exact: true })).toBeEnabled();
+    expect(requests).toBe(2);
+    await page.screenshot({ path: testInfo.outputPath('partial-batch-retry.png'), fullPage: true });
 });
 
 test('a failed AI transform preserves the Editor draft and allows retry', async ({ page }, testInfo) => {
@@ -71,6 +100,7 @@ test('a failed AI transform preserves the Editor draft and allows retry', async 
     await page.getByRole('slider', { name: 'Brightness', exact: true }).press('End');
     const brightness = await page.getByRole('slider', { name: 'Brightness', exact: true }).inputValue();
     expect(brightness).not.toBe('100');
+    await page.locator('.ai-edit-section summary').click();
     await page.getByRole('textbox', { name: 'AI transformation prompt' }).fill('Keep the colored squares');
     await page.getByRole('button', { name: 'Transform with AI', exact: true }).click();
     await expect(page.getByRole('alert')).toHaveText('OpenAI API Error: 502');
