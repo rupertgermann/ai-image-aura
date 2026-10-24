@@ -207,7 +207,7 @@ for (const scenario of cases) {
                 return { width: image.width, height: image.height, pixels: Array.from(drawing.getImageData(0, 0, image.width, image.height).data) };
             }, mask!.data.toString('base64'));
             expect([decoded.width, decoded.height]).toEqual([sourcePixels.width, sourcePixels.height]);
-            expect(decoded.pixels).toEqual(maskPixels);
+            expect(decoded.pixels.filter((_, index) => index % 4 === 3)).toEqual(maskPixels.filter((_, index) => index % 4 === 3).map((alpha) => 255 - alpha));
         }
         await page.locator('.layer-name').filter({ hasText: 'Base' }).click();
         await assertPlacement();

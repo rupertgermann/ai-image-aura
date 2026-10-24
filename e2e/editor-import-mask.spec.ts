@@ -1,0 +1,202 @@
+import { writeFile } from 'node:fs/promises';
+import { expect, test, type Page } from '@playwright/test';
+
+const imageId = 'editor-import-mask';
+const prompt = 'Editor import and mask';
+
+async function openEditor(page: Page) {
+    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Archive', exact: true }).click();
+    await page.getByRole('button', { name: `Open image: ${prompt}`, exact: true }).click();
+    await page.getByRole('dialog', { name: 'Image details' }).getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save as copy', exact: true })).toBeEnabled();
+}
+
+async function seedEditor(page: Page) {
+    await page.goto('/');
+    const dataUrl = await page.evaluate(async ({ imageId, prompt }) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 128;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Canvas unavailable');
+        context.fillStyle = '#888888';
+        context.fillRect(0, 0, 128, 128);
+        const url = canvas.toDataURL();
+        const modulePath = '/src/archive/ArchiveStore.ts';
+        const { archiveStore } = await import(modulePath);
+        localStorage.setItem('aura_openapi_key', JSON.stringify('synthetic-never-sent'));
+        await archiveStore.save({ id: imageId, url, prompt, model: 'gpt-image-2.5-flare', timestamp: '2026-10-24',
+            width: 128, height: 128, quality: 'medium', aspectRatio: '128x128', background: 'auto' });
+        return url;
+    }, { imageId, prompt });
+    await page.reload();
+    await openEditor(page);
+    return dataUrl;
+}
+
+async function delayImports(page: Page) {
+    await page.evaluate(() => {
+        const read = File.prototype.arrayBuffer;
+        const pending = new Map<string, () => Promise<void>>();
+        File.prototype.arrayBuffer = function () {
+            if (!this.name.startsWith('delayed-')) return read.call(this);
+            return new Promise<ArrayBuffer>((resolve) => {
+                pending.set(this.name, async () => { resolve(await read.call(this)); });
+            });
+        };
+        document.addEventListener('release-import', (event) => {
+            if (event instanceof CustomEvent) void pending.get(event.detail)?.();
+        });
+    });
+}
+
+async function releaseImport(page: Page, name: string) {
+    await page.evaluate((name) => document.dispatchEvent(new CustomEvent('release-import', { detail: name })), name);
+}
+
+async function paintMask(page: Page) {
+    await page.getByRole('button', { name: 'Mask', exact: true }).click();
+    const canvas = page.locator('.transform-mask-canvas');
+    await expect(canvas).toHaveJSProperty('width', 128);
+    await page.getByRole('button', { name: 'Apply Mask', exact: true }).click();
+    await expect(page.getByText('Paint a mask before applying it.', { exact: true })).toBeVisible();
+    await canvas.click({ position: { x: 64, y: 64 } });
+    await canvas.click({ position: { x: 32, y: 32 } });
+    await page.getByRole('button', { name: 'Eraser', exact: true }).click();
+    await canvas.click({ position: { x: 32, y: 32 } });
+    await page.getByRole('button', { name: 'Apply Mask', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Transform mask' })).toBeHidden();
+}
+
+test.beforeEach(async ({ context, baseURL }) => {
+    await context.route('**/*', (route) => new URL(route.request().url()).origin === baseURL ? route.continue() : route.abort());
+});
+
+test('pending layer import preserves adjustments, undo, reload and archive save', async ({ page }, testInfo) => {
+    const dataUrl = await seedEditor(page);
+    await delayImports(page);
+    await page.getByLabel('Add image layers', { exact: true }).setInputFiles({ name: 'delayed-layer.png', mimeType: 'image/png', buffer: Buffer.from(dataUrl.split(',')[1], 'base64') });
+    await page.getByRole('slider', { name: 'Brightness', exact: true }).fill('150');
+    await releaseImport(page, 'delayed-layer.png');
+    await expect(page.locator('.layer-name')).toHaveCount(2);
+    await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
+    await page.getByRole('button', { name: 'Undo', exact: true }).click();
+    await expect(page.locator('.layer-name')).toHaveCount(1);
+    await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
+    await page.getByRole('button', { name: 'Redo', exact: true }).click();
+    await expect(page.locator('.layer-name')).toHaveCount(2);
+    await page.reload();
+    await openEditor(page);
+    await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
+    await expect(page.locator('.layer-name')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+    await openEditor(page);
+    await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
+    await expect(page.locator('.layer-name')).toHaveCount(2);
+    await page.screenshot({ path: testInfo.outputPath('import-saved-reopened.png'), fullPage: true });
+});
+
+for (const order of [['a', 'b'], ['b', 'a']]) {
+    test(`overlapping reference imports preserve removal and completion order ${order.join('-')}`, async ({ page }, testInfo) => {
+        const dataUrl = await seedEditor(page);
+        await page.locator('.ai-edit-section > summary').click();
+        const upload = page.locator('.editor-container').getByLabel('Add reference images', { exact: true });
+        const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
+        await upload.setInputFiles({ name: 'existing.png', mimeType: 'image/png', buffer });
+        await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(1);
+        await delayImports(page);
+        for (const name of ['a', 'b']) await upload.setInputFiles({ name: `delayed-${name}.png`, mimeType: 'image/png', buffer });
+        await page.getByRole('button', { name: 'Remove reference 1', exact: true }).click();
+        for (const [index, name] of order.entries()) {
+            await releaseImport(page, `delayed-${name}.png`);
+            await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(index + 1);
+        }
+        await page.getByRole('button', { name: 'Undo', exact: true }).click();
+        await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(1);
+        await page.getByRole('button', { name: 'Redo', exact: true }).click();
+        await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(2);
+        await page.screenshot({ path: testInfo.outputPath('reference-imports.png'), fullPage: true });
+    });
+}
+
+for (const model of ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst']) {
+    test(`painted and replayed mask selects editable pixels for ${model}`, async ({ page }, testInfo) => {
+        await seedEditor(page);
+        const masks: string[] = [];
+        await page.route('https://api.openai.com/v1/images/edits', async (route) => {
+            const request = route.request();
+            const form = await new Response(new Uint8Array(request.postDataBuffer() ?? []), { headers: { 'content-type': request.headers()['content-type'] } }).formData();
+            const source = form.get('image[]');
+            const mask = form.get('mask');
+            if (!(source instanceof File) || !(mask instanceof File)) throw new Error('Missing edit source/mask');
+            masks.push(Buffer.from(await mask.arrayBuffer()).toString('base64'));
+            await route.fulfill({ json: { data: [{ b64_json: Buffer.from(await source.arrayBuffer()).toString('base64') }] } });
+        });
+        await page.locator('.ai-edit-section > summary').click();
+        await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption(model);
+        await paintMask(page);
+        await page.getByLabel('AI transformation prompt').fill('Change only the painted area');
+        await page.getByRole('button', { name: 'Transform with AI', exact: true }).click();
+        await expect(page.getByLabel('AI result name', { exact: true })).toBeVisible();
+        const inspectMask = (base64: string) => page.evaluate(async (base64) => {
+            const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width; canvas.height = bitmap.height;
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Canvas unavailable');
+            context.drawImage(bitmap, 0, 0); bitmap.close();
+            return { width: canvas.width, height: canvas.height, painted: context.getImageData(64, 64, 1, 1).data[3], erased: context.getImageData(32, 32, 1, 1).data[3], untouched: context.getImageData(4, 4, 1, 1).data[3] };
+        }, base64);
+        expect(await inspectMask(masks[0])).toEqual({ width: 128, height: 128, painted: 0, erased: 255, untouched: 255 });
+        await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+        await page.evaluate(async ({ imageId, model }) => {
+            const storePath = '/src/archive/ArchiveStore.ts';
+            const clientPath = '/src/utils/openai.ts';
+            const filePath = '/src/utils/file.ts';
+            const lineagePath = '/src/lineage/LineageStore.ts';
+            const replayPath = '/src/lineage/replayLineageStep.ts';
+            const { archiveStore } = await import(storePath);
+            const { openAiImageClient } = await import(clientPath);
+            const { dataURLtoFile } = await import(filePath);
+            const image = await archiveStore.get(imageId);
+            const { lineageStore } = await import(lineagePath);
+            const { buildEditorReplay } = await import(replayPath);
+            const steps = await lineageStore.getByArchiveImageId(imageId);
+            const replay = steps.map(buildEditorReplay).find((replay: { maskImage?: File } | null) => replay?.maskImage);
+            if (!replay?.maskImage) throw new Error('Saved lineage mask missing');
+            await openAiImageClient.createImage({ apiKey: 'synthetic-never-sent', model, prompt: 'Replay saved mask', referenceImages: [dataURLtoFile(image.url, 'source.png')], maskImage: replay.maskImage });
+        }, { imageId, model });
+        expect(masks).toHaveLength(2);
+        expect(await inspectMask(masks[1])).toEqual(await inspectMask(masks[0]));
+        await writeFile(testInfo.outputPath('outgoing-mask.png'), Buffer.from(masks[0], 'base64'));
+        await page.screenshot({ path: testInfo.outputPath('mask-saved.png'), fullPage: true });
+    });
+}
+
+test('a restored mask with different dimensions is rejected before the provider request', async ({ page }) => {
+    await seedEditor(page);
+    let requests = 0;
+    await page.route('https://api.openai.com/v1/images/edits', async (route) => {
+        requests++;
+        await route.fulfill({ json: { data: [{ b64_json: 'unused' }] } });
+    });
+    const error = await page.evaluate(async () => {
+        const clientPath = '/src/utils/openai.ts';
+        const { openAiImageClient } = await import(clientPath);
+        const canvas = document.createElement('canvas');
+        const blob = () => new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG unavailable'))));
+        canvas.width = canvas.height = 128;
+        const source = new File([await blob()], 'source.png', { type: 'image/png' });
+        canvas.width = 64;
+        const mask = await blob();
+        try {
+            await openAiImageClient.createImage({ apiKey: 'synthetic-never-sent', prompt: 'Replay', referenceImages: [source], maskImage: mask });
+            return null;
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+        }
+    });
+    expect(error).toBe('Transform mask dimensions must match the source image. Repaint the mask for this target.');
+    expect(requests).toBe(0);
+});
