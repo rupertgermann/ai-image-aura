@@ -40,7 +40,7 @@ describe('Autopilot preflight cancellation', () => {
                     return [];
                 } },
                 createAutopilot: (input) => createAutopilotSession(input, { reasoningClient: {
-                    createResponse: async () => ({ outputText: JSON.stringify({ score: 95, feedback: [] }) }),
+                    createResponse: async () => ({ outputText: JSON.stringify({ score: 95, feedback: ['Matches the goal.'] }) }),
                 } }),
             });
             return null;

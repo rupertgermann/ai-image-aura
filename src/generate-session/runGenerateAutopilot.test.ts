@@ -39,7 +39,7 @@ describe('runGenerateAutopilot', () => {
             sessionStore: session, lineageStore: lineage,
             workflow: { generate: async () => [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,new' }], serializeReferences: async () => [] },
             createSession: (input) => createAutopilotSession(input, { reasoningClient: {
-                createResponse: async () => ({ outputText: JSON.stringify({ score: 95, feedback: [] }) }),
+                createResponse: async () => ({ outputText: JSON.stringify({ score: 95, feedback: ['Matches the goal.'] }) }),
             } }),
         });
         const iteration = outcome.result.iterations[0];

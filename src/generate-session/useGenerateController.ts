@@ -378,6 +378,7 @@ export function useGenerateController({
         lastErrorIteration: null,
     });
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
+    const autopilotCancelRequested = useRef(false);
     const partialRunIdRef = useRef(0);
 
     const latestIteration = autopilot.iterations.at(-1);
@@ -555,6 +556,7 @@ export function useGenerateController({
             return null;
         }
 
+        autopilotCancelRequested.current = false;
         runningRef.current = true;
         setLoading(true);
         setError(null);
@@ -594,6 +596,7 @@ export function useGenerateController({
                 initialCostLedger,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
+                    if (autopilotCancelRequested.current) sessionInstance.cancel();
                 },
                 maxIterations: input.maxIterations,
                 satisfactionThreshold: input.satisfactionThreshold,
@@ -667,6 +670,7 @@ export function useGenerateController({
     }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, getProviderCredential, goalTranslationCostContext, isDocumentHidden, lineage, reasoningModel, referenceImages, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
+        autopilotCancelRequested.current = true;
         autopilotSessionRef.current?.cancel();
     }, []);
 
