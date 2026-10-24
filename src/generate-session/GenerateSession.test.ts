@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { StorageProvider } from '../services/StorageService';
 import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, transferSimilarFromArchive, type GenerateBatchSnapshot } from './GenerateSession';
 import type { LineageStep } from '../lineage/LineageStore';
@@ -321,3 +321,66 @@ class InMemoryStorageProvider implements StorageProvider {
         return Array.from(this.values.keys());
     }
 }
+
+const transferLocalKeys = ['aura_generate_draft', 'generate_lineage_source',
+    'aura_generate_prompt', 'aura_generate_quality', 'aura_generate_aspect_ratio',
+    'aura_generate_background', 'aura_generate_style', 'aura_generate_lighting',
+    'aura_generate_palette', 'aura_generate_is_saved'];
+const transferBlobKeys = ['generate_current_batch', 'generate_current_result',
+    'generate_current_result_references', 'generate_transferred_references'];
+
+describe('Create Similar transfer recovery', () => {
+    it.each([...transferLocalKeys, ...transferBlobKeys])('restores all raw session state when mutating %s fails', async (failedKey) => {
+        const localValues = new Map(transferLocalKeys.map((key) => [key, `raw old ${key}`]));
+        const blobValues = new Map(transferBlobKeys.map((key) => [key, `raw old ${key}`]));
+        const beforeLocal = new Map(localValues);
+        const beforeBlobs = new Map(blobValues);
+        let failed = false;
+        const fail = (key: string) => {
+            if (key === failedKey && !failed) { failed = true; throw new Error('mutation failed'); }
+        };
+        const localStorage: Storage = {
+            get length() { return localValues.size; },
+            clear: () => localValues.clear(), key: (index) => [...localValues.keys()][index] ?? null,
+            getItem: (key) => localValues.get(key) ?? null,
+            setItem: (key, value) => { localValues.set(key, value); fail(key); },
+            removeItem: (key) => { localValues.delete(key); fail(key); },
+        };
+        const blobStorage: StorageProvider = {
+            load: async (key) => blobValues.get(key) ?? null,
+            save: async (key, value) => { blobValues.set(key, value); fail(key); },
+            remove: async (key) => {
+                if (failedKey === 'generate_current_batch' && key === 'generate_current_result') {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+                blobValues.delete(key); fail(key);
+            },
+            listKeys: async () => [...blobValues.keys()],
+        };
+        const store = createGenerateSessionStore({ localStorage, blobStorage });
+        await expect(store.transferFromArchive({
+            id: 'new-source', url: 'new-image', prompt: 'new prompt', timestamp: '2026-10-24',
+            references: ['new-reference'],
+        })).rejects.toThrow('mutation failed');
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(localValues).toEqual(beforeLocal);
+        expect(blobValues).toEqual(beforeBlobs);
+    });
+
+    it('attempts independent restorations after one restoration rejects', async () => {
+        const values = new Map(transferBlobKeys.map((key) => [key, `old ${key}`]));
+        const save = vi.fn(async (key: string, value: string) => {
+            if (key === 'generate_transferred_references' || key === 'generate_current_batch') throw new Error('storage unavailable');
+            values.set(key, value);
+        });
+        const store = createGenerateSessionStore({ blobStorage: {
+            load: async (key) => values.get(key) ?? null, save,
+            remove: async (key) => { values.delete(key); }, listKeys: async () => [...values.keys()],
+        } });
+        await expect(store.transferFromArchive({
+            id: 'new', url: 'new', prompt: 'new', timestamp: '2026-10-24', references: ['new'],
+        })).rejects.toThrow();
+        expect(save).toHaveBeenCalledWith('generate_current_result', 'old generate_current_result');
+        expect(save).toHaveBeenCalledWith('generate_current_result_references', 'old generate_current_result_references');
+    });
+});
