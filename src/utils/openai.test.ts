@@ -20,7 +20,7 @@ describe('openAiImageClient', () => {
     it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('sends %s quality and single-image streaming for generations and masked edits', async (model) => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ b64_json: 'result' }] })));
         const reference = new File(['source'], 'source.png', { type: 'image/png' });
-        
+
         vi.stubGlobal('fetch', fetchMock);
         try {
             for (const quality of ['xhigh', 'max', 'auto'] as const) {
