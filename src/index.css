@@ -2365,8 +2365,8 @@ summary { cursor: pointer; font-size: 13px; line-height: 1.6; }
 .section-desc, .field-relationship-note, .empty-state p, .confirm-body p { font-family: var(--font-suisse-intl); font-size: 14px; }
 
 .card-open, .reference-open { display: block; width: 100%; height: 100%; }
-.card-open { position: relative; }
-.card-open:focus-visible::after {
+.card-open, .reference-open { position: relative; }
+.card-open:focus-visible::after, .reference-open:focus-visible::after {
     content: '';
     position: absolute;
     inset: 4px;

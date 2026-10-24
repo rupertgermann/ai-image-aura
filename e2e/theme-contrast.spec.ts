@@ -114,10 +114,55 @@ for (const mode of ['light', 'dark'] as const) {
             await page.screenshot({ path: testInfo.outputPath(`${mode}-${art}-art-focus.png`) });
         }
         await page.getByRole('button', { name: 'Open image: black contrast artwork', exact: true }).click();
-        const download = page.getByRole('button', { name: 'Download', exact: true });
+        const download = page.getByRole('dialog', { name: 'Image details', exact: true }).getByRole('button', { name: 'Download', exact: true });
         await download.hover();
         await page.waitForTimeout(250);
         expect(await contrast(download, 'color'), 'hovered primary button label').toBeGreaterThanOrEqual(4.5);
         await page.screenshot({ path: testInfo.outputPath(`${mode}-primary-hover.png`) });
+    });
+}
+
+for (const mode of ['light', 'dark'] as const) {
+    test(`${mode} reference thumbnails paint keyboard focus inside their clipped bounds`, async ({ page }, testInfo) => {
+        await page.emulateMedia({ colorScheme: mode });
+        await page.goto('/');
+        const references = await page.evaluate(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 64;
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Canvas unavailable');
+            return ['white', 'black'].map(color => {
+                context.fillStyle = color;
+                context.fillRect(0, 0, 64, 64);
+                return { color, url: canvas.toDataURL() };
+            });
+        });
+        await page.getByLabel('Add reference images', { exact: true }).setInputFiles(references.map(({ color, url }) => ({
+            name: `${color}.png`, mimeType: 'image/png', buffer: Buffer.from(url.split(',')[1], 'base64'),
+        })));
+        for (const [index, { color }] of references.entries()) {
+            const preview = page.getByRole('button', { name: `Preview reference ${index + 1}`, exact: true });
+            await page.keyboard.press('Tab');
+            await preview.focus();
+            await expect(preview).toBeFocused();
+            const bounds = await preview.boundingBox();
+            if (!bounds) throw new Error('Reference preview unavailable');
+            const screenshot = await page.screenshot({ path: testInfo.outputPath(`${mode}-${color}-reference-focus.png`) });
+            const difference = await page.evaluate(async ({ image, bounds }) => {
+                const capture = new Image();
+                capture.src = image;
+                await capture.decode();
+                const canvas = document.createElement('canvas');
+                canvas.width = capture.width;
+                canvas.height = capture.height;
+                const context = canvas.getContext('2d');
+                if (!context) throw new Error('Canvas unavailable');
+                context.drawImage(capture, 0, 0);
+                const sample = (offset: number) => context.getImageData(Math.floor((bounds.x + offset) * devicePixelRatio),
+                    Math.floor((bounds.y + bounds.height / 2) * devicePixelRatio), 1, 1).data[0];
+                return Math.abs(sample(3) - sample(5));
+            }, { image: `data:image/png;base64,${screenshot.toString('base64')}`, bounds });
+            expect(difference, `${color} artwork has two visibly contrasting focus bands`).toBeGreaterThan(200);
+        }
     });
 }
