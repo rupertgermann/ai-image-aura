@@ -114,3 +114,83 @@ for (const batchSize of [1, 2]) {
         await page.screenshot({ path: testInfo.outputPath('prior-results-saved-after-failure.png'), fullPage: true });
     });
 }
+
+for (const failedIteration of [1, 2]) {
+    test(`a lineage write failure on iteration ${failedIteration} keeps the paid image downloadable and saveable`, async ({ page, context, baseURL }, testInfo) => {
+        let generations = 0;
+        let reasoningCalls = 0;
+        const refinedPrompt = 'Latest paid blue squares';
+        const latestImageBase64 = await page.evaluate(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 64;
+            const drawing = canvas.getContext('2d');
+            if (!drawing) throw new Error('Canvas unavailable');
+            drawing.fillStyle = 'blue';
+            drawing.fillRect(0, 0, 64, 64);
+            return canvas.toDataURL().split(',')[1];
+        });
+        await context.route('**/*', async (route) => {
+            const url = route.request().url();
+            if (url === 'https://api.openai.com/v1/images/generations') {
+                generations += 1;
+                await route.fulfill({ json: { data: [{ b64_json: generations === 1 ? imageBase64 : latestImageBase64 }] } });
+            } else if (url === 'https://api.openai.com/v1/responses') {
+                reasoningCalls += 1;
+                await route.fulfill({ json: { output_text: reasoningCalls === 2 ? refinedPrompt
+                    : JSON.stringify({ score: reasoningCalls === 1 ? 80 : 20, feedback: ['Improve lighting.'] }) } });
+            } else if (new URL(url).origin === baseURL) await route.continue();
+            else await route.abort();
+        });
+        await page.goto('/');
+        const navigation = page.getByRole('navigation', { name: 'Main navigation' });
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByLabel('OpenAI API Key', { exact: true }).fill('synthetic-provider-key');
+        await page.locator('section').filter({ has: page.getByRole('heading', { name: 'OpenAI API Key', exact: true }) })
+            .getByRole('button', { name: 'Save key', exact: true }).click();
+        await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
+        await page.evaluate(async (failureIndex) => {
+            const modulePath = '/src/lineage/LineageStore.ts';
+            const { lineageStore } = await import(modulePath);
+            const save = lineageStore.save.bind(lineageStore);
+            let iteration = 0;
+            lineageStore.save = async (input: { stepType: string }) => {
+                if (input.stepType === 'autopilot-iteration' && ++iteration === failureIndex) {
+                    lineageStore.save = save;
+                    throw new Error('Synthetic lineage storage failure');
+                }
+                return save(input);
+            };
+        }, failedIteration);
+        await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+        await page.getByLabel('Starting prompt', { exact: true }).fill(prompt);
+        await page.getByLabel('Goal', { exact: true }).fill('Keep four colored squares');
+        await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
+        await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
+        await expect(page.getByRole('alert')).toContainText('Synthetic lineage storage failure');
+        const expectedWidth = failedIteration === 1 ? 128 : 64;
+        const expectedPrompt = failedIteration === 1 ? prompt : refinedPrompt;
+        await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveJSProperty('naturalWidth', expectedWidth);
+        await expect(page.getByLabel('Starting prompt', { exact: true })).toHaveValue(expectedPrompt);
+        expect(generations).toBe(failedIteration);
+        expect(reasoningCalls).toBe(failedIteration * 2 - 1);
+        const downloadPromise = page.waitForEvent('download');
+        await page.getByRole('button', { name: 'Download', exact: true }).click();
+        const download = await downloadPromise;
+        await download.saveAs(testInfo.outputPath('retained-paid-image.png'));
+        expect(await download.failure()).toBeNull();
+        await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+        await page.reload();
+        await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveJSProperty('naturalWidth', expectedWidth);
+        await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
+        await page.getByRole('button', { name: `Open image: ${expectedPrompt}`, exact: true }).click();
+        const details = page.getByRole('dialog', { name: 'Image details' });
+        await expect(details.locator('.modal-image')).toHaveJSProperty('naturalWidth', expectedWidth);
+        await expect(details.locator('.prompt-container p')).toHaveText(expectedPrompt);
+        await expect(details.locator('.lineage-entry')).toHaveCount(failedIteration);
+        if (failedIteration === 2) {
+            await expect(details.locator('.lineage-entry').filter({ hasText: 'Iteration 1 · Score 80' })).toBeVisible();
+        }
+        await details.screenshot({ path: testInfo.outputPath('saved-paid-candidate.png') });
+    });
+}
