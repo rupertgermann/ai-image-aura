@@ -56,7 +56,8 @@ export async function renderAiTransformEditInput({
 }: RenderAiTransformEditInputOptions): Promise<RenderedAiTransformEditInput> {
     const targetPlan = planAiTransformTarget(draft);
     const sourceLayerStack = buildAiTransformSourceLayerStack(draft.layerStack, targetPlan);
-    const sourceImage = await render(sourceLayerStack, adjustments, targetPlan.targetBounds);
+    // Global adjustments remain editable and apply once to the returned layer.
+    const sourceImage = await render(sourceLayerStack, { brightness: 100, contrast: 100, saturation: 100, filter: 'none' }, targetPlan.targetBounds);
     const compositionContextImage = targetPlan.requiresCompositionContext
         ? blobToFile(
             await render(draft.layerStack, adjustments, getWholeCompositionBounds(draft.layerStack)),

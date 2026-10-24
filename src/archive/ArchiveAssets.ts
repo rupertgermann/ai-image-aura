@@ -124,31 +124,37 @@ export async function restoreArchiveAssetSnapshot(
     touchedReferenceIds: number[],
     touchedLayerIds: string[],
 ): Promise<void> {
-    if (snapshot.image !== null) {
-        await blobs.save(getArchiveImageBlobKey(id), snapshot.image);
-    } else {
-        await blobs.remove(getArchiveImageBlobKey(id));
-    }
-
     const referenceIds = getTouchedReferenceIds(Array.from(snapshot.references.keys()), touchedReferenceIds);
-    await Promise.all(referenceIds.map(async (index) => {
-        const previousReference = snapshot.references.get(index);
-        if (previousReference !== undefined) {
-            await blobs.save(getArchiveReferenceBlobKey(id, index), previousReference);
-            return;
-        }
-
-        await blobs.remove(getArchiveReferenceBlobKey(id, index));
-    }));
-
     const layerIds = getTouchedLayerIds(Array.from(snapshot.layers.keys()), touchedLayerIds);
-    await Promise.all(layerIds.map(async (layerId) => {
-        const previousLayer = snapshot.layers.get(layerId);
-        if (previousLayer !== undefined) {
-            await blobs.save(getArchiveLayerBlobKey(id, layerId), previousLayer);
-            return;
-        }
+    const restorations = await Promise.allSettled([
+        snapshot.image !== null
+            ? blobs.save(getArchiveImageBlobKey(id), snapshot.image)
+            : blobs.remove(getArchiveImageBlobKey(id)),
+        ...referenceIds.map(async (index) => {
+            const previousReference = snapshot.references.get(index);
+            if (previousReference !== undefined) {
+                await blobs.save(getArchiveReferenceBlobKey(id, index), previousReference);
+                return;
+            }
 
-        await blobs.remove(getArchiveLayerBlobKey(id, layerId));
-    }));
+            await blobs.remove(getArchiveReferenceBlobKey(id, index));
+        }),
+        ...layerIds.map(async (layerId) => {
+            const previousLayer = snapshot.layers.get(layerId);
+            if (previousLayer !== undefined) {
+                await blobs.save(getArchiveLayerBlobKey(id, layerId), previousLayer);
+                return;
+            }
+
+            await blobs.remove(getArchiveLayerBlobKey(id, layerId));
+        }),
+    ]);
+    const failures = restorations.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length === 1) {
+        throw failures[0];
+    }
+    if (failures.length > 1) {
+        const details = failures.map((error) => error instanceof Error ? error.message : String(error)).join('; ');
+        throw new AggregateError(failures, `Archive asset restoration failed: ${details}`);
+    }
 }
