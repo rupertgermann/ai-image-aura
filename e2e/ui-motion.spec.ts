@@ -10,11 +10,28 @@ async function settle(page: Page) {
     });
 }
 
-async function expectExit(locator: Locator) {
-    await expect.poll(() => locator.evaluateAll((elements) => elements.some((element) =>
-        element.closest('[inert]') && element.getAnimations().some((animation) => animation.playState === 'running'),
-    ))).toBe(true);
-    await expect(locator).toHaveCount(0);
+async function expectExit(locator: Locator, dismiss: () => Promise<unknown>) {
+    const elements = await locator.elementHandles();
+    await Promise.all(elements.map((element) => element.evaluate((node) => {
+        const presence = node.closest('.presence');
+        if (!presence) throw new Error('Exit target has no Presence container');
+        const observer = new MutationObserver(() => {
+            if (node.closest('[inert]') && node.getAnimations().some((animation) => animation.playState === 'running')) {
+                observer.disconnect();
+                node.setAttribute('data-observed-exit', 'true');
+            }
+        });
+        observer.observe(presence, { attributes: true, subtree: true, attributeFilter: ['inert', 'data-present'] });
+    })));
+    try {
+        await dismiss();
+        await expect.poll(async () => (await Promise.all(elements.map((element) =>
+            element.getAttribute('data-observed-exit'),
+        ))).some((value) => value === 'true')).toBe(true);
+        await expect(locator).toHaveCount(0);
+    } finally {
+        await Promise.all(elements.map((element) => element.dispose()));
+    }
 }
 
 test.beforeEach(async ({ context, page, baseURL }) => {
@@ -66,8 +83,7 @@ test('navigation, disclosures, reference dialogs and menus enter and exit withou
     await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
     await page.getByLabel('Goal', { exact: true }).fill('Keep the orange subject centered');
     await settle(page);
-    await page.getByRole('button', { name: 'Single Shot', exact: true }).click();
-    await expectExit(page.locator('.autopilot-panel'));
+    await expectExit(page.locator('.autopilot-panel'), () => page.getByRole('button', { name: 'Single Shot', exact: true }).click());
     await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
     await expect(page.getByLabel('Goal', { exact: true })).toHaveValue('Keep the orange subject centered');
     await page.getByRole('button', { name: 'Single Shot', exact: true }).click();
@@ -77,8 +93,7 @@ test('navigation, disclosures, reference dialogs and menus enter and exit withou
     const palette = page.getByRole('combobox', { name: 'Palette', exact: true });
     await palette.click();
     await settle(page);
-    await palette.press('Escape');
-    await expectExit(page.locator('.palette-options'));
+    await expectExit(page.locator('.palette-options'), () => palette.press('Escape'));
     await expect(palette).toBeFocused();
     await palette.click();
     await palette.press('ArrowDown');
@@ -92,14 +107,12 @@ test('navigation, disclosures, reference dialogs and menus enter and exit withou
     await expect(dialog).toBeVisible();
     await settle(page);
     await page.screenshot({ path: testInfo.outputPath('reference-dialog.png') });
-    await page.keyboard.press('Escape');
-    await expectExit(dialog);
+    await expectExit(dialog, () => page.keyboard.press('Escape'));
     await expect(preview).toBeFocused();
     await preview.click();
     await page.getByRole('button', { name: 'Close reference preview' }).click();
     await expect(dialog).toHaveCount(0);
-    await page.getByRole('button', { name: 'Remove reference 1' }).click();
-    await expectExit(page.locator('.reference-preview'));
+    await expectExit(page.locator('.reference-preview'), () => page.getByRole('button', { name: 'Remove reference 1' }).click());
     await page.locator('.style-options > summary').click();
     await expect.poll(() => page.locator('.style-options').evaluate((element) =>
         getComputedStyle(element, '::details-content').contentVisibility,
@@ -186,8 +199,7 @@ test('archive filtering, confirmations, toasts and Editor panels remain usable t
     await expect(page.locator('.image-card')).toHaveCount(3);
     await settle(page);
     await page.screenshot({ path: testInfo.outputPath('archive-desktop.png') });
-    await page.getByRole('button', { name: 'Favorites', exact: true }).click();
-    await expectExit(page.locator('.image-card').filter({ hasText: 'Blue study' }));
+    await expectExit(page.locator('.image-card').filter({ hasText: 'Blue study' }), () => page.getByRole('button', { name: 'Favorites', exact: true }).click());
     await expect(page.locator('.image-card')).toHaveCount(1);
     await page.getByRole('button', { name: 'Favorites', exact: true }).click();
     await expect(page.locator('.image-card')).toHaveCount(3);
@@ -199,8 +211,7 @@ test('archive filtering, confirmations, toasts and Editor panels remain usable t
     const bulkBottom = await page.locator('.bulk-action-bar').evaluate((element) => element.getBoundingClientRect().bottom);
     expect(bulkBottom).toBeGreaterThan(960);
     await settle(page);
-    await page.locator('.bulk-action-bar').getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expectExit(page.locator('.bulk-action-bar'));
+    await expectExit(page.locator('.bulk-action-bar'), () => page.locator('.bulk-action-bar').getByRole('button', { name: 'Cancel', exact: true }).click());
 
     await page.getByRole('button', { name: 'Open image: Orange study', exact: true }).click();
     const detail = page.getByRole('dialog', { name: 'Image details', exact: true });
@@ -208,10 +219,8 @@ test('archive filtering, confirmations, toasts and Editor panels remain usable t
     await settle(page);
     await page.screenshot({ path: testInfo.outputPath('image-details.png') });
     await detail.getByRole('button', { name: 'Favorited', exact: true }).click();
-    await detail.getByRole('button', { name: 'Close image details' }).click();
-    await expectExit(page.locator('dialog[aria-label="Image details"]'));
-    await page.getByRole('button', { name: 'Dismiss notification' }).last().click();
-    await expectExit(page.locator('.toast'));
+    await expectExit(page.locator('dialog[aria-label="Image details"]'), () => detail.getByRole('button', { name: 'Close image details' }).click());
+    await expectExit(page.locator('.toast'), () => page.getByRole('button', { name: 'Dismiss notification' }).last().click());
 
     const blue = page.locator('.image-card').filter({ hasText: 'Blue study' });
     await blue.hover();
@@ -219,8 +228,7 @@ test('archive filtering, confirmations, toasts and Editor panels remain usable t
     const confirm = page.locator('dialog[aria-label="Delete image?"]');
     await expect(confirm).toBeVisible();
     await settle(page);
-    await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expectExit(confirm);
+    await expectExit(confirm, () => confirm.getByRole('button', { name: 'Cancel', exact: true }).click());
     await expect(page.locator('.image-card')).toHaveCount(3);
 
     await page.getByRole('button', { name: 'Open image: Orange study', exact: true }).click();
