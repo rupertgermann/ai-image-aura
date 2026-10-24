@@ -30,3 +30,4 @@ public/recovery/
 # Browser E2E artifacts
 test-results/
 playwright-report/
+.audit
