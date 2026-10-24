@@ -33,7 +33,7 @@ it.each([false, true])('restores the exact Autopilot provider inputs and clears 
     const navigator = createLineageNavigator({ sessionStore: session, lineageStore: { getById: async () => step }, findImage: () => null });
     expect(await navigator.replayIntoGenerate('intermediate')).toEqual({ status: 'replayed' });
     expect(await session.loadCurrentBatch()).toBeNull();
-    const providerGenerate = vi.fn(async (_request: ImageProviderRequest) => [{ b64_json: 'TkVX' }]);
+    const providerGenerate = vi.fn<(request: ImageProviderRequest) => Promise<{ b64_json: string }[]>>().mockResolvedValue([{ b64_json: 'TkVX' }]);
     const workflow = createImageWorkflow({ ...imageProviderRegistry, openai: { edit: vi.fn(), generate: providerGenerate } });
     const restoredReferences = workflow.hydrateReferences(await session.consumeTransferredReferences());
     const draft = session.readDraft();
@@ -52,4 +52,14 @@ it('refuses legacy intermediate inputs before mutating the existing session', as
     const navigator = createLineageNavigator({ sessionStore: session, findImage: () => null, lineageStore: { getById: async () => ({ id: 'legacy', archiveImageId: 'missing', parentStepId: null, timestamp: '2026-10-24', stepType: 'autopilot-iteration', metadata: { prompt: 'legacy' } }) } });
     expect(await navigator.replayIntoGenerate('legacy')).toMatchObject({ status: 'unavailable' });
     expect({ blobs: [...blobs], local: [...local] }).toEqual(before);
+});
+
+it.each([{ referenceCount: 0 }, { referenceImages: { count: 0, ids: [] } }])('replays a missing archive generation with explicitly empty references %j', async (metadata) => {
+    const { session } = setup();
+    const navigator = createLineageNavigator({ sessionStore: session, findImage: () => null, lineageStore: {
+        getById: async () => ({ id: 'known-empty', archiveImageId: 'missing', parentStepId: null, timestamp: '2026-10-24', stepType: 'generation', metadata: { ...metadata, prompt: 'known empty' } }),
+    } });
+    expect(await navigator.replayIntoGenerate('known-empty')).toEqual({ status: 'replayed' });
+    expect(session.readDraft().prompt).toBe('known empty');
+    expect(await session.consumeTransferredReferences()).toEqual([]);
 });

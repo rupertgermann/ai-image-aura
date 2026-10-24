@@ -18,8 +18,7 @@ describe('LineageNavigator', () => {
                 status: 'unavailable',
                 reason: 'This step cannot be replayed into Generate',
             });
-            expect(sessionStore.transferFromArchive).not.toHaveBeenCalled();
-            expect(sessionStore.writeDraft).not.toHaveBeenCalled();
+            expect(sessionStore.transfer).not.toHaveBeenCalled();
         });
     });
 
@@ -35,7 +34,7 @@ describe('LineageNavigator', () => {
                 status: 'unavailable',
                 reason: 'Selected step image is missing from the local archive',
             });
-            expect(sessionStore.saveLineageSource).not.toHaveBeenCalled();
+            expect(sessionStore.transfer).not.toHaveBeenCalled();
         });
 
         it('reports unavailable when the step is not editor-replayable', async () => {
@@ -58,7 +57,7 @@ describe('LineageNavigator', () => {
                 status: 'unavailable',
                 reason: 'Selected lineage step no longer exists',
             });
-            expect(sessionStore.saveLineageSource).not.toHaveBeenCalled();
+            expect(sessionStore.transfer).not.toHaveBeenCalled();
         });
     });
 });
@@ -70,9 +69,7 @@ interface SetupOptions {
 
 function setup({ steps, images }: SetupOptions) {
     const sessionStore = {
-        transferFromArchive: vi.fn().mockResolvedValue(undefined),
-        writeDraft: vi.fn(),
-        saveLineageSource: vi.fn(),
+        transfer: vi.fn().mockResolvedValue(undefined),
     } satisfies LineageNavigatorDeps['sessionStore'];
 
     const navigator = createLineageNavigator({

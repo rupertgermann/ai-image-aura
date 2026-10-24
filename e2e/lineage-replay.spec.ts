@@ -38,7 +38,8 @@ for (const action of ['Load in Editor', 'Fork from this step']) {
         await dialog.getByRole('button', { name: 'Load in Generate', exact: true }).click();
         await nav.getByRole('button', { name: 'Editor', exact: true }).click();
         await page.reload();
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
+        await page.getByRole('button', { name: 'B&W', exact: true }).click();
+        await page.getByRole('button', { name: 'Save changes', exact: true }).click();
         await expect(page.locator('.editor-container')).toBeHidden();
         const result = await page.evaluate(async () => {
             const lineagePath = '/src/lineage/LineageStore.ts';
@@ -54,19 +55,38 @@ for (const action of ['Load in Editor', 'Fork from this step']) {
 }
 
 test('intermediate Autopilot replay restores reference bytes and controls in the next HTTP request', async ({ page }, testInfo) => {
-    await page.evaluate(async (url) => {
+    const importedReferences = await page.evaluate(async (url) => {
         const lineagePath = '/src/lineage/LineageStore.ts';
         const { lineageStore } = await import(lineagePath);
         await lineageStore.save({ id: 'intermediate', archiveImageId: 'autopilot:synthetic:iteration:1', parentStepId: null, stepType: 'autopilot-iteration', timestamp: '2026-10-24', metadata: {
             prompt: 'Intermediate reference request', model: 'gpt-image-2.5-flare', quality: 'high', aspectRatio: '1536x1024', background: 'transparent', references: [url], outputImageDataUrl: url,
         } });
-        await lineageStore.save({ id: 'childB', archiveImageId: 'B', parentStepId: 'intermediate', stepType: 'generation', timestamp: '2026-10-24T01:00:00Z', metadata: {} });
+        await lineageStore.save({ id: 'stepB', archiveImageId: 'B', parentStepId: 'intermediate', stepType: 'generation', timestamp: '2026-10-24T01:00:00Z', metadata: {} });
+        const archivePath = '/src/archive/ArchiveStore.ts';
+        const transferPath = '/src/archive/ArchiveTransfer.ts';
+        const { archiveStore } = await import(archivePath);
+        const { buildArchiveZip, importArchiveZip } = await import(transferPath);
+        const image = await archiveStore.get('B');
+        if (!image) throw new Error('Missing fixture image');
+        let references: unknown;
+        const zip = await buildArchiveZip([image], { lineageStore });
+        const summary = await importArchiveZip(zip, {
+            archiveStore: { save: async (input: unknown) => input },
+            lineageStore: { save: async (step: { id: string; metadata: Record<string, unknown> }) => {
+                if (step.id === 'intermediate') references = step.metadata.references;
+                return step;
+            } },
+        });
+        if (summary.missingAssetFiles.length) throw new Error('Missing ZIP assets');
+        return references;
+
     }, imageUrl);
+    expect(importedReferences).toEqual([imageUrl]);
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     await nav.getByRole('button', { name: 'Archive', exact: true }).click();
     await page.getByRole('button', { name: 'Open image: Image B', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Image details' });
-    await dialog.locator('.lineage-entry').filter({ hasText: 'Intermediate reference request' }).getByRole('button', { name: 'Load in Generate', exact: true }).click();
+    await dialog.locator('.lineage-entry').filter({ hasText: 'Autopilot Iteration' }).getByRole('button', { name: 'Load in Generate', exact: true }).click();
     await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Remove reference/ })).toHaveCount(1);
     let requestBody = '';
