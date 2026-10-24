@@ -13,6 +13,7 @@ async function settle(page: Page) {
 async function expectExit(locator: Locator, dismiss: () => Promise<unknown>) {
     const elements = await locator.elementHandles();
     await Promise.all(elements.map((element) => element.evaluate((node) => {
+        if (!(node instanceof Element)) throw new Error('Exit target is not an element');
         const presence = node.closest('.presence');
         if (!presence) throw new Error('Exit target has no Presence container');
         const observer = new MutationObserver(() => {
