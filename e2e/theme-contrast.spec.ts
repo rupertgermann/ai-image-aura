@@ -1,5 +1,16 @@
 import { expect, test, type Locator } from '@playwright/test';
 
+test.beforeEach(async ({ context, baseURL }) => {
+    await context.route('**/*', route => new URL(route.request().url()).origin === baseURL ? route.continue() : route.abort());
+});
+
+async function settleAnimations(locator: Locator) {
+    await locator.evaluate(async element => {
+        const animations = element.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity);
+        await Promise.allSettled(animations.map(animation => animation.finished));
+    });
+}
+
 async function contrast(locator: Locator, foreground: 'color' | 'borderTopColor' | 'outlineColor') {
     return locator.evaluate((element, property) => {
         const canvas = document.createElement('canvas');
@@ -40,22 +51,23 @@ for (const mode of ['light', 'dark'] as const) {
     test(`${mode} hover labels, archive selection, and keyboard focus stay distinguishable`, async ({ page }, testInfo) => {
         await page.emulateMedia({ colorScheme: mode });
         await page.goto('/');
-        await page.evaluate(async () => {
-            const path = '/src/archive/ArchiveStore.ts';
-            const { archiveStore }: typeof import('../src/archive/ArchiveStore') = await import(path);
+        const artwork = await page.evaluate(() => {
             const canvas = document.createElement('canvas');
             canvas.width = canvas.height = 64;
             const context = canvas.getContext('2d');
             if (!context) throw new Error('Canvas unavailable');
-            for (const color of ['white', 'black']) {
+            return ['white', 'black'].map(color => {
                 context.fillStyle = color;
                 context.fillRect(0, 0, 64, 64);
-                await archiveStore.save({ id: color, url: canvas.toDataURL(), prompt: `${color} contrast artwork`,
-                    quality: 'medium', aspectRatio: '64x64', model: 'gpt-image-2', background: 'opaque',
-                    timestamp: '2026-10-25T00:00:00Z' });
-            }
+                return { color, base64: canvas.toDataURL().split(',')[1] };
+            });
         });
-        await page.reload();
+        await page.route('https://api.openai.com/v1/images/generations', route => {
+            const prompt = String(route.request().postDataJSON().prompt);
+            const image = artwork.find(image => prompt.startsWith(image.color));
+            if (!image) throw new Error('Unexpected synthetic image request');
+            return route.fulfill({ json: { data: [{ b64_json: image.base64 }] } });
+        });
         const navigation = page.getByRole('navigation', { name: 'Main navigation' });
         await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
         await page.getByLabel('OpenAI API Key', { exact: true }).fill('synthetic-contrast-test');
@@ -64,12 +76,24 @@ for (const mode of ['light', 'dark'] as const) {
         await page.waitForTimeout(250);
         expect.soft(await contrast(save, 'color'), 'hovered amber button label').toBeGreaterThanOrEqual(4.5);
         await page.screenshot({ path: testInfo.outputPath(`${mode}-hover.png`) });
+        await save.click();
+        await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
+        for (const { color, base64 } of artwork) {
+            await page.getByLabel('Prompt', { exact: true }).fill(`${color} contrast artwork`);
+            await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+            await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveAttribute('src', `data:image/png;base64,${base64}`);
+            await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+            await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeVisible();
+        }
         await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
         const whiteCard = page.getByRole('article').filter({ has: page.getByRole('button', { name: 'Open image: white contrast artwork', exact: true }) });
         await whiteCard.hover();
         expect.soft(await contrast(whiteCard.locator('.selector-inner'), 'borderTopColor'), 'unchecked archive selection boundary').toBeGreaterThanOrEqual(3);
         await whiteCard.getByRole('button', { name: 'Add to favorites', exact: true }).click();
-        const dismiss = page.getByRole('button', { name: 'Dismiss notification' });
+        const toast = page.getByRole('status').filter({ hasText: 'Added to favorites' });
+        await expect(toast).toBeVisible();
+        await settleAnimations(toast);
+        const dismiss = toast.getByRole('button', { name: 'Dismiss notification' });
         await page.keyboard.press('Tab');
         await dismiss.focus();
         await expect(dismiss).toBeFocused();
@@ -81,7 +105,6 @@ for (const mode of ['light', 'dark'] as const) {
         expect(parseFloat(toastFocus.width)).toBeGreaterThanOrEqual(2);
         expect.soft(await contrast(dismiss, 'outlineColor'), 'toast keyboard focus').toBeGreaterThanOrEqual(3);
         await page.screenshot({ path: testInfo.outputPath(`${mode}-toast-focus.png`) });
-        await dismiss.click();
         for (const art of ['white', 'black']) {
             const open = page.getByRole('button', { name: `Open image: ${art} contrast artwork`, exact: true });
             await page.keyboard.press('Tab');
@@ -145,6 +168,7 @@ for (const mode of ['light', 'dark'] as const) {
             await page.keyboard.press('Tab');
             await preview.focus();
             await expect(preview).toBeFocused();
+            await settleAnimations(preview.locator('..'));
             const bounds = await preview.boundingBox();
             if (!bounds) throw new Error('Reference preview unavailable');
             const screenshot = await page.screenshot({ path: testInfo.outputPath(`${mode}-${color}-reference-focus.png`) });

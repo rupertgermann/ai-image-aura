@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ context, baseURL }) => {
+    await context.route('**/*', route => new URL(route.request().url()).origin === baseURL ? route.continue() : route.abort());
+});
+
 for (const mode of ['light', 'dark'] as const) {
     test(`${mode} system preference is readable and manual choice persists`, async ({ page }, testInfo) => {
         await page.emulateMedia({ colorScheme: mode });
