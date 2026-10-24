@@ -25,6 +25,10 @@ class InMemoryArchiveMetadataPort {
         this.records.set(record.id, record);
     }
 
+    async insertIfAbsent(record: ArchiveMetadataRecord) {
+        if (!this.records.has(record.id)) this.records.set(record.id, record);
+    }
+
     async setFavorite(id: string, favorite: boolean) {
         const record = this.records.get(id);
         if (!record) {
@@ -341,6 +345,25 @@ describe('ArchiveStore layer asset ownership', () => {
             }),
         ]);
         expect(blobs.blobs.has('layer_image-1_new-layer')).toBe(false);
+    });
+
+    it('hydrates the winning save when orphan scanning follows a stale metadata listing', async () => {
+        const { store, metadata, blobs } = createStore();
+        let resume: () => void = () => {};
+        let scan: () => void = () => {};
+        const started = new Promise<void>((resolve) => { scan = resolve; });
+        const gate = new Promise<void>((resolve) => { resume = resolve; });
+        blobs.listKeys = async () => { scan(); await gate; return [...blobs.blobs.keys()]; };
+        const listing = store.list();
+        await started;
+        await store.save(createImageInput({
+            id: 'saved', model: 'gpt-image-2.5-flare', favorite: true,
+            references: ['data:image/png;base64,reference'], layerStack: createLayerStack('original', ['base']),
+        }));
+        const original = await store.get('saved');
+        resume();
+        await expect(listing).resolves.toEqual([original]);
+        await expect(createArchiveStore({ metadata, blobs }).get('saved')).resolves.toEqual(original);
     });
 
     it('recovers orphaned image blobs when metadata is missing', async () => {
