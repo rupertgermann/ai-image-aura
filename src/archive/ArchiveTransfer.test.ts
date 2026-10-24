@@ -93,7 +93,7 @@ describe('ArchiveTransfer', () => {
             saveImage: (request) => saveArchiveImage(request, {
                 archive: {
                     get: async (id) => sourceArchive.images.get(id) ?? null,
-                    save: (image) => sourceArchive.save(image),
+                    save: sourceArchive.save.bind(sourceArchive),
                     remove: async (id) => { sourceArchive.images.delete(id); },
                 },
                 lineage: sourceLineage,
