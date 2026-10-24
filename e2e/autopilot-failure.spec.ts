@@ -74,3 +74,43 @@ for (const failedIteration of [1, 2]) {
         await page.screenshot({ path: testInfo.outputPath('retained-autopilot-image.png'), fullPage: true });
     });
 }
+
+for (const batchSize of [1, 2]) {
+    test(`a first image failure keeps all ${batchSize} prior results usable without reload`, async ({ page, context, baseURL }, testInfo) => {
+        let failImage = false;
+        await context.route('**/*', async (route) => {
+            const url = route.request().url();
+            if (url === 'https://api.openai.com/v1/images/generations') {
+                if (failImage) await route.fulfill({ status: 429, json: { error: { message: 'Synthetic image quota exceeded' } } });
+                else await route.fulfill({ json: { data: Array.from({ length: batchSize }, () => ({ b64_json: imageBase64 })) } });
+            } else if (new URL(url).origin === baseURL) await route.continue();
+            else await route.abort();
+        });
+        await page.goto('/');
+        const navigation = page.getByRole('navigation', { name: 'Main navigation' });
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByLabel('OpenAI API Key', { exact: true }).fill('synthetic-provider-key');
+        await page.locator('section').filter({ has: page.getByRole('heading', { name: 'OpenAI API Key', exact: true }) })
+            .getByRole('button', { name: 'Save key', exact: true }).click();
+        await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
+        await page.getByLabel('Prompt', { exact: true }).fill('Prior usable result');
+        await page.getByLabel('BATCH SIZE', { exact: true }).selectOption(String(batchSize));
+        await page.getByRole('button', { name: batchSize === 1 ? 'Generate image' : 'Generate 2 images', exact: true }).click();
+        await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(batchSize);
+        failImage = true;
+        await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+        await page.getByLabel('Goal', { exact: true }).fill('A paper crane');
+        await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
+        await page.getByRole('button', { name: 'Continue', exact: true }).click();
+        await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
+        await expect(page.getByRole('alert')).toContainText('Synthetic image quota exceeded');
+        await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(batchSize);
+        await page.getByRole('button', { name: 'Use as reference', exact: true }).first().click();
+        await expect(page.getByRole('button', { name: /Remove reference/ })).toHaveCount(1);
+        await page.getByRole('button', { name: batchSize === 1 ? 'Save to Archive' : 'Save all', exact: true }).click();
+        await expect(page.getByRole('button', { name: batchSize === 1 ? 'Saved to Archive' : 'All saved', exact: true })).toBeDisabled();
+        await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Open image: Prior usable result', exact: true })).toHaveCount(batchSize);
+        await page.screenshot({ path: testInfo.outputPath('prior-results-saved-after-failure.png'), fullPage: true });
+    });
+}

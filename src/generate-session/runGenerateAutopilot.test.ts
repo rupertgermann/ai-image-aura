@@ -3,13 +3,63 @@ import { runGenerateAutopilot } from './runGenerateAutopilot';
 import { createAutopilotSession } from '../autopilot/AutopilotSession';
 import { NANO_BANANA_PRO_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
-import type { LineageStep, SaveLineageStepInput } from '../lineage/LineageStore';
+import { createLineageStore, type LineageStep, type SaveLineageStepInput } from '../lineage/LineageStore';
 import type { ApiCostLedger } from '../db/types';
 import { calculateApiCostTotals } from '../costs/apiCost';
 import { saveGenerateResultSlots } from './useGenerateController';
-import { DEFAULT_GENERATE_DRAFT } from './GenerateSession';
+import { saveArchiveImage } from '../archive/saveArchiveImage';
+import { loadLineageTimeline } from '../lineage/loadLineageTimeline';
+import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT } from './GenerateSession';
 
 describe('runGenerateAutopilot', () => {
+    it.each(['archive', 'explicit', 'root'])('keeps %s ancestry through Autopilot and final archive save', async (sourceKind) => {
+        const steps = new Map<string, LineageStep>();
+        const lineage = createLineageStore({ metadata: {
+            save: async (step) => { steps.set(step.id, step); },
+            getById: async (id) => steps.get(id) ?? null,
+            getByArchiveImageId: async (id) => [...steps.values()].filter((step) => step.archiveImageId === id),
+            getChildren: async (id) => [...steps.values()].filter((step) => step.parentStepId === id),
+        } });
+        const original = await lineage.save({ archiveImageId: 'source', stepType: 'generation', metadata: {} });
+        const latest = await lineage.save({ archiveImageId: 'source', parentStepId: original.id, stepType: 'overwrite', metadata: {} });
+        const blobs = new Map<string, string>();
+        const session = createGenerateSessionStore({ blobStorage: {
+            save: async (key, value) => { blobs.set(key, value); }, load: async (key) => blobs.get(key) ?? null,
+            remove: async (key) => { blobs.delete(key); }, listKeys: async () => [...blobs.keys()],
+        } });
+        if (sourceKind !== 'root') {
+            await session.transferFromArchive({
+                id: 'source', url: 'source-image', prompt: 'original', quality: 'high',
+                aspectRatio: '1024x1024', background: 'auto', timestamp: '2026-10-24',
+            }, sourceKind === 'explicit' ? { archiveImageId: 'source', stepId: original.id } : undefined);
+        }
+        const outcome = await runGenerateAutopilot({
+            goal: 'portrait', imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
+            draft: { ...DEFAULT_GENERATE_DRAFT, prompt: 'portrait' }, referenceImages: [],
+            sessionStore: session, lineageStore: lineage,
+            workflow: { generate: async () => [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,new' }], serializeReferences: async () => [] },
+            createSession: (input) => createAutopilotSession(input, { reasoningClient: {
+                createResponse: async () => ({ outputText: JSON.stringify({ score: 95, feedback: [] }) }),
+            } }),
+        });
+        const iteration = outcome.result.iterations[0];
+        const expectedParent = sourceKind === 'archive' ? latest.id : sourceKind === 'explicit' ? original.id : null;
+        expect(steps.get(iteration.stepId ?? '')?.parentStepId).toBe(expectedParent);
+        const batch = outcome.batch;
+        if (!batch?.draft) throw new Error('Missing candidate');
+        await saveGenerateResultSlots({
+            results: batch.results, draft: batch.draft, runDraft: batch.draft,
+            usedReferences: batch.references, runLineageSource: batch.lineageSource,
+            serializeReferences: async () => [], createArchiveImageId: () => 'final',
+            saveImage: (request) => saveArchiveImage(request, { lineage, archive: {
+                get: async () => null, save: async (image) => image, remove: async () => {},
+            } }),
+        });
+        const timeline = await loadLineageTimeline('final', lineage);
+        expect(timeline.entries.some((entry) => entry.id === original.id)).toBe(sourceKind !== 'root');
+        expect(timeline.entries.some((entry) => entry.id === latest.id)).toBe(sourceKind === 'archive');
+    });
+
     it.each([1, 2])('retains and saves the paid candidate when lineage fails on iteration %i', async (failedIteration) => {
         let imageNumber = 0;
         let stepNumber = 0;
@@ -24,7 +74,7 @@ describe('runGenerateAutopilot', () => {
             draft: { ...DEFAULT_GENERATE_DRAFT, prompt: 'original prompt' },
             referenceImages: [new File(['reference'], 'reference.png')],
             sessionStore: { loadLineageSource: () => ({ archiveImageId: 'original', stepId: 'original-step' }) },
-            lineageStore: { save: async (step) => {
+            lineageStore: { getByArchiveImageId: async () => [], save: async (step) => {
                 if (++stepNumber === failedIteration) throw failure;
                 return { ...step, id: `step-${stepNumber}` };
             } },
@@ -80,7 +130,7 @@ describe('runGenerateAutopilot', () => {
             goal: 'portrait', imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
             draft: DEFAULT_GENERATE_DRAFT, referenceImages: [],
             sessionStore: { loadLineageSource: () => null },
-            lineageStore: { save: vi.fn() },
+            lineageStore: { getByArchiveImageId: async () => [], save: vi.fn() },
             workflow: { generate, serializeReferences: async () => { throw new Error('reference read failed'); } },
             createSession: (input) => createAutopilotSession(input, { reasoningClient: { createResponse: vi.fn() } }),
         })).rejects.toThrow('reference read failed');
@@ -161,6 +211,7 @@ describe('runGenerateAutopilot', () => {
                 loadLineageSource: () => null,
             },
             lineageStore: {
+                getByArchiveImageId: async () => [],
                 save: saveLineageStep,
             },
             workflow: {
@@ -219,7 +270,7 @@ describe('runGenerateAutopilot', () => {
             goal: 'portrait', imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
             draft: { ...DEFAULT_GENERATE_DRAFT, prompt: 'original prompt' },
             referenceImages: [], sessionStore: { loadLineageSource: () => null },
-            lineageStore: { save: async (step) => ({ ...step, id: `step-${++stepNumber}` }) },
+            lineageStore: { getByArchiveImageId: async () => [], save: async (step) => ({ ...step, id: `step-${++stepNumber}` }) },
             workflow: {
                 generate: async () => [{
                     slotIndex: 0, status: 'success', imageUrl: `data:image/png;base64,image-${++imageNumber}`,
@@ -298,7 +349,7 @@ describe('runGenerateAutopilot', () => {
             sessionStore: {
                 loadLineageSource: () => null,
             },
-            lineageStore: { save },
+            lineageStore: { getByArchiveImageId: async () => [], save },
             workflow: { generate, serializeReferences: vi.fn(async () => []) },
             createSession: (input) => createAutopilotSession(input, { reasoningClient: { createResponse } }),
             maxIterations: 1,
