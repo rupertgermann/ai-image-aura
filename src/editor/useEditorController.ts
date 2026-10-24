@@ -33,8 +33,8 @@ export function useEditorController({
     maskImage,
     onSave,
 }: UseEditorControllerOptions) {
-    const { commitDraft, ...session } = useEditorSession(image);
-    const { draft, draftLoading, adjustments, referenceImages, addReferenceFiles } = session;
+    const { commitDraft, addLayerFiles: importLayerFiles, addReferenceFiles: importReferenceFiles, ...session } = useEditorSession(image);
+    const { draft, draftLoading, adjustments, referenceImages, hasPendingImports } = session;
     const isCanvasReady = !!draft && !draftLoading;
     const operationInProgress = useRef(false);
     const [saving, setSaving] = useState(false);
@@ -43,8 +43,18 @@ export function useEditorController({
     const [aiError, setAiError] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
 
+    const addLayerFiles = useCallback((files: File[]) => {
+        if (operationInProgress.current) return;
+        return importLayerFiles(files);
+    }, [importLayerFiles]);
+
+    const addReferenceFiles = useCallback((files: File[]) => {
+        if (operationInProgress.current) return;
+        return importReferenceFiles(files);
+    }, [importReferenceFiles]);
+
     const save = useCallback(async (isCopy: boolean = false) => {
-        if (!draft || draftLoading || operationInProgress.current) {
+        if (!draft || draftLoading || hasPendingImports() || operationInProgress.current) {
             return;
         }
 
@@ -63,11 +73,12 @@ export function useEditorController({
     }, [
         draft,
         draftLoading,
+        hasPendingImports,
         onSave,
     ]);
 
     const applyAiEdit = useCallback(async () => {
-        if (!imageCredential || !aiPrompt.trim() || !draft || !isCanvasReady || operationInProgress.current) {
+        if (!imageCredential || !aiPrompt.trim() || !draft || !isCanvasReady || hasPendingImports() || operationInProgress.current) {
             return;
         }
 
@@ -95,7 +106,7 @@ export function useEditorController({
             operationInProgress.current = false;
             setAiLoading(false);
         }
-    }, [adjustments, aiPrompt, imageCredential, commitDraft, draft, isCanvasReady, maskImage, model, referenceImages]);
+    }, [adjustments, aiPrompt, imageCredential, commitDraft, draft, hasPendingImports, isCanvasReady, maskImage, model, referenceImages]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -119,6 +130,8 @@ export function useEditorController({
 
     return {
         ...session,
+        addLayerFiles,
+        addReferenceFiles,
         saving,
         aiPrompt,
         setAiPrompt,

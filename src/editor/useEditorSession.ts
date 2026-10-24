@@ -33,6 +33,9 @@ export function useEditorSession(image: ArchiveImage | null) {
     const [history, setHistory] = useState<LayerHistoryState | null>(null);
     const [draftLoading, setDraftLoading] = useState(true);
     const [draftError, setDraftError] = useState<string | null>(null);
+    const [importing, setImporting] = useState(false);
+    const pendingImports = useRef(0);
+    const hasPendingImports = useCallback(() => pendingImports.current > 0, []);
     const latestDraft = useRef<EditorDraft | null>(null);
     const sessionRevision = useRef(0);
     const restoreDraft = useEffectEvent((persisted: EditorDraft | null) => {
@@ -40,10 +43,12 @@ export function useEditorSession(image: ArchiveImage | null) {
         latestDraft.current = next;
         setHistory(next ? { past: [], present: next, future: [] } : null);
         setDraftLoading(false);
+        setImporting(false);
     });
     useEffect(() => {
         let cancelled = false;
         sessionRevision.current += 1;
+        pendingImports.current = 0;
         latestDraft.current = null;
         loadEditorDraft(sessionKey).then((persisted) => {
             if (!cancelled) restoreDraft(persisted);
@@ -107,25 +112,36 @@ export function useEditorSession(image: ArchiveImage | null) {
         }
 
         const revision = sessionRevision.current;
-        const uploads = [];
-        for (const file of files) {
-            const dataUrl = await fileToDataURL(file);
-            uploads.push({ dataUrl, imageSize: await readImageSize(dataUrl), name: file.name || 'Uploaded layer' });
-        }
-        if (revision !== sessionRevision.current || !latestDraft.current) return;
+        pendingImports.current += 1;
+        setImporting(true);
+        try {
+            const uploads = [];
+            for (const file of files) {
+                const dataUrl = await fileToDataURL(file);
+                uploads.push({ dataUrl, imageSize: await readImageSize(dataUrl), name: file.name || 'Uploaded layer' });
+            }
+            if (revision !== sessionRevision.current || !latestDraft.current) return;
 
-        let nextDraft = latestDraft.current;
-        for (const { dataUrl, imageSize, name } of uploads) {
-            const result = addUploadedLayer(nextDraft.layerStack, dataUrl, makeId, name, imageSize);
-            nextDraft = {
-                ...nextDraft,
-                layerStack: result.layerStack,
-                selectedLayerIds: [result.layerId],
-                primarySelectedLayerId: result.layerId,
-            };
-        }
+            let nextDraft = latestDraft.current;
+            for (const { dataUrl, imageSize, name } of uploads) {
+                const result = addUploadedLayer(nextDraft.layerStack, dataUrl, makeId, name, imageSize);
+                nextDraft = {
+                    ...nextDraft,
+                    layerStack: result.layerStack,
+                    selectedLayerIds: [result.layerId],
+                    primarySelectedLayerId: result.layerId,
+                };
+            }
 
-        commitDraft(nextDraft);
+            commitDraft(nextDraft);
+        } catch (error: unknown) {
+            if (revision === sessionRevision.current) setDraftError(error instanceof Error ? error.message : 'Could not import image layers.');
+        } finally {
+            if (revision === sessionRevision.current) {
+                pendingImports.current -= 1;
+                setImporting(pendingImports.current > 0);
+            }
+        }
     }, [commitDraft, draft, makeId]);
 
     const selectLayer = useCallback((layerId: string, additive = false) => {
@@ -220,11 +236,22 @@ export function useEditorSession(image: ArchiveImage | null) {
         }
 
         const revision = sessionRevision.current;
-        const dataUrls = await Promise.all(files.map((file) => fileToDataURL(file)));
-        if (revision !== sessionRevision.current || !latestDraft.current) return;
+        pendingImports.current += 1;
+        setImporting(true);
+        try {
+            const dataUrls = await Promise.all(files.map((file) => fileToDataURL(file)));
+            if (revision !== sessionRevision.current || !latestDraft.current) return;
 
-        const current = latestDraft.current;
-        commitDraft({ ...current, references: [...current.references, ...dataUrls] });
+            const current = latestDraft.current;
+            commitDraft({ ...current, references: [...current.references, ...dataUrls] });
+        } catch (error: unknown) {
+            if (revision === sessionRevision.current) setDraftError(error instanceof Error ? error.message : 'Could not import reference images.');
+        } finally {
+            if (revision === sessionRevision.current) {
+                pendingImports.current -= 1;
+                setImporting(pendingImports.current > 0);
+            }
+        }
     }, [commitDraft, draft]);
 
     const removeReferenceAt = useCallback((index: number) => {
@@ -254,6 +281,8 @@ export function useEditorSession(image: ArchiveImage | null) {
             adjustmentGesture.current = 'idle';
         },
         draftLoading,
+        importing,
+        hasPendingImports,
         draftError,
         draft,
         layerStack: draft?.layerStack ?? null,
