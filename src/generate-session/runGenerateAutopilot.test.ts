@@ -60,7 +60,7 @@ describe('runGenerateAutopilot', () => {
             actualParameters: { revisedPrompt: `actual-${failedIteration}` },
         });
         expect(batch.lineageSource?.stepId).toBe(failedIteration === 1 ? 'original-step' : 'step-1');
-        const saveImage = vi.fn(async (request: Parameters<typeof saveGenerateResultSlots>[0]['saveImage'] extends (request: infer T) => unknown ? T : never) => request.image);
+        const saveImage = vi.fn(async (request: Parameters<Parameters<typeof saveGenerateResultSlots>[0]['saveImage']>[0]) => request.image);
         const saved = await saveGenerateResultSlots({
             results: batch.results, draft: batch.draft, runDraft: batch.draft,
             usedReferences: batch.references, runLineageSource: batch.lineageSource,

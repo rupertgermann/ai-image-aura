@@ -360,7 +360,7 @@ describe('Create Similar transfer recovery', () => {
         const store = createGenerateSessionStore({ localStorage, blobStorage });
         await expect(store.transferFromArchive({
             id: 'new-source', url: 'new-image', prompt: 'new prompt', timestamp: '2026-10-24',
-            references: ['new-reference'],
+            references: ['new-reference'], quality: 'high', aspectRatio: '1024x1024', background: 'auto',
         })).rejects.toThrow('mutation failed');
         await new Promise((resolve) => setTimeout(resolve, 30));
         expect(localValues).toEqual(beforeLocal);
@@ -379,6 +379,7 @@ describe('Create Similar transfer recovery', () => {
         } });
         await expect(store.transferFromArchive({
             id: 'new', url: 'new', prompt: 'new', timestamp: '2026-10-24', references: ['new'],
+            quality: 'high', aspectRatio: '1024x1024', background: 'auto',
         })).rejects.toThrow();
         expect(save).toHaveBeenCalledWith('generate_current_result', 'old generate_current_result');
         expect(save).toHaveBeenCalledWith('generate_current_result_references', 'old generate_current_result_references');

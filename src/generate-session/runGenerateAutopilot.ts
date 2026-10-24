@@ -38,6 +38,8 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     imageModel.controls.batchSize = 1;
     const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(input.draft.model, input.referenceImages);
     const usedReferenceImages = referenceRunPlan.providerReferenceImages.slice();
+    const usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
+    const originalSource = input.sessionStore.loadLineageSource();
     const session = createSession({
         goal: input.goal,
         initialPrompt: input.draft.prompt,
@@ -51,7 +53,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
         imageCredential: input.imageCredential,
         getProviderCredential: input.getProviderCredential,
         reasoningModel: input.reasoningModel,
-        initialParentStepId: input.sessionStore.loadLineageSource()?.stepId ?? null,
+        initialParentStepId: originalSource?.stepId ?? null,
         initialCostLedger: input.initialCostLedger,
         maxIterations: input.maxIterations,
         satisfactionThreshold: input.satisfactionThreshold,
@@ -73,11 +75,13 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
         const runDraft = structuredClone(input.draft);
         runDraft.prompt = selectedIteration.prompt;
         runDraft[getImageModelDraftKey(runDraft.model)].batchSize = 1;
-        const usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
-        const lineageSource = {
-            archiveImageId: selectedIteration.archiveImageId,
-            stepId: selectedIteration.stepId,
-        };
+        const durableIteration = selectedIteration.stepId
+            ? selectedIteration
+            : result.iterations.filter((iteration) => iteration.stepId !== null).at(-1);
+        const lineageSource = durableIteration ? {
+            archiveImageId: durableIteration.archiveImageId,
+            stepId: durableIteration.stepId,
+        } : originalSource;
         batch = {
             results: [{
                 slotIndex: 0,
@@ -86,7 +90,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
                 isSaved: false,
                 actualParameters: selectedIteration.actualParameters,
                 costLedger: result.bestIteration?.costLedger ?? selectedIteration.costLedger,
-                archiveImageId: selectedIteration.archiveImageId,
+                ...(selectedIteration.stepId ? { archiveImageId: selectedIteration.archiveImageId } : {}),
             }],
             references: usedReferences,
             draft: runDraft,
