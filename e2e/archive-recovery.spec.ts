@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-// Import is a programmatic workflow. Real SQLite and IndexedDB run on the same HTTP origin as the app.
 test.beforeEach(async ({ context, page, baseURL }) => {
     await context.route('**/*', (route) => new URL(route.request().url()).origin === baseURL
         ? route.continue() : route.abort());
