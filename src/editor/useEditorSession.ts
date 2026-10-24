@@ -34,6 +34,7 @@ export function useEditorSession(image: ArchiveImage | null) {
     const [draftLoading, setDraftLoading] = useState(true);
     const [draftError, setDraftError] = useState<string | null>(null);
     const latestDraft = useRef<EditorDraft | null>(null);
+    const sessionRevision = useRef(0);
     const restoreDraft = useEffectEvent((persisted: EditorDraft | null) => {
         const next = image && persisted ? repairEditorDraftForImage(persisted, image) : savedDraft;
         latestDraft.current = next;
@@ -42,6 +43,8 @@ export function useEditorSession(image: ArchiveImage | null) {
     });
     useEffect(() => {
         let cancelled = false;
+        sessionRevision.current += 1;
+        latestDraft.current = null;
         loadEditorDraft(sessionKey).then((persisted) => {
             if (!cancelled) restoreDraft(persisted);
         }).catch(() => {
@@ -50,7 +53,7 @@ export function useEditorSession(image: ArchiveImage | null) {
                 restoreDraft(null);
             }
         });
-        return () => { cancelled = true; };
+        return () => { cancelled = true; sessionRevision.current += 1; };
     }, [sessionKey]);
     const persistDraft = useCallback((next: EditorDraft) => {
         void saveEditorDraft(sessionKey, next).then(() => setDraftError(null)).catch(() => {
@@ -103,11 +106,17 @@ export function useEditorSession(image: ArchiveImage | null) {
             return;
         }
 
-        let nextDraft = draft;
+        const revision = sessionRevision.current;
+        const uploads = [];
         for (const file of files) {
             const dataUrl = await fileToDataURL(file);
-            const imageSize = await readImageSize(dataUrl);
-            const result = addUploadedLayer(nextDraft.layerStack, dataUrl, makeId, file.name || 'Uploaded layer', imageSize);
+            uploads.push({ dataUrl, imageSize: await readImageSize(dataUrl), name: file.name || 'Uploaded layer' });
+        }
+        if (revision !== sessionRevision.current || !latestDraft.current) return;
+
+        let nextDraft = latestDraft.current;
+        for (const { dataUrl, imageSize, name } of uploads) {
+            const result = addUploadedLayer(nextDraft.layerStack, dataUrl, makeId, name, imageSize);
             nextDraft = {
                 ...nextDraft,
                 layerStack: result.layerStack,
@@ -210,8 +219,12 @@ export function useEditorSession(image: ArchiveImage | null) {
             return;
         }
 
+        const revision = sessionRevision.current;
         const dataUrls = await Promise.all(files.map((file) => fileToDataURL(file)));
-        commitDraft({ ...draft, references: [...draft.references, ...dataUrls] });
+        if (revision !== sessionRevision.current || !latestDraft.current) return;
+
+        const current = latestDraft.current;
+        commitDraft({ ...current, references: [...current.references, ...dataUrls] });
     }, [commitDraft, draft]);
 
     const removeReferenceAt = useCallback((index: number) => {
