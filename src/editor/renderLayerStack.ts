@@ -19,7 +19,6 @@ export async function renderLayerStackToDataUrl(
         throw new Error('Canvas unavailable');
     }
 
-    context.filter = buildCanvasFilter(adjustments);
     context.translate(-x, -y);
 
     for (const layer of layerStack.layers) {
@@ -37,7 +36,16 @@ export async function renderLayerStackToDataUrl(
         context.restore();
     }
 
-    return canvas.toDataURL('image/png');
+    const output = document.createElement('canvas');
+    output.width = canvas.width;
+    output.height = canvas.height;
+    const outputContext = output.getContext('2d');
+    if (!outputContext) {
+        throw new Error('Canvas unavailable');
+    }
+    outputContext.filter = buildCanvasFilter(adjustments);
+    outputContext.drawImage(canvas, 0, 0);
+    return output.toDataURL('image/png');
 }
 
 export async function renderLayerStackToBlob(

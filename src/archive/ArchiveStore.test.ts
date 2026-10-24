@@ -123,6 +123,131 @@ describe('archive and lineage completion', () => {
     });
 });
 
+describe('ArchiveStore compensation failures', () => {
+    it.each(['image', 'reference'] as const)('restores other asset keys before reporting failed %s restoration', async (failedAsset) => {
+        const { store, metadata, blobs } = createStore();
+        await store.save(createImageInput({
+            id: 'image-1',
+            references: ['data:image/png;base64,old-reference'],
+            layerStack: createLayerStack('old', ['base', 'retained']),
+        }));
+        const originalError = new Error('Metadata write failed');
+        const assetError = new Error(`${failedAsset} restoration failed`);
+        vi.spyOn(metadata, 'save').mockRejectedValueOnce(originalError);
+        const saveBlob = blobs.save.bind(blobs);
+        vi.spyOn(blobs, 'save').mockImplementation(async (key, data) => {
+            if ((failedAsset === 'image' && key === 'img_image-1' && data === 'data:image/png;base64,flat-preview')
+                || (failedAsset === 'reference' && key === 'ref_image-1_0' && data === 'data:image/png;base64,old-reference')) {
+                throw assetError;
+            }
+            if (key === 'layer_image-1_base' && data === 'data:image/png;base64,old-base') {
+                await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            await saveBlob(key, data);
+        });
+
+        await expect(store.save(createImageInput({
+            id: 'image-1', url: 'data:image/png;base64,new-preview',
+            references: ['data:image/png;base64,new-reference', 'data:image/png;base64,extra-reference'],
+            layerStack: createLayerStack('new', ['base', 'new-layer']),
+        }))).rejects.toMatchObject({ errors: [originalError, assetError] });
+
+        if (failedAsset === 'image') {
+            expect(blobs.blobs.get('ref_image-1_0')).toBe('data:image/png;base64,old-reference');
+        } else {
+            expect(blobs.blobs.get('img_image-1')).toBe('data:image/png;base64,flat-preview');
+        }
+        expect(blobs.blobs.has('ref_image-1_1')).toBe(false);
+        expect(blobs.blobs.get('layer_image-1_base')).toBe('data:image/png;base64,old-base');
+        expect(blobs.blobs.get('layer_image-1_retained')).toBe('data:image/png;base64,old-retained');
+        expect(blobs.blobs.has('layer_image-1_new-layer')).toBe(false);
+    });
+
+    it('reports every failed asset restoration while restoring unaffected keys', async () => {
+        const { store, metadata, blobs } = createStore();
+        await store.save(createImageInput({
+            id: 'image-1', references: ['data:image/png;base64,old-reference'],
+            layerStack: createLayerStack('old', ['base']),
+        }));
+        const originalError = new Error('Metadata write failed');
+        const imageError = new Error('Image restoration failed');
+        const referenceError = new Error('Reference restoration failed');
+        const layerError = new Error('Layer restoration failed');
+        vi.spyOn(metadata, 'save').mockRejectedValueOnce(originalError);
+        const saveBlob = blobs.save.bind(blobs);
+        vi.spyOn(blobs, 'save').mockImplementation(async (key, data) => {
+            if (data === 'data:image/png;base64,flat-preview') throw imageError;
+            if (data === 'data:image/png;base64,old-reference') throw referenceError;
+            if (data === 'data:image/png;base64,old-base') throw layerError;
+            await saveBlob(key, data);
+        });
+
+        await expect(store.save(createImageInput({
+            id: 'image-1', url: 'data:image/png;base64,new-preview',
+            references: ['data:image/png;base64,new-reference', 'data:image/png;base64,extra-reference'],
+            layerStack: createLayerStack('new', ['base', 'new-layer']),
+        }))).rejects.toMatchObject({
+            errors: [originalError, { errors: [imageError, referenceError, layerError] }],
+        });
+        expect(blobs.blobs.has('ref_image-1_1')).toBe(false);
+        expect(blobs.blobs.has('layer_image-1_new-layer')).toBe(false);
+    });
+
+    it.each(['overwrite', 'delete'] as const)('restores image assets after %s fails while metadata remains unavailable', async (operation) => {
+        const { store, metadata, blobs } = createStore();
+        await store.save(createImageInput({
+            id: 'image-1',
+            references: ['data:image/png;base64,old-reference'],
+            layerStack: createLayerStack('old', ['base', 'retained']),
+        }));
+        const baseline = await store.get('image-1');
+        const originalError = new Error('Metadata write failed');
+        const rollbackError = new Error('Metadata restoration failed');
+        vi.spyOn(metadata, 'save').mockRejectedValue(rollbackError);
+        if (operation === 'overwrite') {
+            vi.mocked(metadata.save).mockRejectedValueOnce(originalError);
+        } else {
+            vi.spyOn(metadata, 'remove').mockRejectedValue(originalError);
+        }
+
+        const write = operation === 'overwrite'
+            ? store.save(createImageInput({
+                id: 'image-1', url: 'data:image/png;base64,new-preview',
+                references: ['data:image/png;base64,new-reference'],
+                layerStack: createLayerStack('new', ['base', 'new-layer']),
+            }))
+            : store.remove('image-1');
+
+        await expect(write).rejects.toMatchObject({
+            message: expect.stringContaining('Metadata restoration failed'),
+            errors: [originalError, rollbackError],
+        });
+        await expect(store.get('image-1')).resolves.toEqual(baseline);
+        expect(blobs.blobs.has('layer_image-1_new-layer')).toBe(false);
+    });
+
+    it('reports the original failure and both failed compensations', async () => {
+        const { store, metadata, blobs } = createStore();
+        await store.save(createImageInput({ id: 'image-1' }));
+        const originalError = new Error('Metadata write failed');
+        const metadataError = new Error('Metadata restoration failed');
+        const assetError = new Error('Asset restoration failed');
+        vi.spyOn(metadata, 'save').mockRejectedValueOnce(originalError).mockRejectedValue(metadataError);
+        const saveBlob = blobs.save.bind(blobs);
+        vi.spyOn(blobs, 'save').mockImplementation(async (key, data) => {
+            if (data === 'data:image/png;base64,flat-preview') {
+                throw assetError;
+            }
+            await saveBlob(key, data);
+        });
+
+        await expect(store.save(createImageInput({ id: 'image-1', url: 'data:image/png;base64,new-preview' }))).rejects.toMatchObject({
+            message: expect.stringContaining('Asset restoration failed'),
+            errors: [originalError, metadataError, assetError],
+        });
+    });
+});
+
 describe('ArchiveStore layer asset ownership', () => {
 
     it('save as copy gives copied layered images independent layer assets', async () => {

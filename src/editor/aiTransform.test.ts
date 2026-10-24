@@ -56,6 +56,7 @@ describe('Editor AI transforms', () => {
 
     it('renders selected layers as the editable source and the full composition as context', async () => {
         const layerStack = createLayerStack();
+        const adjusted = { ...adjustments, brightness: 50, contrast: 150 };
         const userReferences = [
             new File(['user-a'], 'user-a.png', { type: 'image/png' }),
             new File(['user-b'], 'user-b.png', { type: 'image/png' }),
@@ -64,7 +65,7 @@ describe('Editor AI transforms', () => {
 
         const result = await renderAiTransformEditInput({
             draft: createDraft(layerStack, ['layer-1']),
-            adjustments,
+            adjustments: adjusted,
             referenceImages: userReferences,
             render,
         });
@@ -77,6 +78,8 @@ describe('Editor AI transforms', () => {
         const sourceCall = render.mock.calls[0];
         const contextCall = render.mock.calls[1];
         expect(sourceCall?.[0].layers.map((layer) => layer.id)).toEqual(['layer-1']);
+        expect(sourceCall?.[1]).toEqual(adjustments);
+        expect(contextCall?.[1]).toEqual(adjusted);
         expect(sourceCall?.[2]).toEqual({ x: 100, y: 120, width: 200, height: 220 });
         expect(contextCall?.[0].layers.map((layer) => layer.id)).toEqual(['base', 'layer-1', 'layer-2']);
         expect(contextCall?.[2]).toEqual({ x: 0, y: 0, width: 1000, height: 800 });
@@ -88,7 +91,7 @@ describe('Editor AI transforms', () => {
 
         const result = await renderAiTransformEditInput({
             draft: createDraft(layerStack, ['base']),
-            adjustments,
+            adjustments: { ...adjustments, brightness: 50 },
             referenceImages: [],
             render,
         });
@@ -97,6 +100,7 @@ describe('Editor AI transforms', () => {
         expect(result.compositionContextImage).toBeNull();
         expect(render).toHaveBeenCalledTimes(1);
         expect(render.mock.calls[0]?.[0].layers.map((layer) => layer.id)).toEqual(['base', 'layer-1', 'layer-2']);
+        expect(render.mock.calls[0]?.[1]).toEqual(adjustments);
         expect(render.mock.calls[0]?.[2]).toEqual({ x: 0, y: 0, width: 1000, height: 800 });
     });
 

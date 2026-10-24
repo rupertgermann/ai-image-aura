@@ -264,6 +264,97 @@ describe('AutopilotSession', () => {
         await expect(lineage.getById('step-1')).resolves.toEqual(expect.objectContaining({ stepType: 'autopilot-iteration' }));
     });
 
+    it('does not start another paid generation when cancelled during refinement', async () => {
+        const generate = vi.fn().mockResolvedValue({ imageDataUrl: 'data:image/png;base64,one' });
+        const lineage = createStore();
+        const createResponse = vi.fn()
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 60, feedback: ['Improve light.'] }) })
+            .mockImplementationOnce(async () => {
+                session.cancel();
+                return { outputText: 'refined prompt' };
+            });
+        const session = createAutopilotSession({
+            goal: 'portrait', initialPrompt: 'portrait', settings: createSettings(),
+            imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
+            maxIterations: 4, generate, lineageStore: lineage,
+        }, { reasoningClient: { createResponse } });
+
+        const result = await session.run();
+
+        expect(result.status).toBe('cancelled');
+        expect(generate).toHaveBeenCalledTimes(1);
+        expect(result.iterations).toHaveLength(1);
+        expect(createResponse).toHaveBeenCalledTimes(2);
+        expect(result.bestIteration?.costLedger?.items.map((item) => item.operation)).toEqual([
+            'satisfaction-evaluation', 'prompt-refinement',
+        ]);
+    });
+
+    it('does not generate when cancelled before run', async () => {
+        const generate = vi.fn();
+        const session = createAutopilotSession({
+            goal: 'portrait', initialPrompt: 'portrait', settings: createSettings(),
+            imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
+            generate, lineageStore: createStore(),
+        });
+        session.cancel();
+
+        const result = await session.run();
+
+        expect(result.status).toBe('cancelled');
+        expect(generate).not.toHaveBeenCalled();
+    });
+
+    it.each([1, 2])('preserves paid output when evaluation fails on iteration %i', async (failedIteration) => {
+        const lineage = createStore();
+        const callbacks = { onIterationComplete: vi.fn(), onError: vi.fn() };
+        const error = new Error('evaluation quota exceeded');
+        const imageCost = createCostLedger(createCostItem('image-generation', 0.04));
+        let generatedCount = 0;
+        const generate = vi.fn(async () => ({
+            imageDataUrl: `data:image/png;base64,image-${++generatedCount}`,
+            costLedger: imageCost,
+        }));
+        const createResponse = vi.fn();
+        if (failedIteration === 2) {
+            createResponse
+                .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 80, feedback: ['Improve light.'] }) })
+                .mockResolvedValueOnce({ outputText: 'refined prompt' });
+        }
+        createResponse.mockRejectedValueOnce(error);
+
+        const result = await createAutopilotSession({
+            goal: 'portrait', initialPrompt: 'portrait', settings: createSettings(),
+            imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
+            satisfactionThreshold: failedIteration === 1 ? 0 : 90,
+            generate, lineageStore: lineage, callbacks,
+        }, { reasoningClient: { createResponse } }).run();
+
+        expect(result.status).toBe('failed');
+        expect(result.error).toBe(error);
+        expect(generate).toHaveBeenCalledTimes(failedIteration);
+        expect(result.iterations).toHaveLength(failedIteration);
+        expect(result.iterations.at(-1)).toMatchObject({
+            imageDataUrl: `data:image/png;base64,image-${failedIteration}`,
+            score: 0,
+            feedback: ['Evaluation failed: evaluation quota exceeded'],
+            costLedger: imageCost,
+        });
+        expect(result.bestIteration?.iterationNumber).toBe(1);
+        expect(result.bestIteration?.score).toBe(failedIteration === 1 ? 0 : 80);
+        expect(calculateApiCostTotals(result.bestIteration?.costLedger).totalUsd).toBeCloseTo(0.04 * failedIteration);
+        expect(callbacks.onIterationComplete).toHaveBeenCalledTimes(failedIteration);
+        expect(callbacks.onError).toHaveBeenCalledWith(error, failedIteration);
+        await expect(lineage.getById(`step-${failedIteration}`)).resolves.toMatchObject({
+            parentStepId: failedIteration === 1 ? null : 'step-1',
+            metadata: {
+                outputImageDataUrl: `data:image/png;base64,image-${failedIteration}`,
+                evaluatorFeedback: ['Evaluation failed: evaluation quota exceeded'],
+                costLedger: imageCost,
+            },
+        });
+    });
+
     it('stops on generation failure, preserves prior steps, and reports the error via callback', async () => {
         const lineage = createStore();
         const callbacks = { onIterationComplete: vi.fn(), onError: vi.fn() };

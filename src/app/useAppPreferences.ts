@@ -17,10 +17,13 @@ export function useAppPreferences() {
     }), [apiKey, googleApiKey, localServerUrl]);
 
     useEffect(() => {
-        if (!apiKey) {
+        if (!apiKey && localStorage.getItem(PROVIDER_API_KEY_STORAGE_KEYS.openai) === null) {
             const legacyKey = localStorage.getItem('openai_api_key');
             if (legacyKey) {
                 setApiKey(legacyKey);
+                if (localStorage.getItem(PROVIDER_API_KEY_STORAGE_KEYS.openai) === JSON.stringify(legacyKey)) {
+                    localStorage.removeItem('openai_api_key');
+                }
             }
         }
     }, [apiKey, setApiKey]);
@@ -30,6 +33,7 @@ export function useAppPreferences() {
     }, [setCurrentView]);
 
     const updateApiKey = useCallback((key: string) => {
+        localStorage.removeItem('openai_api_key');
         setApiKey(key);
     }, [setApiKey]);
 
@@ -39,7 +43,7 @@ export function useAppPreferences() {
 
     const updateLocalServerUrl = useCallback((url: string) => {
         const normalized = normalizeLocalServerUrl(url);
-        if (normalized) setLocalServerUrl(normalized);
+        if (!url.trim() || normalized) setLocalServerUrl(normalized ?? '');
     }, [setLocalServerUrl]);
 
     const updateCompletionNotificationsEnabled = useCallback((enabled: boolean) => {

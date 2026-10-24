@@ -124,9 +124,10 @@ class LocalArchiveStore implements ArchiveStore {
                 layerStack: durableLayerStack,
             });
         } catch (error) {
-            await this.restoreMetadata(id, existing);
-            await restoreArchiveAssetSnapshot(this.blobs, id, snapshot, touchedReferenceIds, touchedLayerIds);
-            throw error;
+            await restoreAfterFailure(error, [
+                this.restoreMetadata(id, existing),
+                restoreArchiveAssetSnapshot(this.blobs, id, snapshot, touchedReferenceIds, touchedLayerIds),
+            ]);
         }
 
         return {
@@ -173,9 +174,10 @@ class LocalArchiveStore implements ArchiveStore {
             await Promise.all(touchedLayerIds.map((layerId) => this.blobs.remove(getArchiveLayerBlobKey(id, layerId))));
             await this.metadata.remove(id);
         } catch (error) {
-            await this.restoreMetadata(id, existing);
-            await restoreArchiveAssetSnapshot(this.blobs, id, snapshot, touchedReferenceIds, touchedLayerIds);
-            throw error;
+            await restoreAfterFailure(error, [
+                this.restoreMetadata(id, existing),
+                restoreArchiveAssetSnapshot(this.blobs, id, snapshot, touchedReferenceIds, touchedLayerIds),
+            ]);
         }
     }
 
@@ -267,6 +269,16 @@ class LocalArchiveStore implements ArchiveStore {
 
         return recoveredImage;
     }
+}
+
+async function restoreAfterFailure(error: unknown, restorations: Promise<void>[]): Promise<never> {
+    const results = await Promise.allSettled(restorations);
+    const failures = results.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length) {
+        const errors = [error, ...failures];
+        throw new AggregateError(errors, `Archive operation and restoration failed: ${errors.map((cause) => cause instanceof Error ? cause.message : String(cause)).join('; ')}`);
+    }
+    throw error;
 }
 
 export function createArchiveStore(deps: CreateArchiveStoreDeps = {}): ArchiveStore {

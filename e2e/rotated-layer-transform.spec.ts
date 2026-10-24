@@ -9,16 +9,30 @@ const cases = [
     { name: 'base and rotated selection', x: -40, y: 120, rotation: 90, mask: false, whole: false },
 ];
 
-async function editorPixels(page: Page) {
+async function editorMismatchCount(page: Page, expectedUrl: string) {
     const canvas = page.locator('.editor-stage canvas').first();
     await expect(canvas).toHaveJSProperty('width', 500);
     await expect(canvas).toHaveJSProperty('height', 500);
-    return canvas.evaluate((element) => {
+    return canvas.evaluate(async (element, url) => {
         if (!(element instanceof HTMLCanvasElement)) throw new Error('Expected Editor canvas');
         const context = element.getContext('2d');
         if (!context) throw new Error('Canvas unavailable');
-        return Array.from(context.getImageData(0, 0, element.width, element.height).data);
-    });
+        const image = await createImageBitmap(await (await fetch(url)).blob());
+        const expectedCanvas = document.createElement('canvas');
+        expectedCanvas.width = element.width;
+        expectedCanvas.height = element.height;
+        const expectedContext = expectedCanvas.getContext('2d');
+        if (!expectedContext) throw new Error('Canvas unavailable');
+        expectedContext.drawImage(image, 0, 0);
+        image.close();
+        const actual = context.getImageData(0, 0, element.width, element.height).data;
+        const expected = expectedContext.getImageData(0, 0, element.width, element.height).data;
+        let mismatches = 0;
+        for (let index = 0; index < actual.length; index += 1) {
+            if (Math.abs(actual[index] - expected[index]) > 2) mismatches += 1;
+        }
+        return mismatches;
+    }, expectedUrl);
 }
 
 async function openEditor(page: Page) {
@@ -95,20 +109,10 @@ for (const scenario of cases) {
             const image = await archiveStore.get('rotation-test');
             return renderLayerStackToDataUrl(image.layerStack, { brightness: 100, contrast: 100, saturation: 100, filter: 'none' });
         });
-        const expectedPixels = await page.evaluate(async (url) => {
-            const image = await createImageBitmap(await (await fetch(url)).blob());
-            const canvas = document.createElement('canvas');
-            canvas.width = canvas.height = 500;
-            const drawing = canvas.getContext('2d');
-            if (!drawing) throw new Error('Canvas unavailable');
-            drawing.drawImage(image, 0, 0);
-            return Array.from(drawing.getImageData(0, 0, 500, 500).data);
-        }, expected);
         const assertPlacement = async () => {
-            await expect.poll(async () => {
-                const actual = await editorPixels(page);
-                return actual.filter((value, index) => Math.abs(value - expectedPixels[index]) > 2).length;
-            }, { message: 'Editor artwork must retain its saved composition position' }).toBeLessThan(1500);
+            await expect.poll(() => editorMismatchCount(page, expected), {
+                message: 'Editor artwork must retain its saved composition position',
+            }).toBeLessThan(1500);
         };
         await assertPlacement();
         await page.screenshot({ path: testInfo.outputPath('before.png'), fullPage: true });

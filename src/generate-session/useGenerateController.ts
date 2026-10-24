@@ -613,9 +613,9 @@ export function useGenerateController({
                 },
             });
 
-            if (outcome.batch && outcome.result.bestIteration) {
+            if (outcome.batch?.draft) {
                 updateDraft({
-                    prompt: outcome.result.bestIteration.prompt,
+                    prompt: outcome.batch.draft.prompt,
                     isSaved: false,
                 });
                 await adoptBatch(outcome.batch);

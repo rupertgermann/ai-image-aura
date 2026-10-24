@@ -1,5 +1,5 @@
 import { createPromptRefiner } from './PromptRefiner';
-import { createSatisfactionEvaluator } from './SatisfactionEvaluator';
+import { createSatisfactionEvaluator, type SatisfactionEvaluation } from './SatisfactionEvaluator';
 import { createGoalPromptTranslator } from './GoalPromptTranslator';
 import { resolveReasoningClient, type ReasoningClient } from './ReasoningClient';
 import { getProviderLabel, OPENAI_RESPONSES_MODEL, resolveReasoningModelConfig, type Provider, type ReasoningModelSlug } from '../utils/openaiModels';
@@ -103,6 +103,10 @@ class DefaultAutopilotSession implements AutopilotSession {
         let runCostLedger = this.input.initialCostLedger;
 
         for (let iterationNumber = 1; iterationNumber <= maxIterations; iterationNumber += 1) {
+            if (this.cancelled) {
+                return buildResult('cancelled', iterations, null, runCostLedger);
+            }
+
             try {
                 const iterationSettings = snapshotAutopilotSettings(runSettings);
                 const generatedImage = await generate({
@@ -112,10 +116,14 @@ class DefaultAutopilotSession implements AutopilotSession {
                 });
                 const imageDataUrl = generatedImage.imageDataUrl;
 
+                let evaluationError: Error | null = null;
                 const evaluation = await evaluate({
                     imageDataUrl,
                     goal: this.input.goal,
                     apiKey: reasoningApiKey,
+                }).catch((error: unknown): SatisfactionEvaluation => {
+                    evaluationError = error instanceof Error ? error : new Error('Image evaluation failed');
+                    return { score: 0, feedback: [`Evaluation failed: ${evaluationError.message}`] };
                 });
                 const iterationCostLedger = mergeApiCostLedgers(
                     generatedImage.costLedger,
@@ -158,6 +166,10 @@ class DefaultAutopilotSession implements AutopilotSession {
                 runningBest = pickBetterIteration(runningBest, completedIteration);
                 this.input.callbacks?.onIterationComplete?.(completedIteration, runningBest);
                 parentStepId = step.id;
+
+                if (evaluationError) {
+                    throw evaluationError;
+                }
 
                 if (evaluation.score >= satisfactionThreshold) {
                     return buildResult('satisfied', iterations, null, runCostLedger);
