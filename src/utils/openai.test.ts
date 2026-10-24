@@ -250,9 +250,10 @@ describe('openAiImageClient', () => {
         }
     });
 
-    it.each([false, true])('finishes an open completed stream despite cleanup failure=%s', async (cleanupFails) => {
+    it.each(['success', 'failure', 'pending'])('finishes an open completed stream with %s cleanup', async (cleanup) => {
         const cancel = vi.fn(() => {
-            if (cleanupFails) throw new Error('connection reset during cleanup');
+            if (cleanup === 'failure') throw new Error('connection reset during cleanup');
+            if (cleanup === 'pending') return new Promise<void>(() => {});
         });
         const stream = new ReadableStream<Uint8Array>({
             start(controller) {
