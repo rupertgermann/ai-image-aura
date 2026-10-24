@@ -91,14 +91,15 @@ const LIGHTING_OPTIONS = [
     "dramatic chiaroscuro",
 ];
 
-const Select = ({ label, value, options, onChange, className }: {
+const Select = ({ label, value, options, onChange, className, disabled }: {
     label: string;
     value: string;
     options: { value: string; label: string }[];
     onChange: (value: string) => void;
     className?: string;
+    disabled?: boolean;
 }) => (
-    <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className={className}>
+    <select aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} className={className}>
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
 );
@@ -339,6 +340,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             <Select
                                 label="Example prompts"
                                 className="example-prompt-select"
+                                disabled={translatingGoal}
                                 value=""
                                 onChange={(v) => { if (v) updateDraft({ prompt: v }); }}
                                 options={[
@@ -351,6 +353,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             id="generation-prompt"
                             placeholder="Describe an image. A subject, a setting, a little imagination…"
                             value={prompt}
+                            disabled={translatingGoal}
                             onChange={(e) => updateDraft({ prompt: e.target.value })}
                             className="prompt-input"
                         />
@@ -367,13 +370,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             <button
                                 className={!isAutopilotMode ? 'active' : ''}
                                 aria-pressed={!isAutopilotMode}
-                                disabled={loading}
+                                disabled={loading || translatingGoal}
                                 onClick={() => setMode('single-shot')}
                             >Single Shot</button>
                             <button
                                 className={isAutopilotMode ? 'active' : ''}
                                 aria-pressed={isAutopilotMode}
-                                disabled={loading}
+                                disabled={loading || translatingGoal}
                                 onClick={() => setMode('autopilot')}
                             >Autopilot</button>
                         </div>
@@ -383,7 +386,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div className="autopilot-panel">
                             <div className="option-group">
                                 <label htmlFor="reasoning-model">Reasoning model</label>
-                                <select id="reasoning-model" value={reasoningModel} disabled={loading} onChange={(event) => setReasoningModel(event.target.value)}>
+                                <select id="reasoning-model" value={reasoningModel} disabled={loading || translatingGoal} onChange={(event) => setReasoningModel(event.target.value)}>
                                     {(Object.keys(REASONING_MODEL_REGISTRY) as ReasoningModelSlug[]).map((slug) => (
                                         <option key={slug} value={slug}>{resolveReasoningModelConfig(slug).label}</option>
                                     ))}
@@ -404,9 +407,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                     id="autopilot-goal"
                                     placeholder="Describe the outcome you want in plain language..."
                                     value={goal}
+                                    disabled={translatingGoal}
                                     onChange={(e) => setGoal(e.target.value)}
                                     className="prompt-input autopilot-goal-input"
                                 />
+                                {translatingGoal && <p className="field-relationship-note" role="status">
+                                    Creating a starting prompt. Prompt and goal editing will resume when it finishes.
+                                </p>}
                                 <p className="field-relationship-note">
                                     Autopilot checks each image against your goal. It uses the starting prompt to generate the first image.
                                 </p>
@@ -575,6 +582,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                                         <button className="btn-ghost" onClick={() => setShowCostDisclosure(false)}>Cancel</button>
                                         <button
                                             className="btn-amber"
+                                            disabled={translatingGoal}
                                             onClick={() => {
                                                 setShowCostDisclosure(false);
                                                 void handleRunAutopilot();
@@ -586,7 +594,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             <button
                                 className="btn-amber"
                                 onClick={() => requestAction('autopilot')}
-                                disabled={loading || saving || !prompt.trim() || !goal.trim() || !imageCredential || !reasoningApiKey}
+                                disabled={loading || saving || translatingGoal || !prompt.trim() || !goal.trim() || !imageCredential || !reasoningApiKey}
                                 style={{ width: '100%' }}
                             >
                                 {loading ? <Loader2 className="spin" size={20} /> : <Sparkles size={20} />}
