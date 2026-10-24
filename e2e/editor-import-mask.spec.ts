@@ -74,6 +74,7 @@ for (const operation of ['transform', 'save']) {
         await expect(transform).toBeDisabled();
         await expect(save).toBeDisabled();
         await expect(copy).toBeDisabled();
+        await page.getByRole('button', { name: 'Undo', exact: true }).focus();
         await page.keyboard.press('ControlOrMeta+s');
         await expect(page.getByRole('heading', { name: 'Editor', exact: true })).toBeVisible();
         expect(requests).toBe(0);
@@ -93,14 +94,14 @@ for (const operation of ['transform', 'save']) {
             await expect(page.getByLabel('AI result name', { exact: true })).toBeVisible();
             expect(requests).toBe(1);
         }
-        await expect(page.getByLabel('delayed-layer.png name', { exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'delayed-layer.png 100%', exact: true })).toBeVisible();
         await save.click();
         await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
         await page.reload();
         await openEditor(page);
-        await expect(page.getByLabel('delayed-layer.png name', { exact: true })).toBeVisible();
-        if (operation === 'transform') await expect(page.getByLabel('AI result name', { exact: true })).toBeVisible();
-        else await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
+        await expect(page.getByRole('button', { name: 'delayed-layer.png 100%', exact: true })).toBeVisible();
+        if (operation === 'transform') await expect(page.getByRole('button', { name: 'AI result 100%', exact: true })).toBeVisible();
+        await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
         await page.locator('.ai-edit-section > summary').click();
         await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(1);
         await page.screenshot({ path: testInfo.outputPath(`pending-import-${operation}-saved.png`), fullPage: true });
@@ -123,6 +124,63 @@ test('a failed import releases Save and reports the failure', async ({ page }, t
     await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('failed-import-recovered.png'), fullPage: true });
 });
+
+for (const operation of ['transform', 'save']) {
+    test(`reference drop and paste cannot mutate a pending ${operation}`, async ({ page }, testInfo) => {
+        const dataUrl = await seedEditor(page);
+        await page.locator('.ai-edit-section > summary').click();
+        await page.getByRole('slider', { name: 'Brightness', exact: true }).fill('150');
+        let finishTransform = () => {};
+        let requests = 0;
+        await page.route('https://api.openai.com/v1/images/edits', async (route) => {
+            requests++;
+            await new Promise<void>((resolve) => { finishTransform = resolve; });
+            await route.fulfill({ json: { data: [{ b64_json: dataUrl.split(',')[1] }] } });
+        });
+        if (operation === 'transform') {
+            await page.getByLabel('AI transformation prompt').fill('Keep references stable');
+            await page.getByRole('button', { name: 'Transform with AI', exact: true }).click();
+            await expect.poll(() => requests).toBe(1);
+        } else {
+            await page.evaluate(async () => {
+                const modulePath = '/src/archive/ArchiveStore.ts';
+                const { archiveStore } = await import(modulePath);
+                const save = archiveStore.save.bind(archiveStore);
+                const pending = new Promise<void>((resolve) => document.addEventListener('finish-save', () => resolve(), { once: true }));
+                archiveStore.save = async (...args: Parameters<typeof save>) => {
+                    await pending;
+                    return save(...args);
+                };
+            });
+            await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+            await expect(page.getByRole('button', { name: 'Saving…', exact: true })).toBeVisible();
+        }
+        for (const input of ['drop', 'paste']) {
+            await page.locator('.editor-container .reference-section').evaluate(async (target, { input, dataUrl }) => {
+                const bytes = Uint8Array.from(atob(dataUrl.split(',')[1]), (character) => character.charCodeAt(0));
+                const read = File.prototype.arrayBuffer;
+                File.prototype.arrayBuffer = function () {
+                    return this.name === 'during-operation.png' ? Promise.resolve(bytes.buffer) : read.call(this);
+                };
+                const transfer = new DataTransfer();
+                transfer.items.add(new File([bytes], 'during-operation.png', { type: 'image/png' }));
+                target.dispatchEvent(input === 'drop'
+                    ? new DragEvent('drop', { bubbles: true, dataTransfer: transfer })
+                    : new ClipboardEvent('paste', { bubbles: true, clipboardData: transfer }));
+                await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+            }, { input, dataUrl });
+            await expect.soft(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(0);
+        }
+        if (operation === 'transform') {
+            finishTransform();
+            await expect(page.getByLabel('AI result name', { exact: true })).toBeVisible();
+        } else {
+            await page.evaluate(() => document.dispatchEvent(new Event('finish-save')));
+            await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+        }
+        await page.screenshot({ path: testInfo.outputPath(`reference-input-blocked-during-${operation}.png`), fullPage: true });
+    });
+}
 
 async function paintMask(page: Page) {
     await page.getByRole('button', { name: 'Mask', exact: true }).click();
