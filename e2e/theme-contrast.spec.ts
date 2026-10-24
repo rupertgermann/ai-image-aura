@@ -1,0 +1,192 @@
+import { expect, test, type Locator } from '@playwright/test';
+
+test.beforeEach(async ({ context, baseURL }) => {
+    await context.route('**/*', route => new URL(route.request().url()).origin === baseURL ? route.continue() : route.abort());
+});
+
+async function settleAnimations(locator: Locator) {
+    await locator.evaluate(async element => {
+        const animations = element.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity);
+        await Promise.allSettled(animations.map(animation => animation.finished));
+    });
+}
+
+async function contrast(locator: Locator, foreground: 'color' | 'borderTopColor' | 'outlineColor') {
+    return locator.evaluate((element, property) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Canvas unavailable');
+        const channels = (value: string) => {
+            context.clearRect(0, 0, 1, 1);
+            context.fillStyle = value;
+            context.fillRect(0, 0, 1, 1);
+            const rgba = Array.from(context.getImageData(0, 0, 1, 1).data);
+            return [rgba[0], rgba[1], rgba[2], rgba[3] / 255];
+        };
+        const luminance = (rgb: number[]) => rgb.slice(0, 3).reduce((sum, channel, index) => {
+            const value = channel / 255;
+            return sum + (value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4) * [0.2126, 0.7152, 0.0722][index];
+        }, 0);
+        const blend = (front: number[], back: number[], opacity = 1) => {
+            const alpha = (front[3] ?? 1) * opacity;
+            return back.map((channel, index) => front[index] * alpha + channel * (1 - alpha));
+        };
+        const ancestors: Element[] = [];
+        for (let node = element.parentElement; node; node = node.parentElement) ancestors.unshift(node);
+        let backdrop = [255, 255, 255];
+        for (const ancestor of ancestors) backdrop = blend(channels(getComputedStyle(ancestor).backgroundColor), backdrop);
+        const style = getComputedStyle(element);
+        const opacity = Number(style.opacity);
+        const fill = blend(channels(style.backgroundColor), backdrop);
+        const visibleFill = blend([...fill, 1], backdrop, opacity);
+        const visibleInk = blend(blend(channels(style[property]), fill), backdrop, opacity);
+        const first = luminance(visibleFill);
+        const second = luminance(visibleInk);
+        return (Math.max(first, second) + .05) / (Math.min(first, second) + .05);
+    }, foreground);
+}
+
+for (const mode of ['light', 'dark'] as const) {
+    test(`${mode} hover labels, archive selection, and keyboard focus stay distinguishable`, async ({ page }, testInfo) => {
+        await page.emulateMedia({ colorScheme: mode });
+        await page.goto('/');
+        const artwork = await page.evaluate(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 64;
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Canvas unavailable');
+            return ['white', 'black'].map(color => {
+                context.fillStyle = color;
+                context.fillRect(0, 0, 64, 64);
+                return { color, base64: canvas.toDataURL().split(',')[1] };
+            });
+        });
+        await page.route('https://api.openai.com/v1/images/generations', route => {
+            const prompt = String(route.request().postDataJSON().prompt);
+            const image = artwork.find(image => prompt.startsWith(image.color));
+            if (!image) throw new Error('Unexpected synthetic image request');
+            return route.fulfill({ json: { data: [{ b64_json: image.base64 }] } });
+        });
+        const navigation = page.getByRole('navigation', { name: 'Main navigation' });
+        await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+        await page.getByLabel('OpenAI API Key', { exact: true }).fill('synthetic-contrast-test');
+        const save = page.getByRole('button', { name: 'Save key', exact: true }).first();
+        await save.hover();
+        await page.waitForTimeout(250);
+        expect.soft(await contrast(save, 'color'), 'hovered amber button label').toBeGreaterThanOrEqual(4.5);
+        await page.screenshot({ path: testInfo.outputPath(`${mode}-hover.png`) });
+        await save.click();
+        await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
+        for (const { color, base64 } of artwork) {
+            await page.getByLabel('Prompt', { exact: true }).fill(`${color} contrast artwork`);
+            await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+            await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveAttribute('src', `data:image/png;base64,${base64}`);
+            await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+            await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeVisible();
+        }
+        await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
+        const whiteCard = page.getByRole('article').filter({ has: page.getByRole('button', { name: 'Open image: white contrast artwork', exact: true }) });
+        await whiteCard.hover();
+        expect.soft(await contrast(whiteCard.locator('.selector-inner'), 'borderTopColor'), 'unchecked archive selection boundary').toBeGreaterThanOrEqual(3);
+        await whiteCard.getByRole('button', { name: 'Add to favorites', exact: true }).click();
+        const toast = page.getByRole('status').filter({ hasText: 'Added to favorites' });
+        await expect(toast).toBeVisible();
+        await settleAnimations(toast);
+        const dismiss = toast.getByRole('button', { name: 'Dismiss notification' });
+        await page.keyboard.press('Tab');
+        await dismiss.focus();
+        await expect(dismiss).toBeFocused();
+        const toastFocus = await dismiss.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return { color: style.outlineColor, width: style.outlineWidth, visible: element.matches(':focus-visible') };
+        });
+        expect(toastFocus.visible).toBe(true);
+        expect(parseFloat(toastFocus.width)).toBeGreaterThanOrEqual(2);
+        expect.soft(await contrast(dismiss, 'outlineColor'), 'toast keyboard focus').toBeGreaterThanOrEqual(3);
+        await page.screenshot({ path: testInfo.outputPath(`${mode}-toast-focus.png`) });
+        for (const art of ['white', 'black']) {
+            const open = page.getByRole('button', { name: `Open image: ${art} contrast artwork`, exact: true });
+            await page.keyboard.press('Tab');
+            await open.focus();
+            const ring = await open.evaluate((element, artColor) => {
+                const style = getComputedStyle(element);
+                const after = getComputedStyle(element, '::after');
+                const colors = [parseFloat(style.outlineWidth) > 0 ? style.outlineColor : '',
+                    after.content !== 'none' && parseFloat(after.outlineWidth) > 0 ? after.outlineColor : '',
+                    after.content !== 'none' && parseFloat(after.borderTopWidth) > 0 ? after.borderTopColor : ''].filter(Boolean);
+                const backgroundLuminance = artColor === 'white' ? 1 : 0;
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = 1;
+                const context = canvas.getContext('2d');
+                if (!context) throw new Error('Canvas unavailable');
+                const ratios = colors.map((color) => {
+                    context.fillStyle = color;
+                    context.fillRect(0, 0, 1, 1);
+                    const rgb = Array.from(context.getImageData(0, 0, 1, 1).data);
+                    const luminance = rgb.slice(0, 3).reduce((sum, channel, index) => {
+                        const value = channel / 255;
+                        return sum + (value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4) * [.2126, .7152, .0722][index];
+                    }, 0);
+                    return (Math.max(luminance, backgroundLuminance) + .05) / (Math.min(luminance, backgroundLuminance) + .05);
+                });
+                return { visible: element.matches(':focus-visible'), colors, ratio: Math.max(0, ...ratios) };
+            }, art);
+            expect(ring.visible).toBe(true);
+            expect.soft(ring.ratio, `${art} artwork keyboard focus`).toBeGreaterThanOrEqual(3);
+            await page.screenshot({ path: testInfo.outputPath(`${mode}-${art}-art-focus.png`) });
+        }
+        await page.getByRole('button', { name: 'Open image: black contrast artwork', exact: true }).click();
+        const download = page.getByRole('dialog', { name: 'Image details', exact: true }).getByRole('button', { name: 'Download', exact: true });
+        await download.hover();
+        await page.waitForTimeout(250);
+        expect(await contrast(download, 'color'), 'hovered primary button label').toBeGreaterThanOrEqual(4.5);
+        await page.screenshot({ path: testInfo.outputPath(`${mode}-primary-hover.png`) });
+    });
+}
+
+for (const mode of ['light', 'dark'] as const) {
+    test(`${mode} reference thumbnails paint keyboard focus inside their clipped bounds`, async ({ page }, testInfo) => {
+        await page.emulateMedia({ colorScheme: mode });
+        await page.goto('/');
+        const references = await page.evaluate(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 64;
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Canvas unavailable');
+            return ['white', 'black'].map(color => {
+                context.fillStyle = color;
+                context.fillRect(0, 0, 64, 64);
+                return { color, url: canvas.toDataURL() };
+            });
+        });
+        await page.getByLabel('Add reference images', { exact: true }).setInputFiles(references.map(({ color, url }) => ({
+            name: `${color}.png`, mimeType: 'image/png', buffer: Buffer.from(url.split(',')[1], 'base64'),
+        })));
+        for (const [index, { color }] of references.entries()) {
+            const preview = page.getByRole('button', { name: `Preview reference ${index + 1}`, exact: true });
+            await page.keyboard.press('Tab');
+            await preview.focus();
+            await expect(preview).toBeFocused();
+            await settleAnimations(preview.locator('..'));
+            const bounds = await preview.boundingBox();
+            if (!bounds) throw new Error('Reference preview unavailable');
+            const screenshot = await page.screenshot({ path: testInfo.outputPath(`${mode}-${color}-reference-focus.png`) });
+            const difference = await page.evaluate(async ({ image, bounds }) => {
+                const capture = new Image();
+                capture.src = image;
+                await capture.decode();
+                const canvas = document.createElement('canvas');
+                canvas.width = capture.width;
+                canvas.height = capture.height;
+                const context = canvas.getContext('2d');
+                if (!context) throw new Error('Canvas unavailable');
+                context.drawImage(capture, 0, 0);
+                const sample = (offset: number) => context.getImageData(Math.floor((bounds.x + offset) * devicePixelRatio),
+                    Math.floor((bounds.y + bounds.height / 2) * devicePixelRatio), 1, 1).data[0];
+                return Math.abs(sample(3) - sample(5));
+            }, { image: `data:image/png;base64,${screenshot.toString('base64')}`, bounds });
+            expect(difference, `${color} artwork has two visibly contrasting focus bands`).toBeGreaterThan(200);
+        }
+    });
+}
