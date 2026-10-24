@@ -53,6 +53,77 @@ async function releaseImport(page: Page, name: string) {
     await page.evaluate((name) => document.dispatchEvent(new CustomEvent('release-import', { detail: name })), name);
 }
 
+for (const operation of ['transform', 'save']) {
+    test(`pending imports block ${operation} until every layer and reference is ready`, async ({ page }, testInfo) => {
+        const dataUrl = await seedEditor(page);
+        const buffer = Buffer.from(dataUrl.split(',')[1], 'base64');
+        let requests = 0;
+        await page.route('https://api.openai.com/v1/images/edits', async (route) => {
+            requests++;
+            await route.fulfill({ json: { data: [{ b64_json: dataUrl.split(',')[1] }] } });
+        });
+        await page.locator('.ai-edit-section > summary').click();
+        await page.getByLabel('AI transformation prompt').fill('Keep the imported work');
+        await page.getByRole('slider', { name: 'Brightness', exact: true }).fill('150');
+        await delayImports(page);
+        await page.getByLabel('Add image layers', { exact: true }).setInputFiles({ name: 'delayed-layer.png', mimeType: 'image/png', buffer });
+        await page.locator('.editor-container').getByLabel('Add reference images', { exact: true }).setInputFiles({ name: 'delayed-reference.png', mimeType: 'image/png', buffer });
+        const transform = page.getByRole('button', { name: 'Transform with AI', exact: true });
+        const save = page.getByRole('button', { name: 'Save changes', exact: true });
+        const copy = page.getByRole('button', { name: 'Save as copy', exact: true });
+        await expect(transform).toBeDisabled();
+        await expect(save).toBeDisabled();
+        await expect(copy).toBeDisabled();
+        await page.keyboard.press('ControlOrMeta+s');
+        await expect(page.getByRole('heading', { name: 'Editor', exact: true })).toBeVisible();
+        expect(requests).toBe(0);
+        const first = operation === 'transform' ? 'layer' : 'reference';
+        const second = operation === 'transform' ? 'reference' : 'layer';
+        await releaseImport(page, `delayed-${first}.png`);
+        if (first === 'layer') await expect(page.locator('.layer-name')).toHaveCount(2);
+        else await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(1);
+        await expect(transform).toBeDisabled();
+        await expect(save).toBeDisabled();
+        await releaseImport(page, `delayed-${second}.png`);
+        await expect(transform).toBeEnabled();
+        await expect(save).toBeEnabled();
+        await expect(copy).toBeEnabled();
+        if (operation === 'transform') {
+            await transform.click();
+            await expect(page.getByLabel('AI result name', { exact: true })).toBeVisible();
+            expect(requests).toBe(1);
+        }
+        await expect(page.getByLabel('delayed-layer.png name', { exact: true })).toBeVisible();
+        await save.click();
+        await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+        await page.reload();
+        await openEditor(page);
+        await expect(page.getByLabel('delayed-layer.png name', { exact: true })).toBeVisible();
+        if (operation === 'transform') await expect(page.getByLabel('AI result name', { exact: true })).toBeVisible();
+        else await expect(page.getByRole('slider', { name: 'Brightness', exact: true })).toHaveValue('150');
+        await page.locator('.ai-edit-section > summary').click();
+        await expect(page.getByRole('img', { name: 'Reference', exact: true })).toHaveCount(1);
+        await page.screenshot({ path: testInfo.outputPath(`pending-import-${operation}-saved.png`), fullPage: true });
+    });
+}
+
+test('a failed import releases Save and reports the failure', async ({ page }, testInfo) => {
+    const dataUrl = await seedEditor(page);
+    await page.evaluate(() => {
+        const read = File.prototype.arrayBuffer;
+        File.prototype.arrayBuffer = function () {
+            return this.name === 'failed.png' ? Promise.reject(new Error('Synthetic file read failure')) : read.call(this);
+        };
+    });
+    await page.getByLabel('Add image layers', { exact: true }).setInputFiles({ name: 'failed.png', mimeType: 'image/png', buffer: Buffer.from(dataUrl.split(',')[1], 'base64') });
+    await expect(page.getByText('Synthetic file read failure', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save as copy', exact: true })).toBeEnabled();
+    await page.getByRole('slider', { name: 'Brightness', exact: true }).fill('150');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('failed-import-recovered.png'), fullPage: true });
+});
+
 async function paintMask(page: Page) {
     await page.getByRole('button', { name: 'Mask', exact: true }).click();
     const canvas = page.locator('.transform-mask-canvas');
