@@ -41,6 +41,7 @@ interface ArchiveMetadataPort {
     list(): Promise<ArchiveMetadataRecord[]>;
     get(id: string): Promise<ArchiveMetadataRecord | null>;
     save(record: ArchiveMetadataRecord): Promise<void>;
+    insertIfAbsent(record: ArchiveMetadataRecord): Promise<void>;
     setFavorite(id: string, favorite: boolean): Promise<void>;
     remove(id: string): Promise<void>;
 }
@@ -254,7 +255,7 @@ class LocalArchiveStore implements ArchiveStore {
             references: [],
         };
 
-        await this.metadata.save({
+        await this.metadata.insertIfAbsent({
             id,
             storedUrl: id,
             prompt: recoveredImage.prompt,
@@ -267,7 +268,7 @@ class LocalArchiveStore implements ArchiveStore {
             referenceIds: [],
         });
 
-        return recoveredImage;
+        return this.get(id);
     }
 }
 

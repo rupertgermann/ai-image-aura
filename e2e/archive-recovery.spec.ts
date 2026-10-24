@@ -31,7 +31,7 @@ for (const missing of ['reference', 'layer', 'image']) {
                 drawing.fillRect(0, 0, 64, 64);
                 return canvas.toDataURL();
             });
-            const original = await archiveStore.save({
+            await archiveStore.save({
                 id: 'saved', url: urls[0], prompt: 'Original artwork', quality: 'high',
                 aspectRatio: '64x64', model: 'gpt-image-2.5-flare', background: 'transparent', timestamp: '2026-10-24T12:00:00Z',
                 references: [urls[1]], layerStack: { canvasWidth: 64, canvasHeight: 64, layers: [{
@@ -39,6 +39,8 @@ for (const missing of ['reference', 'layer', 'image']) {
                     width: 64, height: 64, rotation: 0, opacity: 1, blendMode: 'normal', visible: true, locked: false,
                 }] },
             });
+            const original = await archiveStore.get('saved');
+            if (!original) throw new Error('Original archive image was not persisted');
             const originalStep = await lineageStore.save({ id: 'step', archiveImageId: original.id,
                 stepType: 'generation', parentStepId: null, timestamp: original.timestamp, metadata: { prompt: original.prompt } });
             const incoming = { ...original, prompt: 'Incoming artwork', url: urls[1] };

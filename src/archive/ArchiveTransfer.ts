@@ -30,7 +30,7 @@ interface BuildArchiveZipDeps {
 }
 
 interface ImportArchiveZipDeps {
-    archiveStore: Pick<ArchiveStore, 'save'>;
+    archiveStore: Pick<ArchiveStore, 'get' | 'save'>;
     lineageStore: Pick<LineageStore, 'save'>;
     loadZip?: (input: Blob | Uint8Array | ArrayBuffer) => Promise<JSZip>;
 }
@@ -96,12 +96,15 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
     const lineageManifest = parseLineageManifest(await readOptionalJsonFile(zip, LINEAGE_MANIFEST_FILE));
     const missingAssetFiles: string[] = [];
     const importedImageIds: string[] = [];
+    const skippedImageIds = new Set<string>();
 
     for (const image of archiveManifest.images) {
+        const previousMissingCount = missingAssetFiles.length;
         const imageFileName = image.imageFileName ?? getImageFileName(image.id);
         const imageFile = zip.file(imageFileName);
         if (!imageFile) {
             missingAssetFiles.push(imageFileName);
+            if (await deps.archiveStore.get(image.id)) skippedImageIds.add(image.id);
             continue;
         }
 
@@ -118,6 +121,10 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
             references.push(await blobToDataUrl(await referenceFile.async('blob')));
         }
         const layerStack = await importLayerStack(zip, image.layerStack, missingAssetFiles);
+        if (missingAssetFiles.length > previousMissingCount && await deps.archiveStore.get(image.id)) {
+            skippedImageIds.add(image.id);
+            continue;
+        }
 
         await deps.archiveStore.save({
             id: image.id,
@@ -142,13 +149,14 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
         importedImageIds.push(image.id);
     }
 
-    const stepIds = new Set(lineageManifest.steps.map((step) => step.id));
-    const brokenParentReferences = lineageManifest.steps
+    const steps = lineageManifest.steps.filter((step) => !skippedImageIds.has(step.archiveImageId));
+    const stepIds = new Set(steps.map((step) => step.id));
+    const brokenParentReferences = steps
         .filter((step) => step.parentStepId && !stepIds.has(step.parentStepId))
         .map((step) => ({ stepId: step.id, parentStepId: step.parentStepId! }));
 
     const importedStepIds: string[] = [];
-    for (const step of lineageManifest.steps) {
+    for (const step of steps) {
         const hydratedStep = await hydrateLineageAssetsFromZip(zip, step, missingAssetFiles);
         await deps.lineageStore.save(hydratedStep);
         importedStepIds.push(hydratedStep.id);
