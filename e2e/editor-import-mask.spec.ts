@@ -320,47 +320,120 @@ test('same-size target switches, actual resize and 180-degree rotation invalidat
     await page.screenshot({ path: testInfo.outputPath('mask-rotated-target.png'), fullPage: true });
 });
 
-test('a delayed mask apply cannot attach paint after its target changes', async ({ page }) => {
+for (const cancellation of ['target change', 'Clear']) {
+    test(`a delayed mask apply cannot restore paint after ${cancellation}`, async ({ page }) => {
+        await seedEditor(page);
+        await addMaskTarget(page);
+        await page.locator('.ai-edit-section > summary').click();
+        await page.getByRole('button', { name: 'Mask', exact: true }).click();
+        await page.locator('.transform-mask-canvas').click();
+        await page.evaluate(() => {
+            const encode = HTMLCanvasElement.prototype.toBlob;
+            HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
+                if (this.classList.contains('transform-mask-canvas')) {
+                    document.addEventListener('release-mask', () => encode.call(this, callback, ...args), { once: true });
+                } else encode.call(this, callback, ...args);
+            };
+        });
+        await page.getByRole('button', { name: 'Apply Mask', exact: true }).click();
+        if (cancellation === 'Clear') {
+            await page.getByRole('button', { name: 'Clear', exact: true }).click();
+            await page.evaluate(() => document.dispatchEvent(new Event('release-mask')));
+            await expect(page.getByRole('dialog', { name: 'Transform mask', exact: true })).toBeVisible();
+            await page.getByRole('button', { name: 'Apply Mask', exact: true }).click();
+            await expect(page.getByText('Paint a mask before applying it.', { exact: true })).toBeVisible();
+            return;
+        }
+        await page.getByRole('button', { name: 'Close mask editor', exact: true }).click();
+        await page.locator('.layer-name').filter({ hasText: 'Base' }).click();
+        await page.evaluate(() => document.dispatchEvent(new Event('release-mask')));
+        await page.getByRole('button', { name: 'Mask', exact: true }).click();
+        await expect(page.locator('.transform-mask-canvas')).toHaveJSProperty('width', 128);
+        await page.getByRole('button', { name: 'Close mask editor', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Clear Mask', exact: true })).toHaveCount(0);
+    });
+
+}
+
+
+test('a delayed target render cannot replace the target after reopening Mask', async ({ page }) => {
     await seedEditor(page);
     await addMaskTarget(page);
     await page.locator('.ai-edit-section > summary').click();
-    await page.getByRole('button', { name: 'Mask', exact: true }).click();
-    await page.locator('.transform-mask-canvas').click();
     await page.evaluate(() => {
-        const encode = HTMLCanvasElement.prototype.toBlob;
-        HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
-            if (this.classList.contains('transform-mask-canvas')) {
-                document.addEventListener('release-mask', () => encode.call(this, callback, ...args), { once: true });
-            } else encode.call(this, callback, ...args);
+        const fetchImage = window.fetch;
+        const createUrl = URL.createObjectURL;
+        let renders = 0;
+        let targetUrls = 0;
+        URL.createObjectURL = (blob) => {
+            document.documentElement.dataset.maskTargetUrls = String(++targetUrls);
+            return createUrl(blob);
+        };
+        window.fetch = async (input, init) => {
+            const response = await fetchImage(input, init);
+            if (typeof input === 'string' && input.startsWith('data:image/png')) {
+                const render = ++renders;
+                if (render === 1) {
+                    document.documentElement.dataset.pendingMaskTarget = 'true';
+                    return new Promise<Response>((resolve) => document.addEventListener('release-target', () => resolve(response), { once: true }));
+                }
+                if (render === 3) {
+                    const read = response.blob.bind(response);
+                    response.blob = async () => {
+                        const blob = await read();
+                        requestAnimationFrame(() => document.dispatchEvent(new Event('old-render-finished')));
+                        return blob;
+                    };
+                }
+            }
+            return response;
         };
     });
-    await page.getByRole('button', { name: 'Apply Mask', exact: true }).click();
+    await page.getByRole('button', { name: 'Mask', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-pending-mask-target', 'true');
     await page.getByRole('button', { name: 'Close mask editor', exact: true }).click();
     await page.locator('.layer-name').filter({ hasText: 'Base' }).click();
-    await page.evaluate(() => document.dispatchEvent(new Event('release-mask')));
     await page.getByRole('button', { name: 'Mask', exact: true }).click();
     await expect(page.locator('.transform-mask-canvas')).toHaveJSProperty('width', 128);
-    await page.getByRole('button', { name: 'Close mask editor', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Clear Mask', exact: true })).toHaveCount(0);
+    await page.evaluate(() => new Promise<void>((resolve) => {
+        document.addEventListener('old-render-finished', () => resolve(), { once: true });
+        document.dispatchEvent(new Event('release-target'));
+    }));
+    expect(await page.locator('html').getAttribute('data-mask-target-urls')).toBe('1');
+    await expect(page.locator('.transform-mask-canvas')).toHaveJSProperty('width', 128);
 });
 
-test('a delayed target render is discarded when geometry changes while opening Mask', async ({ page }) => {
+test('Load in Editor rejects a historical mask with different dimensions and does not stretch its paint', async ({ page }, testInfo) => {
     await seedEditor(page);
-    await addMaskTarget(page);
-    await page.locator('.ai-edit-section > summary').click();
-    await page.evaluate(() => {
-        const encode = HTMLCanvasElement.prototype.toBlob;
-        let holdNext = true;
-        HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
-            if (holdNext) {
-                holdNext = false;
-                document.addEventListener('release-target', () => encode.call(this, callback, ...args), { once: true });
-            } else encode.call(this, callback, ...args);
-        };
+    await page.evaluate(async (imageId) => {
+        const modulePath = '/src/lineage/LineageStore.ts';
+        const { lineageStore } = await import(modulePath);
+        const canvas = document.createElement('canvas');
+        canvas.width = 64; canvas.height = 32;
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('Canvas unavailable');
+        context.fillStyle = '#ffffff'; context.fillRect(16, 8, 16, 16);
+        await lineageStore.save({ archiveImageId: imageId, stepType: 'ai-edit', metadata: {
+            editPrompt: 'Replay historical paint', model: 'gpt-image-2.5-flare',
+            transformMaskAsset: { assetId: null, mimeType: 'image/png', dataUrl: canvas.toDataURL() },
+        } });
+    }, imageId);
+    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Archive', exact: true }).click();
+    await page.getByRole('button', { name: `Open image: ${prompt}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Load in Editor', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit Mask', exact: true })).toBeVisible();
+    let requests = 0;
+    await page.route('https://api.openai.com/v1/images/edits', async (route) => { requests++; await route.abort(); });
+    await page.getByRole('button', { name: 'Transform with AI', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Transform mask dimensions must match the source image.' })).toBeVisible();
+    expect(requests).toBe(0);
+    await page.getByRole('button', { name: 'Edit Mask', exact: true }).click();
+    await expect(page.getByText('Saved mask does not match this target. Paint a new mask.', { exact: true })).toBeVisible();
+    const coverage = await page.locator('.transform-mask-canvas').evaluate((element) => {
+        if (!(element instanceof HTMLCanvasElement)) throw new Error('Canvas missing');
+        const pixels = element.getContext('2d')?.getImageData(0, 0, element.width, element.height).data;
+        return pixels?.some((value, index) => index % 4 === 3 && value > 0);
     });
-    await page.getByRole('button', { name: 'Mask', exact: true }).click();
-    await page.keyboard.press('ArrowRight');
-    await page.evaluate(() => document.dispatchEvent(new Event('release-target')));
-    await expect(page.getByRole('dialog', { name: 'Transform mask', exact: true })).toBeHidden();
-    await expect(page.getByText(clearedMaskMessage, { exact: true })).toBeVisible();
+    expect(coverage).toBe(false);
+    await page.screenshot({ path: testInfo.outputPath('replay-mask-dimension-rejection.png'), fullPage: true });
 });
