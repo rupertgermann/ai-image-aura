@@ -1,5 +1,10 @@
 import JSZip from 'jszip';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createAutopilotSession } from '../autopilot/AutopilotSession';
+import { saveGenerateResultSlots } from '../generate-session/useGenerateController';
+import { DEFAULT_GENERATE_DRAFT } from '../generate-session/GenerateSession';
+import { saveArchiveImage } from './saveArchiveImage';
+import { loadLineageTimeline } from '../lineage/loadLineageTimeline';
 import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage } from '../db/types';
 import { buildArchiveZip, importArchiveZip, LINEAGE_MANIFEST_FILE } from './ArchiveTransfer';
@@ -41,6 +46,118 @@ class InMemoryArchiveStore implements Pick<ArchiveStore, 'save'> {
 }
 
 describe('ArchiveTransfer', () => {
+
+    it('preserves real Autopilot history after Generate saves a fresh archive ID and ZIP restores into empty stores', async () => {
+        let nextStepId = 0;
+        const sourceLineage = createLineageStore({
+            metadata: new InMemoryLineageMetadataPort(),
+            makeId: () => `step-${++nextStepId}`,
+        });
+        const result = await createAutopilotSession({
+            goal: 'Bright cinematic image',
+            initialPrompt: 'first prompt',
+            settings: {
+                model: OPENAI_IMAGE_MODEL,
+                controls: { quality: 'high', size: '1024x1024', background: 'transparent', batchSize: 1 },
+                style: 'none', lighting: 'none', palette: 'none', referenceImages: [],
+            },
+            imageCredential: 'stub',
+            getProviderCredential: () => 'stub',
+            maxIterations: 2,
+            generate: vi.fn()
+                .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,b25l' })
+                .mockResolvedValueOnce({ imageDataUrl: 'data:image/png;base64,dHdv' }),
+            lineageStore: sourceLineage,
+            makeRunId: () => 'round-trip',
+        }, {
+            reasoningClient: {
+                createResponse: vi.fn()
+                    .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 30, feedback: ['Improve lighting'] }) })
+                    .mockResolvedValueOnce({ outputText: 'better prompt' })
+                    .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 95, feedback: ['Goal reached'] }) }),
+            },
+        }).run();
+        expect(result.status).toBe('satisfied');
+        expect(result.iterations.map((iteration) => iteration.archiveImageId)).toEqual([
+            'autopilot:round-trip:iteration:1', 'autopilot:round-trip:iteration:2',
+        ]);
+        const best = result.bestIteration!;
+        const sourceArchive = new InMemoryArchiveStore();
+        await saveGenerateResultSlots({
+            results: [{ slotIndex: 0, status: 'success', imageUrl: best.imageDataUrl, isSaved: false, archiveImageId: best.archiveImageId }],
+            draft: DEFAULT_GENERATE_DRAFT,
+            runDraft: DEFAULT_GENERATE_DRAFT,
+            usedReferences: [],
+            runLineageSource: { archiveImageId: best.archiveImageId, stepId: best.stepId },
+            serializeReferences: async () => [],
+            saveImage: (request) => saveArchiveImage(request, {
+                archive: {
+                    get: async (id) => sourceArchive.images.get(id) ?? null,
+                    save: (image) => sourceArchive.save(image),
+                    remove: async (id) => { sourceArchive.images.delete(id); },
+                },
+                lineage: sourceLineage,
+            }),
+            createArchiveImageId: () => 'saved-image',
+        });
+        const before = await loadLineageTimeline('saved-image', sourceLineage);
+        expect(before.entries.map((step) => step.id)).toEqual(['step-1', 'step-2', 'step-3']);
+        const sourceImages = [...sourceArchive.images.values()];
+        expect(sourceImages.map((image) => image.id)).toEqual(['saved-image']);
+
+        const importedArchive = new InMemoryArchiveStore();
+        const importedLineage = createStore();
+        const summary = await importArchiveZip(await buildArchiveZip(sourceImages, { lineageStore: sourceLineage }), {
+            archiveStore: importedArchive,
+            lineageStore: importedLineage,
+        });
+
+        expect(summary.importedStepIds).toEqual(['step-1', 'step-2', 'step-3']);
+        expect(summary.brokenParentReferences).toEqual([]);
+        expect(summary.missingAssetFiles).toEqual([]);
+        expect(importedArchive.images.get('saved-image')?.url).toBe(best.imageDataUrl);
+        expect(await loadLineageTimeline('saved-image', importedLineage)).toEqual(before);
+        for (const id of summary.importedStepIds) {
+            expect(await importedLineage.getById(id)).toEqual(await sourceLineage.getById(id));
+        }
+    });
+
+    it('includes shared ancestors once when exporting only their descendants', async () => {
+        const sourceLineage = createStore();
+        await seedLineage(sourceLineage);
+        const summary = await importArchiveZip(await buildArchiveZip(createImages().slice(1), { lineageStore: sourceLineage }), {
+            archiveStore: new InMemoryArchiveStore(),
+            lineageStore: createStore(),
+        });
+
+        expect(summary.importedImageIds).toEqual(['image-2', 'image-3']);
+        expect(summary.importedStepIds).toEqual(['step-1', 'step-2', 'step-3', 'step-4']);
+        expect(summary.brokenParentReferences).toEqual([]);
+    });
+
+    it.each(['cycle', 'missing-parent'])('terminates ancestor traversal for %s and retains parent links', async (parentStepId) => {
+        const sourceLineage = createStore();
+        await sourceLineage.save({
+            id: 'cycle', archiveImageId: 'image-1', parentStepId: 'ancestor',
+            stepType: 'generation', timestamp: '2026-04-04T10:00:00.000Z', metadata: {},
+        });
+        await sourceLineage.save({
+            id: 'ancestor', archiveImageId: 'unselected-image', parentStepId,
+            stepType: 'generation', timestamp: '2026-04-04T09:00:00.000Z', metadata: {},
+        });
+        const importedLineage = createStore();
+        const summary = await importArchiveZip(await buildArchiveZip([createImages()[0]!], { lineageStore: sourceLineage }), {
+            archiveStore: new InMemoryArchiveStore(),
+            lineageStore: importedLineage,
+        });
+
+        expect(summary.importedStepIds).toEqual(['ancestor', 'cycle']);
+        expect(summary.brokenParentReferences).toEqual(parentStepId === 'cycle' ? [] : [
+            { stepId: 'ancestor', parentStepId: 'missing-parent' },
+        ]);
+        expect(await importedLineage.getById('ancestor')).toEqual(await sourceLineage.getById('ancestor'));
+        expect(await importedLineage.getById('cycle')).toEqual(await sourceLineage.getById('cycle'));
+    });
 
     it('round-trips typed Generate, Editor, and Autopilot lineage metadata without changing the lineage manifest version', async () => {
         const sourceLineage = createStore();
@@ -129,11 +246,16 @@ describe('ArchiveTransfer', () => {
         maskedMetadata.transformMaskAsset = maskedMetadata.aiEdit.transformMask;
         await sourceLineage.save({
             id: 'masked-editor-step',
-            archiveImageId: 'image-1',
+            archiveImageId: 'ancestor-image',
             parentStepId: null,
             stepType: 'ai-edit',
             timestamp: '2026-04-04T10:00:00.000Z',
             metadata: maskedMetadata,
+        });
+
+        await sourceLineage.save({
+            id: 'saved-mask-child', archiveImageId: 'image-1', parentStepId: 'masked-editor-step',
+            stepType: 'save-as-copy', timestamp: '2026-04-04T11:00:00.000Z', metadata: {},
         });
 
         const zipBytes = await buildArchiveZip([createImages()[0]!], { lineageStore: sourceLineage });
@@ -166,7 +288,7 @@ describe('ArchiveTransfer', () => {
             lineageStore: importedLineage,
         });
 
-        await expect(importedLineage.getByArchiveImageId('image-1')).resolves.toEqual([
+        await expect(importedLineage.getByArchiveImageId('ancestor-image')).resolves.toEqual([
             expect.objectContaining({
                 id: 'masked-editor-step',
                 metadata: expect.objectContaining({
