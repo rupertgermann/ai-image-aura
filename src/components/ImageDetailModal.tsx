@@ -315,7 +315,7 @@ const ImageDetailModal: React.FC<ImageDetailModalProps> = ({
                             <button className="btn-ghost" onClick={copyPrompt} style={{ width: '100%', padding: '1rem' }}>
                                 {copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copied' : 'Copy prompt'}
                             </button>
-                            <div className="divider" style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '1rem 0' }} />
+                            <div className="divider" style={{ height: '1px', background: 'var(--color-steel)', margin: '1rem 0' }} />
                             <button className="btn-ghost" onClick={onDelete} style={{ width: '100%', padding: '1rem' }}>
                                 <Trash2 size={18} /> Delete Permanently
                             </button>
