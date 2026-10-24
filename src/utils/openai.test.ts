@@ -222,6 +222,55 @@ describe('openAiImageClient', () => {
         }
     });
 
+    it.each([true, false])('retains final output across a trailing reset (completed=%s)', async (completed) => {
+        const chunks = [
+            'event: image_generation.partial_image\ndata: {"b64_json":"preview"}\n\n',
+            ...(completed ? ['event: image_generation.completed\ndata: {"b64_json":"paid-final-output"}\n\n'] : []),
+        ];
+        const stream = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                const chunk = chunks.shift();
+                if (chunk) controller.enqueue(new TextEncoder().encode(chunk));
+                else controller.error(new Error('connection reset'));
+            },
+        });
+        const partials = vi.fn();
+        vi.stubGlobal('fetch', async () => new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }));
+        try {
+            const result = openAiImageClient.createImages({ apiKey: 'sk-test', prompt: 'a cat', onPartialImage: partials });
+            if (completed) {
+                await expect(result).resolves.toEqual([{ b64_json: 'paid-final-output' }]);
+            } else {
+                await expect(result).rejects.toThrow('connection reset');
+            }
+            expect(partials).toHaveBeenCalledWith({ b64_json: 'preview' });
+            expect(stream.locked).toBe(false);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it.each([false, true])('finishes an open completed stream despite cleanup failure=%s', async (cleanupFails) => {
+        const cancel = vi.fn(() => {
+            if (cleanupFails) throw new Error('connection reset during cleanup');
+        });
+        const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode('event: image_generation.completed\ndata: {"b64_json":"final"}\n\n'));
+            },
+            cancel,
+        });
+        vi.stubGlobal('fetch', async () => new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } }));
+        try {
+            await expect(openAiImageClient.createImages({ apiKey: 'sk-test', prompt: 'a cat', onPartialImage: () => {} }))
+                .resolves.toEqual([{ b64_json: 'final' }]);
+            expect(cancel).toHaveBeenCalledOnce();
+            expect(stream.locked).toBe(false);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    }, 1000);
+
     it('falls back to the normal JSON response when streaming is requested but SSE is not returned', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
             data: [{ b64_json: 'generated' }],
