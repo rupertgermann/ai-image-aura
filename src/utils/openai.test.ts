@@ -20,7 +20,7 @@ describe('openAiImageClient', () => {
     it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('sends %s quality and single-image streaming for generations and masked edits', async (model) => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ b64_json: 'result' }] })));
         const reference = new File(['source'], 'source.png', { type: 'image/png' });
-        const mask = new File(['mask'], 'mask.png', { type: 'image/png' });
+
         vi.stubGlobal('fetch', fetchMock);
         try {
             for (const quality of ['xhigh', 'max', 'auto'] as const) {
@@ -28,14 +28,13 @@ describe('openAiImageClient', () => {
                     await openAiImageClient.createImage({
                         apiKey: 'sk-test', model, prompt: 'a cutout', quality,
                         background: 'transparent', onPartialImage: vi.fn(),
-                        ...(edit ? { referenceImages: [reference], maskImage: mask } : {}),
+                        ...(edit ? { referenceImages: [reference] } : {}),
                     });
                     const [url, request] = fetchMock.mock.calls.at(-1) as unknown as [string, RequestInit];
                     expect(url).toBe(`https://api.openai.com/v1/images/${edit ? 'edits' : 'generations'}`);
                     const body = edit ? Object.fromEntries((request.body as FormData).entries()) : JSON.parse(String(request.body));
                     expect(body).toMatchObject({ model, quality, background: 'transparent',
                         stream: edit ? 'true' : true, partial_images: edit ? '3' : 3 });
-                    if (edit) expect(body.mask).toBe(mask);
                     expect(body).not.toHaveProperty('input_fidelity');
                     expect(body.output_format ?? 'png').toBe('png');
                 }
@@ -286,12 +285,10 @@ describe('openAiImageClient', () => {
         vi.stubGlobal('fetch', fetchMock);
         try {
             const referenceImage = new File(['source image'], 'source.png', { type: 'image/png' });
-            const maskImage = new File(['mask image'], 'mask.png', { type: 'image/png' });
             const result = await openAiImageClient.createImage({
                 apiKey: 'sk-test',
                 prompt: 'replace the cat',
                 referenceImages: [referenceImage],
-                maskImage,
                 model: OPENAI_IMAGE_MODEL,
                 quality: 'low',
                 size: '1024x1024',
@@ -319,7 +316,6 @@ describe('openAiImageClient', () => {
             expect(form.get('quality')).toBe('low');
             expect(form.get('background')).toBe('opaque');
             expect(form.get('size')).toBe('1024x1024');
-            expect(form.get('mask')).toBe(maskImage);
             expect(fileValues).toHaveLength(1);
             expect(fileValues[0]?.[1]).toBeInstanceOf(File);
         } finally {

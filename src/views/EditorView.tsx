@@ -1,6 +1,6 @@
 import Modal from '../components/Modal';
 import Presence from '../components/Presence';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { Undo2, Redo2, Save, MoveHorizontal, Sliders, Palette, Sparkles, Loader2, X, Upload, Copy, Layers, RotateCcw, ChevronDown, ChevronRight, Paintbrush, Eraser } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { EditorCanvas } from '../editor/EditorCanvas';
@@ -13,6 +13,7 @@ import { getImageModelUiChoices, imageModelSupportsTransformMask } from '../imag
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { getAiTransformReferenceWarning, renderAiTransformEditInput } from '../editor/aiTransform';
 import { classifyTransformMaskCoverage } from '../editor/transformMask';
+import { planAiTransformTarget } from '../editor/layers';
 import type { EditorReplay } from '../lineage/replayLineageStep';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
@@ -40,6 +41,8 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
     const [maskBrushSize, setMaskBrushSize] = useState(32);
     const [transformMaskFile, setTransformMaskFile] = useState<File | null>(null);
     const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+    const maskTargetKeyRef = useRef<string | null>(null);
+    const maskOperationRef = useRef(0);
     const paintingMaskRef = useRef(false);
     const activeModel = resolveImageModelConfig(aiEditModel);
     const imageCredential = getProviderCredential(activeModel.provider);
@@ -109,22 +112,45 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
     const aiReferenceWarning = getAiTransformReferenceWarning(aiEditModel, referenceImages.length, draft);
     useEffect(() => { onBusyChange(aiLoading || saving); }, [aiLoading, saving, onBusyChange]);
 
-    useEffect(() => {
-        if (!replay) {
-            return;
+    const targetPlan = draft ? planAiTransformTarget(draft) : null;
+    const targetKey = draft && targetPlan ? JSON.stringify([
+        image?.id,
+        targetPlan.mode,
+        targetPlan.targetBounds,
+        draft.layerStack.layers.filter((layer) => targetPlan.targetLayerIds.includes(layer.id))
+            .map(({ id, x, y, width, height, rotation }) => [id, x, y, width, height, rotation]),
+    ]) : null;
+    const syncMaskTarget = useEffectEvent(() => {
+        if (maskTargetKeyRef.current !== null && maskTargetKeyRef.current !== targetKey) {
+            maskTargetKeyRef.current = null;
+            maskOperationRef.current += 1;
+            setTransformMaskFile(null);
+            setMaskTargetUrl(null);
+            setMaskEditorOpen(false);
+            setMaskLoading(false);
+            setMaskError('Transform target changed. The mask was cleared; repaint it for this target.');
         }
+    });
+    useEffect(() => { syncMaskTarget(); }, [targetKey]);
+    useEffect(() => () => { maskOperationRef.current += 1; }, []);
 
-        if (replay.model) {
-            setAiEditModel(replay.model);
-        }
-        if (replay.prompt) {
-            setAiPrompt(replay.prompt);
-        }
+    const restoreReplayMask = useEffectEvent(() => {
+        if (!replay) return;
+        if (replay.model) setAiEditModel(replay.model);
+        if (replay.prompt) setAiPrompt(replay.prompt);
+        maskOperationRef.current += 1;
+        maskTargetKeyRef.current = replay.maskImage ? targetKey : null;
         setTransformMaskFile(replay.maskImage ?? null);
-    }, [replay, setAiPrompt]);
+        setMaskError(null);
+    });
+    useEffect(() => {
+        if (!draftLoading) restoreReplayMask();
+    }, [replay, draftLoading]);
 
     useEffect(() => {
         if (!supportsTransformMask) {
+            maskOperationRef.current += 1;
+            maskTargetKeyRef.current = null;
             setTransformMaskFile(null);
             setMaskEditorOpen(false);
         }
@@ -136,11 +162,18 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         }
     }, [maskTargetUrl]);
 
+    const closeMaskEditor = () => {
+        maskOperationRef.current += 1;
+        setMaskEditorOpen(false);
+    };
+
     const openMaskEditor = async () => {
-        if (!draft) {
+        if (!draft || !targetKey) {
             return;
         }
 
+        const operation = ++maskOperationRef.current;
+        maskTargetKeyRef.current = targetKey;
         setMaskEditorOpen(true);
         setMaskLoading(true);
         setMaskError(null);
@@ -150,15 +183,16 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                 adjustments,
                 referenceImages: [],
             });
+            if (operation !== maskOperationRef.current) return;
             const url = URL.createObjectURL(input.sourceImage);
             setMaskTargetUrl((previousUrl) => {
                 if (previousUrl) URL.revokeObjectURL(previousUrl);
                 return url;
             });
         } catch (error) {
-            setMaskError(error instanceof Error ? error.message : 'Failed to render transform target');
+            if (operation === maskOperationRef.current) setMaskError(error instanceof Error ? error.message : 'Failed to render transform target');
         } finally {
-            setMaskLoading(false);
+            if (operation === maskOperationRef.current) setMaskLoading(false);
         }
     };
 
@@ -175,11 +209,18 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         context.clearRect(0, 0, canvas.width, canvas.height);
         if (!transformMaskFile) return;
 
+        const operation = maskOperationRef.current;
         const maskUrl = URL.createObjectURL(transformMaskFile);
         const maskImage = new Image();
         maskImage.onload = () => {
-            context.drawImage(maskImage, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(maskUrl);
+            if (operation !== maskOperationRef.current) return;
+            if (maskImage.naturalWidth !== canvas.width || maskImage.naturalHeight !== canvas.height) {
+                setTransformMaskFile(null);
+                setMaskError('Saved mask does not match this target. Paint a new mask.');
+                return;
+            }
+            context.drawImage(maskImage, 0, 0);
         };
         maskImage.onerror = () => URL.revokeObjectURL(maskUrl);
         maskImage.src = maskUrl;
@@ -220,6 +261,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
     };
 
     const clearTransformMask = () => {
+        maskOperationRef.current += 1;
         const canvas = maskCanvasRef.current;
         const context = canvas?.getContext('2d');
         if (canvas && context) {
@@ -230,6 +272,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
     };
 
     const applyTransformMask = async () => {
+        const operation = maskOperationRef.current;
         const canvas = maskCanvasRef.current;
         const context = canvas?.getContext('2d');
         if (!canvas || !context) {
@@ -244,6 +287,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         }
 
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+        if (operation !== maskOperationRef.current) return;
         if (!blob) {
             setMaskError('Failed to create mask image.');
             return;
@@ -543,6 +587,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                                     )}
                                 </div>
                             )}
+                            {maskError && !maskEditorOpen && <div className="info-message mini" role="status">{maskError}</div>}
                             <button
                                 className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
@@ -607,14 +652,14 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                 </fieldset>
             </div>
             <Presence>{maskEditorOpen && (
-                <Modal label="Transform mask" className="transform-mask-modal" onClose={() => setMaskEditorOpen(false)}>
+                <Modal label="Transform mask" className="transform-mask-modal" onClose={closeMaskEditor}>
                     <div className="modal-content transform-mask-dialog">
                         <div className="transform-mask-toolbar">
                             <div className="section-title">
                                 <Paintbrush size={18} className="icon-purple" />
                                 <h3>Transform mask</h3>
                             </div>
-                            <button className="modal-close" onClick={() => setMaskEditorOpen(false)} aria-label="Close mask editor">
+                            <button className="modal-close" onClick={closeMaskEditor} aria-label="Close mask editor">
                                 <X size={20} />
                             </button>
                         </div>
@@ -678,7 +723,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                                 />
                                 <span>{maskBrushSize}</span>
                             </label>
-                            <button className="btn-ghost" type="button" onClick={clearTransformMask}>
+                            <button className="btn-ghost" type="button" onClick={clearTransformMask} disabled={maskLoading}>
                                 <RotateCcw size={16} /> Clear
                             </button>
                             <button className="btn-amber" type="button" onClick={() => { void applyTransformMask(); }}>

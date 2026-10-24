@@ -122,6 +122,7 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
 class LocalGenerateSessionStore implements GenerateSessionStore {
     private readonly blobStorage: StorageProvider;
     private readonly localStorage: Storage;
+    private transferQueue: Promise<void> = Promise.resolve();
 
     constructor(blobStorage: StorageProvider, localStorage: Storage) {
         this.blobStorage = blobStorage;
@@ -152,36 +153,65 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         this.clearLegacyDraftKeys();
     }
 
-    async transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
+    transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
+        const transfer = this.transferQueue.then(() => this.performArchiveTransfer(image, lineageSource, draftOverrides));
+        this.transferQueue = transfer.catch(() => undefined);
+        return transfer;
+    }
+
+    private async performArchiveTransfer(image: ArchiveImage, lineageSource: GenerateLineageSource | null, draftOverrides: Partial<GenerateDraft>): Promise<void> {
         const model = isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL;
 
-        this.writeDraft(sanitizeGenerateDraft({
-            ...DEFAULT_GENERATE_DRAFT,
-            prompt: image.prompt,
-            model,
-            style: image.style || 'none',
-            lighting: image.lighting || 'none',
-            palette: image.palette || 'none',
-            gptImage: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
-            nanoBananaPro: sanitizeArchiveImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, image),
-            qwenImage2_1: sanitizeArchiveImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, image),
-            flux2Klein4b: sanitizeArchiveImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, image),
-            isSaved: false,
-            ...draftOverrides,
-        }));
-        if (lineageSource) {
-            this.saveLineageSource(lineageSource);
-        } else {
-            this.clearLineageSource();
-        }
-        await this.clearCurrentResult();
+        const localSnapshot = [GENERATE_DRAFT_KEY, GENERATE_LINEAGE_SOURCE_KEY, ...Object.values(LEGACY_KEYS)]
+            .map((key) => ({ key, value: this.localStorage.getItem(key) }));
+        const blobSnapshot = await Promise.all([
+            GENERATE_CURRENT_BATCH_KEY, GENERATE_CURRENT_RESULT_KEY,
+            GENERATE_CURRENT_RESULT_REFERENCES_KEY, GENERATE_TRANSFERRED_REFERENCES_KEY,
+        ].map(async (key) => ({ key, value: await this.blobStorage.load(key) })));
 
-        if (image.references && image.references.length > 0) {
-            await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));
-            return;
+        try {
+            if (image.references && image.references.length > 0) {
+                await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));
+            } else {
+                await this.blobStorage.remove(GENERATE_TRANSFERRED_REFERENCES_KEY);
+            }
+            this.writeDraft(sanitizeGenerateDraft({
+                ...DEFAULT_GENERATE_DRAFT,
+                prompt: image.prompt,
+                model,
+                style: image.style || 'none',
+                lighting: image.lighting || 'none',
+                palette: image.palette || 'none',
+                gptImage: sanitizeArchiveImageModelControls(OPENAI_IMAGE_MODEL, image),
+                nanoBananaPro: sanitizeArchiveImageModelControls(NANO_BANANA_PRO_IMAGE_MODEL, image),
+                qwenImage2_1: sanitizeArchiveImageModelControls(QWEN_IMAGE_2_1_IMAGE_MODEL, image),
+                flux2Klein4b: sanitizeArchiveImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, image),
+                isSaved: false,
+                ...draftOverrides,
+            }));
+            if (lineageSource) {
+                this.saveLineageSource(lineageSource);
+            } else {
+                this.clearLineageSource();
+            }
+            await this.clearCurrentResult();
+        } catch (error) {
+            const restorations = await Promise.allSettled([
+                ...localSnapshot.map(async ({ key, value }) => {
+                    if (value === null) this.localStorage.removeItem(key);
+                    else this.localStorage.setItem(key, value);
+                }),
+                ...blobSnapshot.map(async ({ key, value }) => {
+                    if (value === null) await this.blobStorage.remove(key);
+                    else await this.blobStorage.save(key, value);
+                }),
+            ]);
+            const failures = restorations.filter((result) => result.status === 'rejected');
+            if (failures.length) {
+                throw new AggregateError([error, ...failures.map((result) => result.reason)], 'Create Similar failed and some previous session data could not be restored');
+            }
+            throw error;
         }
-
-        await this.blobStorage.remove(GENERATE_TRANSFERRED_REFERENCES_KEY);
     }
 
     loadLineageSource(): GenerateLineageSource | null {
@@ -236,11 +266,13 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
     }
 
     async clearCurrentResult(): Promise<void> {
-        await Promise.all([
+        const removals = await Promise.allSettled([
             this.blobStorage.remove(GENERATE_CURRENT_BATCH_KEY),
             this.blobStorage.remove(GENERATE_CURRENT_RESULT_KEY),
             this.blobStorage.remove(GENERATE_CURRENT_RESULT_REFERENCES_KEY),
         ]);
+        const failure = removals.find((result) => result.status === 'rejected');
+        if (failure) throw failure.reason;
     }
 
     async consumeTransferredReferences(): Promise<string[]> {

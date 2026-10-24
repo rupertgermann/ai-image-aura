@@ -18,6 +18,43 @@ import {
     useGenerateController,
 } from './useGenerateController';
 
+describe('Autopilot preflight cancellation', () => {
+    it('honors Stop while references are read and allows the next run', async () => {
+        const controller: { current: ReturnType<typeof useGenerateController> | null } = { current: null };
+        const generate = vi.fn(async () => [{ slotIndex: 0, status: 'success' as const, imageUrl: 'data:image/png;base64,result' }]);
+        let stopDuringRead = true;
+        renderToStaticMarkup(createElement(() => {
+            controller.current = useGenerateController({
+                imageCredential: 'key', getProviderCredential: () => 'key',
+                draft: { ...DEFAULT_GENERATE_DRAFT, prompt: 'portrait' }, setDraft: vi.fn(),
+                referenceImages: [], replaceReferences: vi.fn(), serializeReferences: async () => [],
+                onSaveImage: async (request) => request.image,
+                session: {
+                    loadCurrentBatch: async () => null, saveCurrentBatch: async () => {},
+                    clearCurrentResult: async () => {}, consumeTransferredReferences: async () => [],
+                    loadLineageSource: () => null, saveLineageSource: vi.fn(), clearLineageSource: vi.fn(),
+                },
+                lineage: { getByArchiveImageId: async () => [], save: async (step) => ({ ...step, id: 'step' }) },
+                workflow: { generate, serializeReferences: async () => {
+                    if (stopDuringRead) controller.current?.cancelAutopilot();
+                    return [];
+                } },
+                createAutopilot: (input) => createAutopilotSession(input, { reasoningClient: {
+                    createResponse: async () => ({ outputText: JSON.stringify({ score: 95, feedback: ['Matches the goal.'] }) }),
+                } }),
+            });
+            return null;
+        }));
+        if (!controller.current) throw new Error('Missing controller');
+        const cancelled = await controller.current.runAutopilot({ goal: 'portrait' });
+        expect(cancelled?.status).toBe('cancelled');
+        expect(generate).not.toHaveBeenCalled();
+        stopDuringRead = false;
+        expect((await controller.current.runAutopilot({ goal: 'portrait' }))?.status).toBe('satisfied');
+        expect(generate).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('Generate controller batch result slots', () => {
     it('retains successful saves when a later slot fails, so retry does not duplicate them', async () => {
         let results = buildGenerateResultSlots([

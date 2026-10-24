@@ -143,6 +143,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         currentResult,
         currentPartialResult,
         currentBatchResults,
+        currentRunLineageSource,
         currentRunDraft,
         loading,
         saving,
@@ -304,6 +305,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const handleUseResultAsReference = (result: SuccessfulGenerateResultSlot) => {
         addGeneratedResultAsReferenceFromAction({
             slot: result,
+            lineageSource: currentRunLineageSource,
             addReferenceFiles,
             session: generateSessionStore,
             capacityMessage: resultReferenceCapacityMessage,
@@ -616,7 +618,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             </p>
                             <div className="autopilot-thumbnail-strip">
                                 {autopilot.iterations.map((iteration) => (
-                                    <div key={iteration.stepId} className={`autopilot-thumbnail ${autopilot.bestIterationNumber === iteration.iterationNumber ? 'best' : ''}`}>
+                                    <div key={iteration.iterationNumber} className={`autopilot-thumbnail ${autopilot.bestIterationNumber === iteration.iterationNumber ? 'best' : ''}`}>
                                         <img src={iteration.imageDataUrl} alt={`Autopilot iteration ${iteration.iterationNumber}`} />
                                         <span>#{iteration.iterationNumber} · {iteration.score}</span>
                                     </div>

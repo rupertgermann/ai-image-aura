@@ -1,3 +1,4 @@
+import { createOpenAiTransformMask } from '../editor/transformMask';
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODEL_REGISTRY, OPENAI_RESPONSES_MODEL, isImageModelSlug } from './openaiModels';
 
 export type ImageQuality = 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'auto';
@@ -95,8 +96,9 @@ async function requestOpenAiImages(request: OpenAiImageRequest): Promise<OpenAiI
             formData.append('image[]', file);
         });
 
-        if (request.maskImage) {
-            formData.append('mask', request.maskImage);
+        const sourceImage = request.referenceImages?.[0];
+        if (request.maskImage && sourceImage) {
+            formData.append('mask', await createOpenAiTransformMask(request.maskImage, sourceImage), 'transform-mask.png');
         }
 
         if (request.size && request.size !== 'auto') formData.append('size', request.size);

@@ -96,6 +96,7 @@ interface SaveGenerateResultSlotsInput {
 
 interface AddGeneratedResultAsReferenceInput {
     slot: GenerateResultSlot;
+    lineageSource?: GenerateLineageSource | null;
     addReferenceFiles: (files: File[]) => void;
     session: Pick<GenerateSessionStore, 'saveLineageSource' | 'clearLineageSource'>;
 }
@@ -245,6 +246,7 @@ export async function saveGenerateResultSlots({
 
 export function addGeneratedResultAsReference({
     slot,
+    lineageSource,
     addReferenceFiles,
     session,
 }: AddGeneratedResultAsReferenceInput) {
@@ -258,6 +260,8 @@ export function addGeneratedResultAsReference({
 
     if (slot.archiveImageId) {
         session.saveLineageSource({ archiveImageId: slot.archiveImageId });
+    } else if (lineageSource) {
+        session.saveLineageSource(lineageSource);
     } else {
         session.clearLineageSource();
     }
@@ -378,6 +382,7 @@ export function useGenerateController({
         lastErrorIteration: null,
     });
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
+    const autopilotCancelRequested = useRef(false);
     const partialRunIdRef = useRef(0);
 
     const latestIteration = autopilot.iterations.at(-1);
@@ -555,6 +560,7 @@ export function useGenerateController({
             return null;
         }
 
+        autopilotCancelRequested.current = false;
         runningRef.current = true;
         setLoading(true);
         setError(null);
@@ -594,6 +600,7 @@ export function useGenerateController({
                 initialCostLedger,
                 onSessionCreated: (sessionInstance) => {
                     autopilotSessionRef.current = sessionInstance;
+                    if (autopilotCancelRequested.current) sessionInstance.cancel();
                 },
                 maxIterations: input.maxIterations,
                 satisfactionThreshold: input.satisfactionThreshold,
@@ -660,6 +667,7 @@ export function useGenerateController({
                     ...completionNotification,
                 });
             }
+            setAutopilotPreview(null);
             autopilotSessionRef.current = null;
             runningRef.current = false;
             setLoading(false);
@@ -667,6 +675,7 @@ export function useGenerateController({
     }, [adoptBatch, currentResult, imageCredential, completionNotificationPort, completionNotificationsEnabled, createAutopilot, draft, getProviderCredential, goalTranslationCostContext, isDocumentHidden, lineage, reasoningModel, referenceImages, session, updateDraft, workflow]);
 
     const cancelAutopilot = useCallback(() => {
+        autopilotCancelRequested.current = true;
         autopilotSessionRef.current?.cancel();
     }, []);
 
@@ -733,6 +742,7 @@ export function useGenerateController({
         currentPartialResult,
         currentBatchResults,
         currentRunDraft,
+        currentRunLineageSource: currentBatch?.lineageSource ?? null,
         loading,
         saving,
         error,

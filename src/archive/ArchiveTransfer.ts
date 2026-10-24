@@ -25,7 +25,7 @@ export {
 } from './ArchiveManifest';
 
 interface BuildArchiveZipDeps {
-    lineageStore: Pick<LineageStore, 'getByArchiveImageId'>;
+    lineageStore: Pick<LineageStore, 'getByArchiveImageId' | 'getById'>;
     createZip?: () => JSZip;
 }
 
@@ -82,7 +82,8 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
 
     zip.file(ARCHIVE_MANIFEST_FILE, JSON.stringify(createArchiveManifest(archiveManifestImages), null, 2));
 
-    const lineageSteps = await addLineageAssetsToZip(zip, dedupeLineageSteps(lineageCollections));
+    const collectedSteps = await collectLineageSteps(lineageCollections, deps.lineageStore);
+    const lineageSteps = await addLineageAssetsToZip(zip, collectedSteps);
     zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify(createLineageManifest(lineageSteps), null, 2));
 
     return zip.generateAsync({ type: 'uint8array' });
@@ -161,12 +162,26 @@ export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer
     };
 }
 
-function dedupeLineageSteps(stepCollections: LineageStep[][]) {
+async function collectLineageSteps(stepCollections: LineageStep[][], store: Pick<LineageStore, 'getById'>) {
     const stepsById = new Map<string, LineageStep>();
 
     for (const collection of stepCollections) {
         for (const step of collection) {
             stepsById.set(step.id, step);
+        }
+    }
+
+    const visited = new Set(stepsById.keys());
+    for (const step of stepsById.values()) {
+        const parentId = step.parentStepId;
+        if (!parentId || visited.has(parentId)) {
+            continue;
+        }
+
+        visited.add(parentId);
+        const parent = await store.getById(parentId);
+        if (parent) {
+            stepsById.set(parent.id, parent);
         }
     }
 

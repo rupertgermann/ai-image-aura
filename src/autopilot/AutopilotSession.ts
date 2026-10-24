@@ -15,7 +15,7 @@ export const MAX_AUTOPILOT_ITERATIONS = 8;
 export const DEFAULT_AUTOPILOT_SATISFACTION_THRESHOLD = 90;
 
 export interface AutopilotIteration {
-    stepId: string;
+    stepId: string | null;
     archiveImageId: string;
     iterationNumber: number;
     prompt: string;
@@ -132,26 +132,8 @@ class DefaultAutopilotSession implements AutopilotSession {
                 runCostLedger = mergeApiCostLedgers(runCostLedger, iterationCostLedger);
 
                 const archiveImageId = `autopilot:${runId}:iteration:${iterationNumber}`;
-                const step = await this.input.lineageStore.save({
-                    archiveImageId,
-                    parentStepId,
-                    stepType: 'autopilot-iteration',
-                    timestamp: new Date().toISOString(),
-                    metadata: buildAutopilotLineageMetadata({
-                        goal: this.input.goal,
-                        reasoningModel: this.reasoning.model,
-                        iterationNumber,
-                        evaluation,
-                        prompt: currentPrompt,
-                        settings: snapshotAutopilotSettings(runSettings),
-                        outputImageDataUrl: imageDataUrl,
-                        actualParameters: generatedImage.actualParameters,
-                        costLedger: iterationCostLedger,
-                    }),
-                });
-
                 const completedIteration: AutopilotIteration = {
-                    stepId: step.id,
+                    stepId: null,
                     archiveImageId,
                     iterationNumber,
                     prompt: currentPrompt,
@@ -164,8 +146,29 @@ class DefaultAutopilotSession implements AutopilotSession {
 
                 iterations.push(completedIteration);
                 runningBest = pickBetterIteration(runningBest, completedIteration);
-                this.input.callbacks?.onIterationComplete?.(completedIteration, runningBest);
-                parentStepId = step.id;
+                try {
+                    const step = await this.input.lineageStore.save({
+                        archiveImageId,
+                        parentStepId,
+                        stepType: 'autopilot-iteration',
+                        timestamp: new Date().toISOString(),
+                        metadata: buildAutopilotLineageMetadata({
+                            goal: this.input.goal,
+                            reasoningModel: this.reasoning.model,
+                            iterationNumber,
+                            evaluation,
+                            prompt: currentPrompt,
+                            settings: snapshotAutopilotSettings(runSettings),
+                            outputImageDataUrl: imageDataUrl,
+                            actualParameters: generatedImage.actualParameters,
+                            costLedger: iterationCostLedger,
+                        }),
+                    });
+                    completedIteration.stepId = step.id;
+                    parentStepId = step.id;
+                } finally {
+                    this.input.callbacks?.onIterationComplete?.(completedIteration, runningBest);
+                }
 
                 if (evaluationError) {
                     throw evaluationError;
