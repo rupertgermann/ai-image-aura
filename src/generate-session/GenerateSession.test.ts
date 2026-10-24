@@ -330,6 +330,52 @@ const transferBlobKeys = ['generate_current_batch', 'generate_current_result',
     'generate_current_result_references', 'generate_transferred_references'];
 
 describe('Create Similar transfer recovery', () => {
+    it('keeps the later transfer when an overlapping earlier transfer fails', async () => {
+        const values = new InMemoryStorageProvider();
+        let releaseFirst!: () => void;
+        let firstStarted!: () => void;
+        const firstBlocked = new Promise<void>((resolve) => { firstStarted = resolve; });
+        const release = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        const localValues = new Map<string, string>();
+        const localStorage: Storage = {
+            get length() { return localValues.size; },
+            clear: () => localValues.clear(), key: (index) => [...localValues.keys()][index] ?? null,
+            getItem: (key) => localValues.get(key) ?? null,
+            setItem: (key, value) => { localValues.set(key, value); },
+            removeItem: (key) => { localValues.delete(key); },
+        };
+        const store = createGenerateSessionStore({ localStorage, blobStorage: {
+            load: (key) => values.load(key), remove: (key) => values.remove(key),
+            listKeys: () => values.listKeys(),
+            save: async (key, value) => {
+                await values.save(key, value);
+                if (key === 'generate_transferred_references' && value === '["first-reference"]') {
+                    firstStarted();
+                    await release;
+                    throw new Error('first transfer failed');
+                }
+            },
+        } });
+        store.writeDraft({ ...DEFAULT_GENERATE_DRAFT, prompt: 'original prompt' });
+        const image = {
+            id: 'first', url: 'image', prompt: 'first prompt', timestamp: '2026-10-24',
+            references: ['first-reference'], quality: 'high', aspectRatio: '1024x1024', background: 'auto',
+        };
+        const first = store.transferFromArchive(image);
+        const firstRejected = expect(first).rejects.toThrow('first transfer failed');
+        await firstBlocked;
+        const second = store.transferFromArchive({ ...image, id: 'second', prompt: 'second prompt', references: ['second-reference'] });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        releaseFirst();
+        await firstRejected;
+        await second;
+
+        expect(store.readDraft().prompt).toBe('second prompt');
+        expect(store.loadLineageSource()).toEqual({ archiveImageId: 'second' });
+        await expect(store.consumeTransferredReferences()).resolves.toEqual(['second-reference']);
+        await expect(store.loadCurrentBatch()).resolves.toBeNull();
+    });
+
     it.each([...transferLocalKeys, ...transferBlobKeys])('restores all raw session state when mutating %s fails', async (failedKey) => {
         const localValues = new Map(transferLocalKeys.map((key) => [key, `raw old ${key}`]));
         const blobValues = new Map(transferBlobKeys.map((key) => [key, `raw old ${key}`]));

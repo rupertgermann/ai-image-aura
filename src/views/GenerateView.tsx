@@ -143,6 +143,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         currentResult,
         currentPartialResult,
         currentBatchResults,
+        currentRunLineageSource,
         currentRunDraft,
         loading,
         saving,
@@ -304,6 +305,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const handleUseResultAsReference = (result: SuccessfulGenerateResultSlot) => {
         addGeneratedResultAsReferenceFromAction({
             slot: result,
+            lineageSource: currentRunLineageSource,
             addReferenceFiles,
             session: generateSessionStore,
             capacityMessage: resultReferenceCapacityMessage,

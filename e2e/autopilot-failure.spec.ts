@@ -178,6 +178,15 @@ for (const failedIteration of [1, 2]) {
         const download = await downloadPromise;
         await download.saveAs(testInfo.outputPath('retained-paid-image.png'));
         expect(await download.failure()).toBeNull();
+        const readLineageSource = () => page.evaluate(async () => {
+            const modulePath = '/src/generate-session/GenerateSession.ts';
+            const { generateSessionStore } = await import(modulePath);
+            return generateSessionStore.loadLineageSource();
+        });
+        const retainedSource = await readLineageSource();
+        if (failedIteration === 2) expect(retainedSource?.stepId).toBeTruthy();
+        await page.getByRole('button', { name: 'Use as reference', exact: true }).click();
+        expect(await readLineageSource()).toEqual(retainedSource);
         await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
         await page.reload();

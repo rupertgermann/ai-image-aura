@@ -122,6 +122,7 @@ export const DEFAULT_GENERATE_DRAFT: GenerateDraft = {
 class LocalGenerateSessionStore implements GenerateSessionStore {
     private readonly blobStorage: StorageProvider;
     private readonly localStorage: Storage;
+    private transferQueue: Promise<void> = Promise.resolve();
 
     constructor(blobStorage: StorageProvider, localStorage: Storage) {
         this.blobStorage = blobStorage;
@@ -152,7 +153,13 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
         this.clearLegacyDraftKeys();
     }
 
-    async transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
+    transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
+        const transfer = this.transferQueue.then(() => this.performArchiveTransfer(image, lineageSource, draftOverrides));
+        this.transferQueue = transfer.catch(() => undefined);
+        return transfer;
+    }
+
+    private async performArchiveTransfer(image: ArchiveImage, lineageSource: GenerateLineageSource | null, draftOverrides: Partial<GenerateDraft>): Promise<void> {
         const model = isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL;
 
         const localSnapshot = [GENERATE_DRAFT_KEY, GENERATE_LINEAGE_SOURCE_KEY, ...Object.values(LEGACY_KEYS)]

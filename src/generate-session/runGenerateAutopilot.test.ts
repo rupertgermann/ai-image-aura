@@ -6,7 +6,7 @@ import type { GenerateImageInput } from '../image-workflow/ImageWorkflow';
 import { createLineageStore, type LineageStep, type SaveLineageStepInput } from '../lineage/LineageStore';
 import type { ApiCostLedger } from '../db/types';
 import { calculateApiCostTotals } from '../costs/apiCost';
-import { saveGenerateResultSlots } from './useGenerateController';
+import { addGeneratedResultAsReferenceFromAction, saveGenerateResultSlots } from './useGenerateController';
 import { saveArchiveImage } from '../archive/saveArchiveImage';
 import { loadLineageTimeline } from '../lineage/loadLineageTimeline';
 import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT } from './GenerateSession';
@@ -80,7 +80,7 @@ describe('runGenerateAutopilot', () => {
             } },
             workflow: {
                 generate: async () => [{
-                    slotIndex: 0, status: 'success', imageUrl: `data:image/png;base64,image-${++imageNumber}`,
+                    slotIndex: 0, status: 'success', imageUrl: `data:image/png;base64,${btoa(`image-${++imageNumber}`)}`,
                     actualParameters: { size: '1024x1024', revisedPrompt: `actual-${imageNumber}` },
                     costLedger: { version: 1, currency: 'USD', items: [{
                         id: `image-${imageNumber}`, kind: 'image-generation', operation: 'image-generation',
@@ -106,10 +106,23 @@ describe('runGenerateAutopilot', () => {
         expect(batch.draft.prompt).toBe(failedIteration === 1 ? 'original prompt' : 'refined prompt');
         expect(batch.references).toEqual(['data:image/png;base64,reference']);
         expect(batch.results[0]).toMatchObject({
-            imageUrl: `data:image/png;base64,image-${failedIteration}`,
+            imageUrl: `data:image/png;base64,${btoa(`image-${failedIteration}`)}`,
             actualParameters: { revisedPrompt: `actual-${failedIteration}` },
         });
         expect(batch.lineageSource?.stepId).toBe(failedIteration === 1 ? 'original-step' : 'step-1');
+        const referenceSession = createGenerateSessionStore();
+        const addReferenceFiles = vi.fn();
+        expect(batch.results[0]).not.toHaveProperty('archiveImageId');
+        expect(addGeneratedResultAsReferenceFromAction({
+            slot: batch.results[0],
+            lineageSource: batch.lineageSource,
+            addReferenceFiles,
+            session: referenceSession,
+            capacityMessage: null,
+            setNotice: vi.fn(),
+        })).toBe(true);
+        expect(addReferenceFiles).toHaveBeenCalledWith([expect.any(File)]);
+        expect(referenceSession.loadLineageSource()).toEqual(batch.lineageSource);
         const saveImage = vi.fn(async (request: Parameters<Parameters<typeof saveGenerateResultSlots>[0]['saveImage']>[0]) => request.image);
         const saved = await saveGenerateResultSlots({
             results: batch.results, draft: batch.draft, runDraft: batch.draft,

@@ -96,6 +96,7 @@ interface SaveGenerateResultSlotsInput {
 
 interface AddGeneratedResultAsReferenceInput {
     slot: GenerateResultSlot;
+    lineageSource?: GenerateLineageSource | null;
     addReferenceFiles: (files: File[]) => void;
     session: Pick<GenerateSessionStore, 'saveLineageSource' | 'clearLineageSource'>;
 }
@@ -245,6 +246,7 @@ export async function saveGenerateResultSlots({
 
 export function addGeneratedResultAsReference({
     slot,
+    lineageSource,
     addReferenceFiles,
     session,
 }: AddGeneratedResultAsReferenceInput) {
@@ -258,6 +260,8 @@ export function addGeneratedResultAsReference({
 
     if (slot.archiveImageId) {
         session.saveLineageSource({ archiveImageId: slot.archiveImageId });
+    } else if (lineageSource) {
+        session.saveLineageSource(lineageSource);
     } else {
         session.clearLineageSource();
     }
@@ -738,6 +742,7 @@ export function useGenerateController({
         currentPartialResult,
         currentBatchResults,
         currentRunDraft,
+        currentRunLineageSource: currentBatch?.lineageSource ?? null,
         loading,
         saving,
         error,
