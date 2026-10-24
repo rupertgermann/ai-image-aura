@@ -663,6 +663,7 @@ export function useGenerateController({
                     ...completionNotification,
                 });
             }
+            setAutopilotPreview(null);
             autopilotSessionRef.current = null;
             runningRef.current = false;
             setLoading(false);

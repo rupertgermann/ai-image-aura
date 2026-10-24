@@ -15,7 +15,7 @@ interface RunGenerateAutopilotInput {
     draft: GenerateDraft;
     referenceImages: File[];
     sessionStore: Pick<GenerateSessionStore, 'loadLineageSource'>;
-    lineageStore: Pick<LineageStore, 'save'>;
+    lineageStore: Pick<LineageStore, 'save' | 'getByArchiveImageId'>;
     createSession?: typeof createAutopilotSession;
     workflow?: Pick<ImageWorkflow, 'generate' | 'serializeReferences'>;
     initialCostLedger?: ApiCostLedger;
@@ -39,7 +39,11 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(input.draft.model, input.referenceImages);
     const usedReferenceImages = referenceRunPlan.providerReferenceImages.slice();
     const usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
-    const originalSource = input.sessionStore.loadLineageSource();
+    const source = input.sessionStore.loadLineageSource();
+    const originalSource = source ? {
+        ...source,
+        stepId: source.stepId ?? (await input.lineageStore.getByArchiveImageId(source.archiveImageId)).at(-1)?.id ?? null,
+    } : null;
     const session = createSession({
         goal: input.goal,
         initialPrompt: input.draft.prompt,

@@ -20,8 +20,8 @@ describe('runGenerateAutopilot', () => {
             getByArchiveImageId: async (id) => [...steps.values()].filter((step) => step.archiveImageId === id),
             getChildren: async (id) => [...steps.values()].filter((step) => step.parentStepId === id),
         } });
-        const original = await lineage.save({ archiveImageId: 'source', stepType: 'generation', metadata: {} });
-        const latest = await lineage.save({ archiveImageId: 'source', parentStepId: original.id, stepType: 'overwrite', metadata: {} });
+        const original = await lineage.save({ archiveImageId: 'source', parentStepId: null, timestamp: '2026-10-24T10:00:00Z', stepType: 'generation', metadata: {} });
+        const latest = await lineage.save({ archiveImageId: 'source', parentStepId: original.id, timestamp: '2026-10-24T11:00:00Z', stepType: 'overwrite', metadata: {} });
         const blobs = new Map<string, string>();
         const session = createGenerateSessionStore({ blobStorage: {
             save: async (key, value) => { blobs.set(key, value); }, load: async (key) => blobs.get(key) ?? null,
@@ -52,7 +52,7 @@ describe('runGenerateAutopilot', () => {
             usedReferences: batch.references, runLineageSource: batch.lineageSource,
             serializeReferences: async () => [], createArchiveImageId: () => 'final',
             saveImage: (request) => saveArchiveImage(request, { lineage, archive: {
-                get: async () => null, save: async (image) => image, remove: async () => {},
+                get: async () => null, save: async (image) => ({ ...image, id: image.id ?? 'final', timestamp: image.timestamp ?? '2026-10-24T12:00:00Z' }), remove: async () => {},
             } }),
         });
         const timeline = await loadLineageTimeline('final', lineage);
