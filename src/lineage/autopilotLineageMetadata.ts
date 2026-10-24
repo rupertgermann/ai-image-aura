@@ -68,6 +68,7 @@ export interface AutopilotLineageMetadata extends Record<string, unknown> {
     runLabel: string;
     actualParameters?: ActualImageParameters;
     costLedger?: ApiCostLedger;
+    references?: string[];
 }
 
 export interface AutopilotTimelineMetadata {
@@ -105,6 +106,7 @@ export function buildAutopilotLineageMetadata(input: {
     outputImageDataUrl: string;
     actualParameters?: ActualImageParameters;
     costLedger?: ApiCostLedger;
+    references?: string[];
 }): AutopilotLineageMetadata {
     const { model, controls } = input.settings;
     const archiveFields = buildImageModelArchiveFields(model, controls);
@@ -112,6 +114,7 @@ export function buildAutopilotLineageMetadata(input: {
     const feedback = input.evaluation.feedback.filter((entry) => entry.trim().length > 0);
 
     return {
+        ...(input.references !== undefined ? { references: input.references.slice() } : {}),
         goal: {
             text: input.goal,
         },

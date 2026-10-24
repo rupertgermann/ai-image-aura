@@ -42,6 +42,7 @@ export function useAppController() {
     const [editingImageOverride, setEditingImage] = useState<ArchiveImage | null>(null);
     const [savedEditorImageId, setSavedEditorImageId] = useLocalStorage<string | null>('editor_image_id', null);
     const editingImage = editingImageOverride ?? images.find((image) => image.id === savedEditorImageId) ?? null;
+    const [editorLineageSource, setEditorLineageSource] = useLocalStorage<{ archiveImageId: string; stepId: string } | null>('editor_lineage_source', null);
     const [editorReplay, setEditorReplay] = useState<EditorReplay | null>(null);
     const [completionNotificationReadiness, setCompletionNotificationReadiness] = useState<CompletionNotificationReadiness>(
         () => browserCompletionNotificationPort.getReadiness(),
@@ -142,8 +143,9 @@ export function useAppController() {
         setEditingImage(image);
         setSavedEditorImageId(image.id);
         setEditorReplay(null);
+        setEditorLineageSource(null);
         changeView('editor');
-    }, [addToast, changeView, editorBusy, setSavedEditorImageId]);
+    }, [addToast, changeView, editorBusy, setEditorLineageSource, setSavedEditorImageId]);
 
     const handleSaveEditedImage = useCallback(async (updatedUrl: string, context: EditorSaveContext) => {
         if (!editingImage) {
@@ -155,11 +157,11 @@ export function useAppController() {
             sourceImage: editingImage,
             updatedUrl,
             context,
-            parentStepId: generateSessionStore.loadLineageSource()?.stepId ?? null,
+            parentStepId: editorLineageSource?.archiveImageId === editingImage.id ? editorLineageSource.stepId : null,
         });
 
         publishSavedImage(savedImage);
-        generateSessionStore.clearLineageSource();
+        setEditorLineageSource(null);
 
         if (savedImage.id !== editingImage.id) {
             addToast('Image saved as a copy', 'success');
@@ -173,7 +175,7 @@ export function useAppController() {
         setEditingImage(null);
         setSavedEditorImageId(null);
         setEditorReplay(null);
-    }, [addToast, changeView, editingImage, publishSavedImage, setSavedEditorImageId]);
+    }, [addToast, changeView, editingImage, editorLineageSource, publishSavedImage, setEditorLineageSource, setSavedEditorImageId]);
 
     const createSimilar = useCallback(async (image: ArchiveImage) => {
         if (generateBusy) {
@@ -229,12 +231,13 @@ export function useAppController() {
             setEditingImage(outcome.image);
             setSavedEditorImageId(outcome.image.id);
             setEditorReplay(outcome.replay);
+            setEditorLineageSource({ archiveImageId: outcome.image.id, stepId });
             changeView('editor');
             addToast('Lineage step loaded into Editor', 'info');
         } catch (error) {
             notifyError(error, 'Failed to replay lineage step');
         }
-    }, [addToast, changeView, editorBusy, lineageNavigator, notifyError, setSavedEditorImageId]);
+    }, [addToast, changeView, editorBusy, lineageNavigator, notifyError, setEditorLineageSource, setSavedEditorImageId]);
 
     const forkFromLineageStep = useCallback(async (stepId: string) => {
         try {
@@ -243,11 +246,24 @@ export function useAppController() {
                 notifyError(new Error(outcome.reason), 'Fork unavailable');
                 return;
             }
-            addToast('Next save will branch from this lineage step', 'info');
+            if (outcome.destination === 'generate') {
+                await replayGenerateFromLineageStep(stepId);
+                return;
+            }
+            if (editorBusy) {
+                addToast('Wait for the current edit to finish before forking a step.', 'info');
+                return;
+            }
+            setEditingImage(outcome.image);
+            setSavedEditorImageId(outcome.image.id);
+            setEditorReplay(null);
+            setEditorLineageSource({ archiveImageId: outcome.image.id, stepId });
+            changeView('editor');
+            addToast('Next Editor save will branch from this lineage step', 'info');
         } catch (error) {
             notifyError(error, 'Failed to fork from lineage step');
         }
-    }, [addToast, lineageNavigator, notifyError]);
+    }, [addToast, changeView, editorBusy, lineageNavigator, notifyError, replayGenerateFromLineageStep, setEditorLineageSource, setSavedEditorImageId]);
 
     const archiveController = useArchiveController({
         images,

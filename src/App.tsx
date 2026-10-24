@@ -95,6 +95,7 @@ function App() {
                         void replayEditorFromLineageStep(stepId)
                     }}
                     onForkFromStep={(stepId) => {
+                        archiveController.closeImage()
                         void forkFromLineageStep(stepId)
                     }}
                     onNext={archiveController.showNextImage}
