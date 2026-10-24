@@ -413,6 +413,40 @@ describe('Create Similar transfer recovery', () => {
         expect(blobValues).toEqual(beforeBlobs);
     });
 
+    it.each([...transferLocalKeys, ...transferBlobKeys])('intermediate replay restores all raw session state when mutating %s fails', async (failedKey) => {
+        const localValues = new Map(transferLocalKeys.map((key) => [key, `raw old ${key}`]));
+        const blobValues = new Map(transferBlobKeys.map((key) => [key, `raw old ${key}`]));
+        const beforeLocal = new Map(localValues);
+        const beforeBlobs = new Map(blobValues);
+        let failed = false;
+        const fail = (key: string) => {
+            if (key === failedKey && !failed) { failed = true; throw new Error('mutation failed'); }
+        };
+        const localStorage: Storage = {
+            get length() { return localValues.size; },
+            clear: () => localValues.clear(), key: (index) => [...localValues.keys()][index] ?? null,
+            getItem: (key) => localValues.get(key) ?? null,
+            setItem: (key, value) => { localValues.set(key, value); fail(key); },
+            removeItem: (key) => { localValues.delete(key); fail(key); },
+        };
+        const blobStorage: StorageProvider = {
+            load: async (key) => blobValues.get(key) ?? null,
+            save: async (key, value) => { blobValues.set(key, value); fail(key); },
+            remove: async (key) => {
+                if (failedKey === 'generate_current_batch' && key === 'generate_current_result') {
+                    await new Promise((resolve) => setTimeout(resolve, 20));
+                }
+                blobValues.delete(key); fail(key);
+            },
+            listKeys: async () => [...blobValues.keys()],
+        };
+        const store = createGenerateSessionStore({ localStorage, blobStorage });
+        await expect(store.transfer({ draft: { ...DEFAULT_GENERATE_DRAFT, prompt: 'new prompt' }, references: ['new-reference'], lineageSource: { archiveImageId: 'intermediate', stepId: 'step' } })).rejects.toThrow('mutation failed');
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(localValues).toEqual(beforeLocal);
+        expect(blobValues).toEqual(beforeBlobs);
+    });
+
     it('attempts independent restorations after one restoration rejects', async () => {
         const values = new Map(transferBlobKeys.map((key) => [key, `old ${key}`]));
         const save = vi.fn(async (key: string, value: string) => {

@@ -8,6 +8,7 @@ import type { ActualImageParameters, ApiCostLedger } from '../db/types';
 import type { GenerateImageInput, GenerateImageSettings } from '../image-workflow/ImageWorkflow';
 import { imageWorkflow } from '../image-workflow/ImageWorkflow';
 import { buildAutopilotLineageMetadata } from '../lineage/autopilotLineageMetadata';
+import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { mergeApiCostLedgers } from '../costs/apiCost';
 
 export const DEFAULT_AUTOPILOT_MAX_ITERATIONS = 4;
@@ -64,6 +65,7 @@ interface CreateAutopilotSessionInput extends AutopilotReasoningInput {
     settings: GenerateImageSettings;
     imageCredential: string;
     initialParentStepId?: string | null;
+    references?: string[];
     initialCostLedger?: ApiCostLedger;
     maxIterations?: number;
     satisfactionThreshold?: number;
@@ -97,6 +99,15 @@ class DefaultAutopilotSession implements AutopilotSession {
         const iterations: AutopilotIteration[] = [];
         const runId = this.input.makeRunId?.() ?? crypto.randomUUID();
         const runSettings = snapshotAutopilotSettings(this.input.settings);
+        runSettings.referenceImages = buildImageModelGenerateReferenceRunPlan(runSettings.model, runSettings.referenceImages).providerReferenceImages.slice();
+        let references: string[];
+        try {
+            references = this.input.references?.slice() ?? await imageWorkflow.serializeReferences(runSettings.referenceImages);
+        } catch (error) {
+            const normalizedError = error instanceof Error ? error : new Error('Could not retain Autopilot references');
+            this.input.callbacks?.onError?.(normalizedError, 1);
+            return buildResult('failed', [], normalizedError, this.input.initialCostLedger);
+        }
         let currentPrompt = this.input.initialPrompt;
         let parentStepId = this.input.initialParentStepId ?? null;
         let runningBest: AutopilotIteration | null = null;
@@ -159,6 +170,7 @@ class DefaultAutopilotSession implements AutopilotSession {
                             evaluation,
                             prompt: currentPrompt,
                             settings: snapshotAutopilotSettings(runSettings),
+                            references,
                             outputImageDataUrl: imageDataUrl,
                             actualParameters: generatedImage.actualParameters,
                             costLedger: iterationCostLedger,

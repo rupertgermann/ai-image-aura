@@ -67,31 +67,37 @@ export class SQLiteArchiveMetadataPort {
     }
 
     async save(record: ArchiveMetadataRecord): Promise<void> {
-        await this.init();
+        await this.write(record, 'REPLACE');
+    }
 
-        await this.sql.sql`
-            INSERT OR REPLACE INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, favorite, ref_ids, style, lighting, palette, layer_stack, actual_parameters, cost_ledger)
-            VALUES (
-                ${record.id},
-                ${record.storedUrl},
-                ${record.prompt},
-                ${record.quality},
-                ${record.aspectRatio},
-                ${record.background},
-                ${record.timestamp},
-                ${record.model || OPENAI_IMAGE_MODEL},
-                ${record.width ?? null},
-                ${record.height ?? null},
-                ${record.favorite ? 1 : null},
-                ${JSON.stringify(record.referenceIds)},
-                ${record.style || null},
-                ${record.lighting || null},
-                ${record.palette || null},
-                ${record.layerStack ? JSON.stringify(createDurableLayerStackMetadata(record.layerStack)) : null},
-                ${record.actualParameters ? JSON.stringify(record.actualParameters) : null},
-                ${record.costLedger ? JSON.stringify(record.costLedger) : null}
-            )
-        `;
+    async insertIfAbsent(record: ArchiveMetadataRecord): Promise<void> {
+        await this.write(record, 'IGNORE');
+    }
+
+    private async write(record: ArchiveMetadataRecord, conflict: 'REPLACE' | 'IGNORE'): Promise<void> {
+        await this.init();
+        await this.sql.sql(
+            `INSERT OR ${conflict} INTO images (id, url, prompt, quality, aspectRatio, background, timestamp, model, width, height, favorite, ref_ids, style, lighting, palette, layer_stack, actual_parameters, cost_ledger)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            record.id,
+            record.storedUrl,
+            record.prompt,
+            record.quality,
+            record.aspectRatio,
+            record.background,
+            record.timestamp,
+            record.model || OPENAI_IMAGE_MODEL,
+            record.width ?? null,
+            record.height ?? null,
+            record.favorite ? 1 : null,
+            JSON.stringify(record.referenceIds),
+            record.style || null,
+            record.lighting || null,
+            record.palette || null,
+            record.layerStack ? JSON.stringify(createDurableLayerStackMetadata(record.layerStack)) : null,
+            record.actualParameters ? JSON.stringify(record.actualParameters) : null,
+            record.costLedger ? JSON.stringify(record.costLedger) : null,
+        );
     }
 
     async list(): Promise<ArchiveMetadataRecord[]> {

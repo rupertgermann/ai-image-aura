@@ -23,6 +23,42 @@ test.beforeEach(async ({ context, baseURL, page }) => {
     await page.getByLabel('Prompt', { exact: true }).fill(prompt);
 });
 
+test('a completed streaming image survives a trailing reset and remains downloadable and saveable', async ({ page }, testInfo) => {
+    await page.evaluate((base64) => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+            if (String(input) !== 'https://api.openai.com/v1/images/generations') return originalFetch(input, init);
+            let completed = false;
+            return new Response(new ReadableStream({
+                pull(controller) {
+                    if (completed) {
+                        controller.error(new Error('Synthetic reset after final image'));
+                        return;
+                    }
+                    completed = true;
+                    controller.enqueue(new TextEncoder().encode(`event: image_generation.completed\ndata: ${JSON.stringify({ type: 'image_generation.completed', b64_json: base64 })}\n\n`));
+                },
+            }), { headers: { 'content-type': 'text/event-stream' } });
+        };
+    }, imageBase64);
+    await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    const downloaded = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download', exact: true }).click();
+    const download = await downloaded;
+    await download.saveAs(testInfo.outputPath('completed-stream-image.png'));
+    expect(await download.failure()).toBeNull();
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+    await page.reload();
+    await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Archive', exact: true }).click();
+    await page.getByRole('button', { name: `Open image: ${prompt}`, exact: true }).click();
+    const details = page.getByRole('dialog', { name: 'Image details' });
+    await expect(details.locator('.modal-image')).toHaveJSProperty('naturalWidth', 128);
+    await details.screenshot({ path: testInfo.outputPath('completed-stream-archive.png') });
+});
+
 test('a failed generation preserves completed batch results and can be retried', async ({ page }, testInfo) => {
     let requests = 0;
     await page.route('https://api.openai.com/v1/images/generations', async (route) => {

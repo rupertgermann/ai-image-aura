@@ -88,7 +88,14 @@ export interface GenerateBatchSnapshot {
     lineageSource: GenerateLineageSource | null;
 }
 
+export interface GenerateSessionTransfer {
+    draft: GenerateDraft;
+    references: string[];
+    lineageSource: GenerateLineageSource | null;
+}
+
 export interface GenerateSessionStore {
+    transfer(input: GenerateSessionTransfer): Promise<void>;
     readDraft(): GenerateDraft;
     writeDraft(draft: GenerateDraft): void;
     transferFromArchive(image: ArchiveImage, lineageSource?: GenerateLineageSource | null, draftOverrides?: Partial<GenerateDraft>): Promise<void>;
@@ -154,28 +161,9 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
     }
 
     transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
-        const transfer = this.transferQueue.then(() => this.performArchiveTransfer(image, lineageSource, draftOverrides));
-        this.transferQueue = transfer.catch(() => undefined);
-        return transfer;
-    }
-
-    private async performArchiveTransfer(image: ArchiveImage, lineageSource: GenerateLineageSource | null, draftOverrides: Partial<GenerateDraft>): Promise<void> {
         const model = isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL;
-
-        const localSnapshot = [GENERATE_DRAFT_KEY, GENERATE_LINEAGE_SOURCE_KEY, ...Object.values(LEGACY_KEYS)]
-            .map((key) => ({ key, value: this.localStorage.getItem(key) }));
-        const blobSnapshot = await Promise.all([
-            GENERATE_CURRENT_BATCH_KEY, GENERATE_CURRENT_RESULT_KEY,
-            GENERATE_CURRENT_RESULT_REFERENCES_KEY, GENERATE_TRANSFERRED_REFERENCES_KEY,
-        ].map(async (key) => ({ key, value: await this.blobStorage.load(key) })));
-
-        try {
-            if (image.references && image.references.length > 0) {
-                await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(image.references));
-            } else {
-                await this.blobStorage.remove(GENERATE_TRANSFERRED_REFERENCES_KEY);
-            }
-            this.writeDraft(sanitizeGenerateDraft({
+        return this.transfer({
+            draft: sanitizeGenerateDraft({
                 ...DEFAULT_GENERATE_DRAFT,
                 prompt: image.prompt,
                 model,
@@ -188,7 +176,34 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
                 flux2Klein4b: sanitizeArchiveImageModelControls(FLUX_2_KLEIN_4B_IMAGE_MODEL, image),
                 isSaved: false,
                 ...draftOverrides,
-            }));
+            }),
+            references: image.references ?? [],
+            lineageSource,
+        });
+    }
+
+    transfer(input: GenerateSessionTransfer): Promise<void> {
+        const snapshot = structuredClone(input);
+        const transfer = this.transferQueue.then(() => this.performTransfer(snapshot));
+        this.transferQueue = transfer.catch(() => undefined);
+        return transfer;
+    }
+
+    private async performTransfer({ draft, references, lineageSource }: GenerateSessionTransfer): Promise<void> {
+        const localSnapshot = [GENERATE_DRAFT_KEY, GENERATE_LINEAGE_SOURCE_KEY, ...Object.values(LEGACY_KEYS)]
+            .map((key) => ({ key, value: this.localStorage.getItem(key) }));
+        const blobSnapshot = await Promise.all([
+            GENERATE_CURRENT_BATCH_KEY, GENERATE_CURRENT_RESULT_KEY,
+            GENERATE_CURRENT_RESULT_REFERENCES_KEY, GENERATE_TRANSFERRED_REFERENCES_KEY,
+        ].map(async (key) => ({ key, value: await this.blobStorage.load(key) })));
+
+        try {
+            if (references.length > 0) {
+                await this.blobStorage.save(GENERATE_TRANSFERRED_REFERENCES_KEY, JSON.stringify(references));
+            } else {
+                await this.blobStorage.remove(GENERATE_TRANSFERRED_REFERENCES_KEY);
+            }
+            this.writeDraft(draft);
             if (lineageSource) {
                 this.saveLineageSource(lineageSource);
             } else {
@@ -208,7 +223,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
             ]);
             const failures = restorations.filter((result) => result.status === 'rejected');
             if (failures.length) {
-                throw new AggregateError([error, ...failures.map((result) => result.reason)], 'Create Similar failed and some previous session data could not be restored');
+                throw new AggregateError([error, ...failures.map((result) => result.reason)], 'Session transfer failed and some previous session data could not be restored');
             }
             throw error;
         }

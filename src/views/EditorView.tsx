@@ -49,6 +49,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
     const supportsTransformMask = imageModelSupportsTransformMask(aiEditModel);
     const {
         draftLoading,
+        importing,
         draftError,
         beginAdjustment,
         endAdjustment,
@@ -110,7 +111,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         onSave,
     });
     const aiReferenceWarning = getAiTransformReferenceWarning(aiEditModel, referenceImages.length, draft);
-    useEffect(() => { onBusyChange(aiLoading || saving); }, [aiLoading, saving, onBusyChange]);
+    useEffect(() => { onBusyChange(aiLoading || saving || importing); }, [aiLoading, saving, importing, onBusyChange]);
 
     const targetPlan = draft ? planAiTransformTarget(draft) : null;
     const targetKey = draft && targetPlan ? JSON.stringify([
@@ -373,12 +374,12 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
         <div className="editor-container">
             <header className="view-header">
                 <div className="header-flex">
-                    <div><h1>Editor</h1><p>{draftLoading ? 'Restoring your draft…' : saving ? 'Saving your image…' : isDirty ? 'Changes not yet saved to archive' : 'No unsaved changes'}</p></div>
+                    <div><h1>Editor</h1><p>{draftLoading ? 'Restoring your draft…' : importing ? 'Importing your images…' : saving ? 'Saving your image…' : isDirty ? 'Changes not yet saved to archive' : 'No unsaved changes'}</p></div>
                     <div className="editor-toolbar">
                         <button className="btn-ghost btn-icon" onClick={undo} disabled={!canUndo || aiLoading || saving} aria-label="Undo" title="Undo (⌘/Ctrl Z)"><Undo2 size={18} /></button>
                         <button className="btn-ghost btn-icon" onClick={redo} disabled={!canRedo || aiLoading || saving} aria-label="Redo" title="Redo (⌘/Ctrl Shift Z)"><Redo2 size={18} /></button>
-                        <button className="btn-ghost" onClick={() => { void save(true); }} disabled={!isCanvasReady || aiLoading || saving}><Copy size={18} /> Save as copy</button>
-                        <button className="btn-amber" onClick={() => { void save(false); }} disabled={!isCanvasReady || !isDirty || aiLoading || saving}><Save size={18} /> {saving ? 'Saving…' : 'Save changes'}</button>
+                        <button className="btn-ghost" onClick={() => { void save(true); }} disabled={!isCanvasReady || importing || aiLoading || saving}><Copy size={18} /> Save as copy</button>
+                        <button className="btn-amber" onClick={() => { void save(false); }} disabled={!isCanvasReady || !isDirty || importing || aiLoading || saving}><Save size={18} /> {saving ? 'Saving…' : 'Save changes'}</button>
                     </div>
                 </div>
                 <Presence>{draftError && <div key="draft-error" className="error-message" role="alert">{draftError}</div>}
@@ -591,7 +592,7 @@ const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, 
                             <button
                                 className="btn-amber"
                                 onClick={() => { void applyAiEdit(); }}
-                                disabled={aiLoading || !aiPrompt.trim() || !imageCredential || !isCanvasReady}
+                                disabled={importing || aiLoading || !aiPrompt.trim() || !imageCredential || !isCanvasReady}
                                 style={{ width: '100%' }}
                             >
                                 {aiLoading ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}

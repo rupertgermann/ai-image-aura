@@ -199,35 +199,44 @@ async function readOpenAiImageStream(
         images: null as OpenAiImageResponse[] | null,
     };
     const processBlock = (block: string) => {
+        if (completed.images) return;
         const nextImages = parseOpenAiImageEventBlock(block, onPartialImage);
         if (nextImages) {
             completed.images = nextImages;
         }
     };
 
-    while (true) {
-        const { value, done } = await reader.read();
-        if (value) {
-            buffer += decoder.decode(value, { stream: !done });
-            buffer = drainEventStreamBlocks(buffer, processBlock);
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (value) {
+                buffer += decoder.decode(value, { stream: !done });
+                buffer = drainEventStreamBlocks(buffer, processBlock);
+            }
+
+            if (completed.images) break;
+
+            if (done) {
+                buffer += decoder.decode();
+                break;
+            }
         }
 
-        if (done) {
-            buffer += decoder.decode();
-            break;
+        if (!completed.images && buffer.trim()) {
+            processBlock(buffer);
         }
-    }
 
-    if (buffer.trim()) {
-        processBlock(buffer);
-    }
+        const completedImages = completed.images;
+        if (!completedImages || completedImages.length === 0) {
+            throw new Error('No image data returned from OpenAI');
+        }
 
-    const completedImages = completed.images;
-    if (!completedImages || completedImages.length === 0) {
-        throw new Error('No image data returned from OpenAI');
+        return completedImages;
+    } finally {
+        // A failed transport cleanup must not discard a completed image or replace the read error.
+        void reader.cancel().catch(() => {});
+        reader.releaseLock();
     }
-
-    return completedImages;
 }
 
 function parseOpenAiImageEventStream(

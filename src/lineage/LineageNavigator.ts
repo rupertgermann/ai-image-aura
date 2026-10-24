@@ -1,5 +1,6 @@
 import type { ArchiveImage } from '../db/types';
 import type { GenerateSessionStore } from '../generate-session/GenerateSession';
+import { dataURLtoFile } from '../utils/file';
 import type { LineageStore } from './LineageStore';
 import { buildEditorReplay, buildGenerateReplay, isEditorReplayable, isGenerateReplayable, type EditorReplay } from './replayLineageStep';
 
@@ -12,7 +13,8 @@ export type ReplayIntoEditorOutcome =
     | { status: 'unavailable'; reason: string };
 
 export type ForkOutcome =
-    | { status: 'forked' }
+    | { status: 'forked'; destination: 'generate' }
+    | { status: 'forked'; destination: 'editor'; image: ArchiveImage }
     | { status: 'unavailable'; reason: string };
 
 export interface LineageNavigator {
@@ -23,7 +25,7 @@ export interface LineageNavigator {
 
 export interface LineageNavigatorDeps {
     lineageStore: Pick<LineageStore, 'getById'>;
-    sessionStore: Pick<GenerateSessionStore, 'transferFromArchive' | 'writeDraft' | 'saveLineageSource'>;
+    sessionStore: Pick<GenerateSessionStore, 'transfer'>;
     findImage: (archiveImageId: string) => ArchiveImage | null;
 }
 
@@ -38,13 +40,23 @@ export function createLineageNavigator(deps: LineageNavigatorDeps): LineageNavig
             }
 
             const image = findImage(step.archiveImageId);
-            const replay = buildGenerateReplay(image, step);
-            if (image) {
-                await sessionStore.transferFromArchive(image, replay.lineageSource, replay.draft);
-            } else {
-                sessionStore.writeDraft(replay.draft);
-                sessionStore.saveLineageSource(replay.lineageSource);
+            const savedReferences = step.stepType === 'autopilot-iteration' ? step.metadata.references : undefined;
+            const referenceImages = step.metadata.referenceImages;
+            const referenceCount = referenceImages && typeof referenceImages === 'object' && 'count' in referenceImages
+                ? referenceImages.count
+                : step.metadata.referenceCount;
+            const knownEmpty = step.stepType !== 'autopilot-iteration' && referenceCount === 0;
+            const references = savedReferences ?? image?.references ?? (image || knownEmpty ? [] : null);
+            if (!Array.isArray(references) || !references.every((reference) => typeof reference === 'string')) {
+                return { status: 'unavailable', reason: 'The reference inputs for this step are unavailable' };
             }
+            try {
+                references.forEach((reference) => dataURLtoFile(reference, 'reference.png'));
+            } catch {
+                return { status: 'unavailable', reason: 'The reference inputs for this step are unavailable' };
+            }
+            const replay = buildGenerateReplay(image, step);
+            await sessionStore.transfer({ ...replay, references });
 
             return { status: 'replayed' };
         },
@@ -65,8 +77,6 @@ export function createLineageNavigator(deps: LineageNavigatorDeps): LineageNavig
                 return { status: 'unavailable', reason: 'This step cannot be replayed into Editor' };
             }
 
-            sessionStore.saveLineageSource({ archiveImageId: step.archiveImageId, stepId: step.id });
-
             return { status: 'replayed', image, replay };
         },
 
@@ -76,9 +86,13 @@ export function createLineageNavigator(deps: LineageNavigatorDeps): LineageNavig
                 return { status: 'unavailable', reason: 'Selected lineage step no longer exists' };
             }
 
-            sessionStore.saveLineageSource({ archiveImageId: step.archiveImageId, stepId: step.id });
-
-            return { status: 'forked' };
+            if (isGenerateReplayable(step)) {
+                return { status: 'forked', destination: 'generate' };
+            }
+            const image = findImage(step.archiveImageId);
+            return image
+                ? { status: 'forked', destination: 'editor', image }
+                : { status: 'unavailable', reason: 'Selected step image is missing from the local archive' };
         },
     };
 }

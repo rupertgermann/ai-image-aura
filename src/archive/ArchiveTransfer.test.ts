@@ -36,8 +36,12 @@ class InMemoryLineageMetadataPort implements LineageMetadataPort {
     }
 }
 
-class InMemoryArchiveStore implements Pick<ArchiveStore, 'save'> {
+class InMemoryArchiveStore implements Pick<ArchiveStore, 'get' | 'save'> {
     readonly images = new Map<string, ArchiveImage>();
+
+    async get(id: string) {
+        return this.images.get(id) ?? null;
+    }
 
     async save(input: ArchiveImage): Promise<ArchiveImage> {
         this.images.set(input.id, input);
@@ -456,6 +460,28 @@ describe('ArchiveTransfer', () => {
         })).rejects.toThrow('Invalid composition adjustments');
         expect(archiveStore.images.size).toBe(0);
         await expect(lineageStore.getByArchiveImageId('image-1')).resolves.toEqual([]);
+    });
+
+    it('skips incomplete conflicting images and their incoming lineage', async () => {
+        const original = createLayeredImage();
+        const archiveStore = new InMemoryArchiveStore();
+        await archiveStore.save(original);
+        const lineageStore = createStore();
+        const step = await lineageStore.save({ id: 'existing-step', archiveImageId: original.id,
+            stepType: 'generation', parentStepId: null, timestamp: original.timestamp, metadata: { prompt: original.prompt } });
+        const zip = await JSZip.loadAsync(await buildArchiveZip([{ ...original, prompt: 'replacement' }], {
+            lineageStore: { getByArchiveImageId: async () => [{ ...step, metadata: { prompt: 'replacement' } }],
+                getById: async () => null },
+        }));
+        zip.remove('aura-layered-image-layer-upload.png');
+        const summary = await importArchiveZip(await zip.generateAsync({ type: 'uint8array' }), {
+            archiveStore, lineageStore,
+        });
+        expect(summary.missingAssetFiles).toEqual(['aura-layered-image-layer-upload.png']);
+        expect(archiveStore.images.get(original.id)).toEqual(original);
+        await expect(lineageStore.getByArchiveImageId(original.id)).resolves.toEqual([step]);
+        expect(summary.importedImageIds).toEqual([]);
+        expect(summary.importedStepIds).toEqual([]);
     });
 
     it('reports missing layer assets without rejecting old archive imports', async () => {

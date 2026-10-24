@@ -46,6 +46,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     } : null;
     const session = createSession({
         goal: input.goal,
+        references: usedReferences,
         initialPrompt: input.draft.prompt,
         settings: {
             ...imageModel,
