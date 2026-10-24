@@ -130,6 +130,44 @@ describe('runGenerateAutopilot', () => {
         });
     });
 
+    it('keeps the latest failed-evaluation candidate saveable with its own prompt and lineage', async () => {
+        let imageNumber = 0;
+        let stepNumber = 0;
+        const createResponse = vi.fn()
+            .mockResolvedValueOnce({ outputText: JSON.stringify({ score: 80, feedback: ['Improve light.'] }) })
+            .mockResolvedValueOnce({ outputText: 'refined prompt' })
+            .mockRejectedValueOnce(new Error('evaluation quota exceeded'));
+        const outcome = await runGenerateAutopilot({
+            goal: 'portrait', imageCredential: 'key', getProviderCredential: () => 'reasoning-key',
+            draft: { ...DEFAULT_GENERATE_DRAFT, prompt: 'original prompt' },
+            referenceImages: [], sessionStore: { loadLineageSource: () => null },
+            lineageStore: { save: async (step) => ({ ...step, id: `step-${++stepNumber}` }) },
+            workflow: {
+                generate: async () => [{
+                    slotIndex: 0, status: 'success', imageUrl: `data:image/png;base64,image-${++imageNumber}`,
+                    costLedger: { version: 1, currency: 'USD', items: [{
+                        id: `image-${imageNumber}`, kind: 'image-generation', operation: 'image-generation',
+                        provider: 'openai', model: DEFAULT_GENERATE_DRAFT.model, label: 'Image generation',
+                        status: 'calculated', currency: 'USD', amountUsd: 0.04,
+                    }] },
+                }],
+                serializeReferences: async () => [],
+            },
+            createSession: (input) => createAutopilotSession(input, { reasoningClient: { createResponse } }),
+        });
+
+        expect(outcome.result.status).toBe('failed');
+        expect(outcome.result.bestIteration?.iterationNumber).toBe(1);
+        expect(outcome.batch?.draft?.prompt).toBe('refined prompt');
+        expect(outcome.batch?.results[0]).toMatchObject({
+            status: 'success', imageUrl: 'data:image/png;base64,image-2',
+            archiveImageId: outcome.result.iterations[1].archiveImageId,
+        });
+        expect(outcome.batch?.lineageSource?.stepId).toBe('step-2');
+        const slot = outcome.batch?.results[0];
+        expect(calculateApiCostTotals(slot?.status === 'success' ? slot.costLedger : undefined).imageGenerationTotalUsd).toBeCloseTo(0.08);
+    });
+
     it('runs Qwen images with hosted reasoning and charges only for reasoning', async () => {
         const imageCost: ApiCostLedger = {
             version: 1,

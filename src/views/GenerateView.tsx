@@ -722,7 +722,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                             {isAutopilotMode && autopilot.iterations.length > 0 && (
                                 <div className="autopilot-result-banner glass-panel">
                                     <strong>
-                                        {autopilot.bestIterationNumber ? `Best Autopilot Result: iteration ${autopilot.bestIterationNumber}` : 'Autopilot result'}
+                                        {autopilot.status === 'failed' ? 'Latest Autopilot Result' : autopilot.bestIterationNumber ? `Best Autopilot Result: iteration ${autopilot.bestIterationNumber}` : 'Autopilot result'}
                                     </strong>
                                     <span>
                                         {autopilot.status === 'max-iterations' && 'Iteration limit reached. The satisfaction threshold was not met.'}

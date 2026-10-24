@@ -64,26 +64,29 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     });
     input.onSessionCreated?.(session);
     const result = await session.run();
+    const selectedIteration = result.status === 'failed'
+        ? result.iterations.at(-1) ?? result.bestIteration
+        : result.bestIteration;
     let batch: GenerateBatchSnapshot | null = null;
 
-    if (result.bestIteration) {
+    if (selectedIteration) {
         const runDraft = structuredClone(input.draft);
-        runDraft.prompt = result.bestIteration.prompt;
+        runDraft.prompt = selectedIteration.prompt;
         runDraft[getImageModelDraftKey(runDraft.model)].batchSize = 1;
         const usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
         const lineageSource = {
-            archiveImageId: result.bestIteration.archiveImageId,
-            stepId: result.bestIteration.stepId,
+            archiveImageId: selectedIteration.archiveImageId,
+            stepId: selectedIteration.stepId,
         };
         batch = {
             results: [{
                 slotIndex: 0,
                 status: 'success',
-                imageUrl: result.bestIteration.imageDataUrl,
+                imageUrl: selectedIteration.imageDataUrl,
                 isSaved: false,
-                actualParameters: result.bestIteration.actualParameters,
-                costLedger: result.bestIteration.costLedger,
-                archiveImageId: result.bestIteration.archiveImageId,
+                actualParameters: selectedIteration.actualParameters,
+                costLedger: result.bestIteration?.costLedger ?? selectedIteration.costLedger,
+                archiveImageId: selectedIteration.archiveImageId,
             }],
             references: usedReferences,
             draft: runDraft,
