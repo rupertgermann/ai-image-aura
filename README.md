@@ -1,10 +1,10 @@
 # AURA AI
 
-AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI, Google, and user-run Qwen Image 2.1 or FLUX.2 klein 4B servers.
+AURA AI is a local-first browser studio for AI image generation and layered editing. Use OpenAI, Google, or your own Qwen Image 2.1 and FLUX.2 klein 4B servers, refine results with Autopilot, and keep an archive with replayable creative history.
 
-The app runs entirely in the browser. Provider API keys, the local server URL, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
+The app runs in the browser without an application backend or account. API keys, drafts, archive images, layer assets, and lineage history are stored on your device. Generation and AI editing send prompts and image inputs directly to the selected provider or user-run server; Autopilot also sends goals and images to its selected reasoning provider.
 
-The interface uses monochrome panels, orange accents, and compact controls. See `docs/DESIGN.md` for the Telepathic Instruments reference.
+The interface has light and dark modes, monochrome panels, orange accents, and compact controls. See `docs/DESIGN.md` for the Telepathic Instruments reference.
 
 ## Screens
 
@@ -16,13 +16,28 @@ The interface uses monochrome panels, orange accents, and compact controls. See 
 |--------|--------|
 | ![Editor view](docs/screens/Editor.png) | ![Detail view](docs/screens/Detail.png) |
 
-## Highlights
+## Current state and features
 
-- Generate up to four images per run, with optional reference images.
-- Use Autopilot to evaluate results and refine prompts against a goal.
-- Edit image layers, apply adjustments, and target AI edits with masks.
-- Search saved images, mark favorites, and transfer archives as ZIP files.
-- Reopen editor drafts and replay or branch from saved lineage steps.
+Version `0.2.0` includes Generate, Archive, Editor, and Settings views. It runs locally through Vite and builds as a static browser app.
+
+- Generate one to four images per run with model-specific controls, style modifiers, and reference images from uploads, drag-and-drop, or clipboard paste.
+- Use Autopilot to translate a goal into a prompt, evaluate results, and refine the prompt across iterations while retaining the best result.
+- Build layered compositions with blend modes, image transforms, adjustments, filters, undo, and redo. AI edits create new layers; supported models also accept painted masks.
+- Keep drafts across reloads and save editable layers alongside flattened archive previews.
+- Search the archive, mark favorites, manage selections, and export ZIP bundles with images, references, layers, and lineage metadata.
+- Inspect saved parameters and lineage, replay earlier steps, and branch from a previous generation or edit.
+- Inspect API cost breakdowns for image generation and Autopilot reasoning when usage data is available. Missing costs are shown as unavailable or partial.
+- Switch between light and dark modes and enable completion notifications for runs that finish in the background.
+
+### Supported models
+
+| Provider | Image models | Autopilot reasoning |
+|----------|--------------|---------------------|
+| OpenAI | GPT Image 2.5 Flare, GPT Image 2.5 Sunburst | GPT 6 Sol |
+| Google | Nano Banana Pro | Gemini 2.5 Flash |
+| User-run server | Qwen Image 2.1, FLUX.2 klein 4B | Uses a configured OpenAI or Google reasoning provider |
+
+Hosted models require your own API keys. Local image models require a compatible server configured in Settings. Local image inference has no API charge; Autopilot can still incur hosted reasoning charges.
 
 ## Tech Stack
 
@@ -129,6 +144,7 @@ The Generate view supports:
 - GPT Image 2.5 batch size options: `1`, `2`, `3`, `4`
 - `Nano Banana Pro` batch size options: `1`, `2`, `3`, `4`
 - `Qwen Image 2.1` batch size options: `1`, `2`, `3`, `4`
+- `FLUX.2 klein 4B` aspect ratios: `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `16:9`, `9:16`; resolution options: `1K`, `2K`; batch size options: `1`, `2`, `3`, `4`
 - Style, lighting, and palette modifiers that are merged into the request prompt
 - Configurable Autopilot iteration count from `1` to `8`
 - Configurable Autopilot satisfaction threshold from `50` to `100`
@@ -137,6 +153,7 @@ The Generate view supports:
 - Multiple reference image uploads through file picker, drag-and-drop, and clipboard paste
 - `Nano Banana Pro` reference inputs are capped to the first `14` images for provider compatibility
 - `Qwen Image 2.1` reference inputs are capped to the first `10` images
+- `FLUX.2 klein 4B` reference inputs are capped to the first `4` images
 - Reference preview modal with next and previous navigation
 - Streaming partial-image previews during single-shot generation for models that support partial streaming
 - A batch result grid for multi-image runs with per-slot save, download, use-as-reference, and isolated per-slot failure reporting
@@ -222,7 +239,7 @@ The Settings view supports:
 - A completion notifications toggle that surfaces a desktop notification when a run finishes while the app is in the background
 - Notification readiness status that reflects unsupported browsers and insecure contexts
 
-The sidebar includes a collapsible navigation rail.
+The sidebar includes a collapsible navigation rail and a light/dark mode toggle. The selected theme persists across reloads.
 
 ## Storage Model
 
@@ -293,6 +310,8 @@ These outputs are replaced by the next run; copy them first to retain a run.
 ## Privacy and Security
 
 - The project is designed for local use in the browser
+- Prompts and image inputs are sent directly to the selected provider or user-run server. Autopilot uses a hosted reasoning provider even with local image models
+- Browser storage holds API keys and archive data. Export archive ZIP bundles before clearing site data or moving to another browser
 - Secrets are not committed to the repository
 - The repository does not ship with embedded API keys, `.env` files, or private key material
 - Sensitive provider request payloads are not logged by the client helpers
