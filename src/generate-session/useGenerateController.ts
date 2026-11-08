@@ -65,6 +65,12 @@ interface UseGenerateControllerOptions {
     isDocumentHidden?: () => boolean;
 }
 
+interface GenerateSessionRestoration {
+    session: NonNullable<UseGenerateControllerOptions['session']>;
+    batch: Promise<GenerateBatchSnapshot | null> | null;
+    references: Promise<string[]> | null;
+}
+
 interface BuildGeneratedArchiveImageInput {
     id: string;
     url: string;
@@ -385,6 +391,7 @@ export function useGenerateController({
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
     const autopilotCancelRequested = useRef(false);
     const partialRunIdRef = useRef(0);
+    const restorationRef = useRef<GenerateSessionRestoration | null>(null);
 
     const latestIteration = autopilotPreview?.iterations.at(-1);
     const batch = displayedBatch?.snapshot ?? null;
@@ -401,6 +408,7 @@ export function useGenerateController({
         : getFirstSuccessfulResultSlot(currentBatchResults)?.imageUrl ?? null;
 
     const adoptBatch = useCallback(async (next: DisplayedBatch, persistedDraft = next.snapshot.draft) => {
+        if (restorationRef.current?.session === session) restorationRef.current.batch = null;
         setDisplayedBatch(next);
         setAutopilotPreview(null);
         await session.saveCurrentBatch({ ...next.snapshot, draft: persistedDraft });
@@ -411,19 +419,42 @@ export function useGenerateController({
     }, [setDraft]);
 
     useEffect(() => {
-        session.loadCurrentBatch().then((batch) => {
-            if (!batch) {
-                return;
-            }
+        // StrictMode reattaches the observer, but transferred references can only be consumed once.
+        if (restorationRef.current?.session !== session) {
+            restorationRef.current = {
+                session,
+                batch: session.loadCurrentBatch(),
+                references: session.consumeTransferredReferences(),
+            };
+        }
+        const restoration = restorationRef.current;
+        let active = true;
 
-            setDisplayedBatch({ snapshot: batch, autopilotSummary: null });
+        void restoration.batch?.then((batch) => {
+            if (active && restoration.batch && batch) {
+                setDisplayedBatch({ snapshot: batch, autopilotSummary: null });
+            }
+        }, () => {
+            if (active && restoration.batch && !runningRef.current && !savingRef.current) {
+                setError('Could not restore the saved generation results.');
+            }
         });
 
-        session.consumeTransferredReferences().then((references) => {
+        void restoration.references?.then((references) => {
+            if (!active) return;
+            restoration.references = null;
             if (references.length > 0) {
                 replaceReferences(references);
             }
+        }, () => {
+            if (!active) return;
+            restoration.references = null;
+            if (!runningRef.current && !savingRef.current) {
+                setError('Could not restore transferred reference images.');
+            }
         });
+
+        return () => { active = false; };
     }, [replaceReferences, session]);
 
     const generate = useCallback(async () => {
@@ -473,9 +504,14 @@ export function useGenerateController({
             });
             const batchResults = buildGenerateResultSlots(results);
             const successfulResult = getFirstSuccessfulResultSlot(batchResults);
-            if (!successfulResult && getFirstSuccessfulResultSlot(currentBatch?.results ?? [])) {
-                const failure = batchResults.find((result) => result.status === 'failed');
-                throw new Error(failure?.error ?? 'Generation failed for every batch result.');
+            if (!successfulResult) {
+                const restoration = restorationRef.current;
+                const previousBatch = currentBatch
+                    ?? (restoration?.session === session ? await restoration.batch : null);
+                if (getFirstSuccessfulResultSlot(previousBatch?.results ?? [])) {
+                    const failure = batchResults.find((result) => result.status === 'failed');
+                    throw new Error(failure?.error ?? 'Generation failed for every batch result.');
+                }
             }
             const batchSnapshot: GenerateBatchSnapshot = {
                 results: batchResults,
@@ -717,6 +753,7 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         if (runningRef.current || savingRef.current) return;
+        if (restorationRef.current?.session === session) restorationRef.current.batch = null;
         setError(null);
         setDisplayedBatch(null);
         setAutopilotPreview(null);
