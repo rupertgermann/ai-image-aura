@@ -1,5 +1,5 @@
 import type { GenerationSaveRequest } from '../archive/saveArchiveImage';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, Loader2, Download, Archive, Trash2, Upload, X, ImagePlus } from 'lucide-react';
 import type { ArchiveImage } from '../db/types';
 import { generateSessionStore, getImageModelDraftKey, useGenerateDraft, type GenerateDraft } from '../generate-session/GenerateSession';
@@ -132,14 +132,26 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     const activeReasoningModel = resolveReasoningModelConfig(reasoningModel);
     const reasoningApiKey = getProviderCredential(activeReasoningModel.provider);
     const referenceCollection = useReferenceImageCollection();
+    const referencesEdited = useRef(false);
     const referenceImages = referenceCollection.files;
     const referenceRunPlan = useMemo(
         () => buildImageModelGenerateReferenceRunPlan(model, referenceImages),
         [model, referenceImages],
     );
     const referencePreviews = referenceCollection.previews;
-    const addReferenceFiles = referenceCollection.addFiles;
-    const removeReferenceAt = referenceCollection.removeAt;
+    const { addFiles, removeAt, replaceWithDataUrls } = referenceCollection;
+    const addReferenceFiles = (files: File[]) => {
+        if (files.length === 0) return;
+        referencesEdited.current = true;
+        addFiles(files);
+    };
+    const removeReferenceAt = (index: number) => {
+        referencesEdited.current = true;
+        removeAt(index);
+    };
+    const restoreTransferredReferences = useCallback((dataUrls: string[]) => {
+        if (!referencesEdited.current) replaceWithDataUrls(dataUrls);
+    }, [replaceWithDataUrls]);
     const {
         currentResult,
         currentPartialResult,
@@ -170,7 +182,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         draft,
         setDraft,
         referenceImages: referenceRunPlan.providerReferenceImages,
-        replaceReferences: referenceCollection.replaceWithDataUrls,
+        replaceReferences: restoreTransferredReferences,
         serializeReferences: referenceCollection.serialize,
         onSaveImage,
         completionNotificationsEnabled,
