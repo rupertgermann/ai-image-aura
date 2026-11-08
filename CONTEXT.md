@@ -11,11 +11,11 @@ into an image. The image model is chosen **per generation** in the Generate view
 and per AI transform in the Editor view. It is recorded on every saved image and
 every lineage step.
 
-Current values: `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`,
+Current values: `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`,
 `nano-banana-pro`, `qwen-image-2.1`, `flux-2-klein-4b`.
 
-`gpt-image-2` is retired and appears only as a historical label,
-**GPT Image 2 (retired)**.
+`gpt-image-2`, `gpt-image-2.5-flare`, and `gpt-image-2.5-sunburst` are retired
+image models that can appear in saved history.
 
 - Avoid calling it the "engine", "the AI", or "backend" — those are vaguer.
 - Distinct from **provider**: the model is the user-facing choice; the provider

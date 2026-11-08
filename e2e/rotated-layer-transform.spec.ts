@@ -92,7 +92,7 @@ for (const scenario of cases) {
             const common = { opacity: 1, blendMode: 'normal', visible: true };
             await archiveStore.save({
                 id: 'rotation-test', url: base, prompt: 'Rotated artwork', timestamp: '2026-09-29',
-                model: 'gpt-image-2.5-flare', width: 500, height: 500, quality: 'medium', aspectRatio: '500x500', background: 'auto',
+                model: 'gpt-image-2.6-flare', width: 500, height: 500, quality: 'medium', aspectRatio: '500x500', background: 'auto',
                 layerStack: { canvasWidth: 500, canvasHeight: 500, layers: [
                     { ...common, id: 'base', name: 'Base', kind: 'base', assetUrl: base, x: 0, y: 0, width: 500, height: 500, rotation: 0, locked: true },
                     { ...common, id: 'rotated', name: 'Rotated', kind: 'uploaded', assetUrl: artwork, x: geometry.x, y: geometry.y, width: 200, height: 220, rotation: geometry.rotation, locked: false },
@@ -147,7 +147,7 @@ for (const scenario of cases) {
             await expect.poll(readLayer).toMatchObject({ x: 250, y: 120, width: 200, height: 220, rotation: 90 });
         }
         await page.locator('.ai-edit-section > summary').click();
-        await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption('gpt-image-2.5-flare');
+        await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption('gpt-image-2.6-flare');
         let maskPixels: number[] | undefined;
         if (scenario.mask) {
             await page.getByRole('button', { name: 'Mask', exact: true }).click();

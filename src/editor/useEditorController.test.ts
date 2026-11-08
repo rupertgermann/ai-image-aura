@@ -176,7 +176,7 @@ function createCostLedger(id: string, amountUsd: number): ApiCostLedger {
             kind: 'image-edit',
             operation: 'image-edit',
             provider: 'openai',
-            model: 'gpt-image-2.5-flare',
+            model: 'gpt-image-2.6-flare',
             label: 'AI edit',
             status: 'calculated',
             currency: 'USD',

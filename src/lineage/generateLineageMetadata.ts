@@ -1,5 +1,5 @@
 import type { ActualImageParameters, ApiCostLedger, ArchiveImage } from '../db/types';
-import type { GenerateDraft } from '../generate-session/GenerateSession';
+import type { GenerateRunDraft } from '../generate-session/GenerateSession';
 import {
     buildImageModelArchiveFields,
     sanitizeArchiveImageModelControls,
@@ -18,9 +18,12 @@ import {
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
-    isImageModelSlug,
+    isRetiredImageModelSlug,
     isStoredImageModelSlug,
+    sanitizeImageModel,
     type ImageModelSlug,
+    type RetiredImageModelSlug,
+    type StoredImageModelSlug,
 } from '../utils/openaiModels';
 
 export interface GenerateLineageDimensions {
@@ -35,7 +38,7 @@ export interface GenerateLineageReferenceImages {
 
 export type LineageImageModel =
     | {
-        slug: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL | 'gpt-image-2';
+        slug: typeof OPENAI_IMAGE_MODEL | typeof OPENAI_SUNBURST_IMAGE_MODEL | RetiredImageModelSlug;
         controls: GptImageControls;
     }
     | {
@@ -53,7 +56,7 @@ export type LineageImageModel =
 
 export interface GenerateLineageMetadata extends Record<string, unknown> {
     prompt: string;
-    model: ImageModelSlug;
+    model: StoredImageModelSlug;
     imageModel: LineageImageModel;
     dimensions: GenerateLineageDimensions;
     quality: string;
@@ -76,9 +79,10 @@ export interface GenerateLineageMetadata extends Record<string, unknown> {
 export function buildGenerateLineageMetadata(input: {
     image: ArchiveImage;
     sourceArchiveImageId: string | null;
-    runDraft?: GenerateDraft | null;
+    runDraft?: GenerateRunDraft | null;
 }): GenerateLineageMetadata {
-    const model = isImageModelSlug(input.image.model) ? input.image.model : DEFAULT_IMAGE_MODEL;
+    const storedModel = isStoredImageModelSlug(input.image.model) ? input.image.model : DEFAULT_IMAGE_MODEL;
+    const model = sanitizeImageModel(storedModel);
     const controls = getGenerateLineageControls(model, input.image, input.runDraft);
     const archiveFields = buildImageModelArchiveFields(model, controls);
     const width = input.image.width ?? archiveFields.width;
@@ -87,8 +91,8 @@ export function buildGenerateLineageMetadata(input: {
 
     return {
         prompt: input.image.prompt,
-        model,
-        imageModel: buildLineageImageModel(model, controls),
+        model: storedModel,
+        imageModel: buildLineageImageModel(storedModel, controls),
         dimensions: {
             width,
             height,
@@ -117,7 +121,7 @@ export function buildGenerateLineageMetadata(input: {
 function getGenerateLineageControls(
     model: ImageModelSlug,
     image: ArchiveImage,
-    runDraft: GenerateDraft | null | undefined,
+    runDraft: GenerateRunDraft | null | undefined,
 ): ImageModelControls {
     switch (model) {
         case OPENAI_SUNBURST_IMAGE_MODEL:
@@ -138,10 +142,6 @@ export function readLineageImageModel(metadata: Record<string, unknown>): Lineag
         return null;
     }
 
-    if (imageModel.slug === 'gpt-image-2') {
-        return { slug: imageModel.slug, controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, imageModel.controls) };
-    }
-
     return buildLineageImageModel(imageModel.slug, imageModel.controls);
 }
 
@@ -156,9 +156,13 @@ export function readGenerateLineageReferenceCount(metadata: Record<string, unkno
 }
 
 export function buildLineageImageModel(
-    model: ImageModelSlug,
+    model: StoredImageModelSlug,
     controls: unknown,
 ): LineageImageModel {
+    if (isRetiredImageModelSlug(model)) {
+        return { slug: model, controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, controls) };
+    }
+
     switch (model) {
         case OPENAI_SUNBURST_IMAGE_MODEL:
         case OPENAI_IMAGE_MODEL: return { slug: model, controls: sanitizeImageModelControls(model, controls) };

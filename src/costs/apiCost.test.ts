@@ -29,7 +29,7 @@ describe('apiCost', () => {
         });
     });
 
-    it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('calculates %s cost from image usage tokens', (model) => {
+    it.each(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'])('calculates %s cost from image usage tokens', (model) => {
         const ledger = buildImageCostLedger({
             provider: 'openai',
             model,
@@ -69,7 +69,7 @@ describe('apiCost', () => {
     it('allocates shared OpenAI image request cost across returned images', () => {
         const ledger = buildImageCostLedger({
             provider: 'openai',
-            model: 'gpt-image-2.5-flare',
+            model: 'gpt-image-2.6-flare',
             operation: 'image-generation',
             usageScope: 'request',
             usageImageCount: 2,

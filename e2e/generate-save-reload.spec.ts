@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 
 const prompt = 'Four colored squares for the durable archive test';
-const model = 'gpt-image-2.5-sunburst';
+const model = 'gpt-image-2.6-sunburst';
 const imageBase64 = readFileSync(new URL('./fixtures/four-colors.png', import.meta.url)).toString('base64');
 
 test('generated image survives Save to Archive and a full reload', async ({ page, context, baseURL }, testInfo) => {
@@ -46,7 +46,7 @@ test('generated image survives Save to Archive and a full reload', async ({ page
     const details = page.getByRole('dialog', { name: 'Image details' });
     await expect(details.locator('.prompt-container p')).toHaveText(prompt);
     await expect(details.locator('.info-cell').filter({ hasText: 'MODEL' }).locator('span'))
-        .toHaveText('GPT Image 2.5 Sunburst');
+        .toHaveText('GPT Image 2.6 Sunburst');
     const restored = details.locator('.modal-image');
     await expect(restored).toBeVisible();
     await expect(restored).toHaveJSProperty('naturalWidth', 128);

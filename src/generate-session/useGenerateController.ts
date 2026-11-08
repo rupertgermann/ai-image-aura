@@ -9,6 +9,7 @@ import {
     type GenerateDraft,
     type GenerateLineageSource,
     type GenerateResultSlot,
+    type GenerateRunDraft,
     type GenerateSessionStore,
 } from './GenerateSession';
 import { imageWorkflow, type GenerateBatchResult, type ImageWorkflow } from '../image-workflow/ImageWorkflow';
@@ -58,7 +59,7 @@ interface BuildGeneratedArchiveImageInput {
     id: string;
     url: string;
     timestamp: string;
-    draft: GenerateDraft;
+    draft: GenerateRunDraft;
     references: string[];
     actualParameters?: ActualImageParameters;
     costLedger?: ApiCostLedger;
@@ -73,7 +74,7 @@ interface BuildGeneratedArchiveImageForSaveInput {
     id: string;
     url: string;
     timestamp: string;
-    draft: GenerateDraft;
+    draft: GenerateRunDraft;
     usedReferences: string[] | null;
     actualParameters?: ActualImageParameters;
     costLedger?: ApiCostLedger;
@@ -84,7 +85,7 @@ interface SaveGenerateResultSlotsInput {
     results: GenerateResultSlot[];
     slotIndexes?: number[];
     draft: GenerateDraft;
-    runDraft: GenerateDraft | null;
+    runDraft: GenerateRunDraft | null;
     usedReferences: string[] | null;
     runLineageSource: GenerateLineageSource | null;
     serializeReferences: () => Promise<string[]>;

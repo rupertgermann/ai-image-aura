@@ -188,7 +188,7 @@ test('archive filtering, confirmations, toasts and Editor panels remain usable t
             drawing.fill();
             await archiveStore.save({
                 id: `motion-${index}`, prompt: ['Orange study', 'Blue study', 'Green study'][index],
-                url: canvas.toDataURL(), timestamp: '2026-09-29', model: 'gpt-image-2.5-flare',
+                url: canvas.toDataURL(), timestamp: '2026-09-29', model: 'gpt-image-2.6-flare',
                 quality: 'medium', aspectRatio: '640x640', background: 'auto', width: 640, height: 640,
                 favorite: index === 0,
             });

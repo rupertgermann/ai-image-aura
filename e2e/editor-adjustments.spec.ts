@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 
-const model = 'gpt-image-2.5-flare';
+const model = 'gpt-image-2.6-flare';
 const prompt = 'Editor adjustment pixels';
 
 async function seedEditor(page: Page, contrast: boolean, selectedLayer: boolean) {

@@ -4,16 +4,20 @@ import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDra
 import type { LineageStep } from '../lineage/LineageStore';
 
 describe('GenerateSession draft migration', () => {
-    it('loads a retired GPT Image draft as Flare without losing its controls', async () => {
+    it.each([
+        ['gpt-image-2', 'gpt-image-2.6-flare'],
+        ['gpt-image-2.5-flare', 'gpt-image-2.6-flare'],
+        ['gpt-image-2.5-sunburst', 'gpt-image-2.6-sunburst'],
+    ])('loads a %s draft as %s while preserving controls and the saved batch model', async (retiredModel, activeModel) => {
         const blobStorage = new InMemoryStorageProvider();
         const legacyDraft = {
-            model: 'gpt-image-2', prompt: 'keep my prompt',
+            model: retiredModel, prompt: 'keep my prompt',
             gptImage2: { quality: 'high', size: '1536x1024', background: 'transparent', batchSize: 3 },
         };
         const localStorage = { getItem: () => JSON.stringify(legacyDraft) } as unknown as Storage;
         const store = createGenerateSessionStore({ blobStorage, localStorage });
         const expected = {
-            model: 'gpt-image-2.5-flare', prompt: 'keep my prompt',
+            model: activeModel, prompt: 'keep my prompt',
             gptImage: legacyDraft.gptImage2,
         };
         expect(store.readDraft()).toMatchObject(expected);
@@ -21,7 +25,7 @@ describe('GenerateSession draft migration', () => {
             results: [{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,old' }],
             draft: legacyDraft,
         }));
-        expect((await store.loadCurrentBatch())?.draft).toMatchObject(expected);
+        expect((await store.loadCurrentBatch())?.draft).toMatchObject({ ...expected, model: retiredModel });
     });
 
     it('Create Similar restores the saved Qwen batch size from generation lineage', async () => {

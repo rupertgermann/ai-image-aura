@@ -17,8 +17,8 @@ export function assertNever(value: never): never {
     throw new Error(`Unexpected value: ${value}`);
 }
 
-export const OPENAI_IMAGE_MODEL = 'gpt-image-2.5-flare';
-export const OPENAI_SUNBURST_IMAGE_MODEL = 'gpt-image-2.5-sunburst';
+export const OPENAI_IMAGE_MODEL = 'gpt-image-2.6-flare';
+export const OPENAI_SUNBURST_IMAGE_MODEL = 'gpt-image-2.6-sunburst';
 export const NANO_BANANA_PRO_IMAGE_MODEL = 'nano-banana-pro';
 export const QWEN_IMAGE_2_1_IMAGE_MODEL = 'qwen-image-2.1';
 export const FLUX_2_KLEIN_4B_IMAGE_MODEL = 'flux-2-klein-4b';
@@ -71,13 +71,13 @@ export const IMAGE_MODEL_REGISTRY = {
         ...OPENAI_IMAGE_CONFIG,
         slug: OPENAI_IMAGE_MODEL,
         apiModel: OPENAI_IMAGE_MODEL,
-        label: 'GPT Image 2.5 Flare',
+        label: 'GPT Image 2.6 Flare',
     },
     [OPENAI_SUNBURST_IMAGE_MODEL]: {
         ...OPENAI_IMAGE_CONFIG,
         slug: OPENAI_SUNBURST_IMAGE_MODEL,
         apiModel: OPENAI_SUNBURST_IMAGE_MODEL,
-        label: 'GPT Image 2.5 Sunburst',
+        label: 'GPT Image 2.6 Sunburst',
     },
     [NANO_BANANA_PRO_IMAGE_MODEL]: {
         slug: NANO_BANANA_PRO_IMAGE_MODEL,
@@ -125,22 +125,31 @@ export const IMAGE_MODEL_REGISTRY = {
 
 export type ImageModelSlug = keyof typeof IMAGE_MODEL_REGISTRY;
 
-export const RETIRED_IMAGE_MODEL_LABELS = {
-    'gpt-image-2': 'GPT Image 2 (retired)',
-} as const;
+const RETIRED_IMAGE_MODELS = {
+    'gpt-image-2': { label: 'GPT Image 2 (retired)', replacement: OPENAI_IMAGE_MODEL },
+    'gpt-image-2.5-flare': { label: 'GPT Image 2.5 Flare (retired)', replacement: OPENAI_IMAGE_MODEL },
+    'gpt-image-2.5-sunburst': { label: 'GPT Image 2.5 Sunburst (retired)', replacement: OPENAI_SUNBURST_IMAGE_MODEL },
+} as const satisfies Record<string, { label: string; replacement: ImageModelSlug }>;
 
-export type StoredImageModelSlug = ImageModelSlug | keyof typeof RETIRED_IMAGE_MODEL_LABELS;
+export type RetiredImageModelSlug = keyof typeof RETIRED_IMAGE_MODELS;
+export type StoredImageModelSlug = ImageModelSlug | RetiredImageModelSlug;
+
+export function isRetiredImageModelSlug(value: unknown): value is RetiredImageModelSlug {
+    return typeof value === 'string' && Object.hasOwn(RETIRED_IMAGE_MODELS, value);
+}
 
 export function isStoredImageModelSlug(value: unknown): value is StoredImageModelSlug {
-    return isImageModelSlug(value)
-        || (typeof value === 'string' && Object.hasOwn(RETIRED_IMAGE_MODEL_LABELS, value));
+    return isImageModelSlug(value) || isRetiredImageModelSlug(value);
+}
+
+export function sanitizeImageModel(value: unknown): ImageModelSlug {
+    if (isImageModelSlug(value)) return value;
+    return isRetiredImageModelSlug(value) ? RETIRED_IMAGE_MODELS[value].replacement : DEFAULT_IMAGE_MODEL;
 }
 
 export function getImageModelLabel(slug: string): string {
     if (isImageModelSlug(slug)) return IMAGE_MODEL_REGISTRY[slug].label;
-    return Object.hasOwn(RETIRED_IMAGE_MODEL_LABELS, slug)
-        ? RETIRED_IMAGE_MODEL_LABELS[slug as keyof typeof RETIRED_IMAGE_MODEL_LABELS]
-        : slug;
+    return isRetiredImageModelSlug(slug) ? RETIRED_IMAGE_MODELS[slug].label : slug;
 }
 
 export const REASONING_MODEL_REGISTRY = {

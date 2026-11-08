@@ -32,7 +32,7 @@ for (const missing of ['reference', 'layer', 'image']) {
             });
             await archiveStore.save({
                 id: 'saved', url: urls[0], prompt: 'Original artwork', quality: 'high',
-                aspectRatio: '64x64', model: 'gpt-image-2.5-flare', background: 'transparent', timestamp: '2026-10-24T12:00:00Z',
+                aspectRatio: '64x64', model: 'gpt-image-2.6-flare', background: 'transparent', timestamp: '2026-10-24T12:00:00Z',
                 references: [urls[1]], layerStack: { canvasWidth: 64, canvasHeight: 64, layers: [{
                     id: 'base', name: 'Base', kind: 'base', assetUrl: urls[2], x: 0, y: 0,
                     width: 64, height: 64, rotation: 0, opacity: 1, blendMode: 'normal', visible: true, locked: false,
@@ -133,7 +133,7 @@ test('stale listing preserves the rich save and concurrent recovery inserts a tr
         canvas.height = 64;
         const url = canvas.toDataURL();
         await saveStore.save({ id: 'rich', url, prompt: 'Rich saved artwork', quality: 'medium',
-            aspectRatio: '96x64', background: 'auto', model: 'gpt-image-2.5-flare', width: 96, height: 64,
+            aspectRatio: '96x64', background: 'auto', model: 'gpt-image-2.6-flare', width: 96, height: 64,
             favorite: true, style: 'cinematic', lighting: 'sunlight', palette: 'warm',
             actualParameters: { revisedPrompt: 'Rich revised prompt', size: '96x64' },
             costLedger: buildImageCostLedger({ provider: 'local', model: 'local-model', operation: 'image-generation' }),
