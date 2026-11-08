@@ -2,12 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { StorageProvider } from '../services/StorageService';
 import { createGenerateSessionStore, DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, transferSimilarFromArchive, type GenerateBatchSnapshot } from './GenerateSession';
 import type { LineageStep } from '../lineage/LineageStore';
+import { OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('GenerateSession draft migration', () => {
     it.each([
-        ['gpt-image-2', 'gpt-image-2.6-flare'],
-        ['gpt-image-2.5-flare', 'gpt-image-2.6-flare'],
-        ['gpt-image-2.5-sunburst', 'gpt-image-2.6-sunburst'],
+        ['gpt-image-2', OPENAI_IMAGE_MODEL],
+        ['gpt-image-2.5-flare', OPENAI_IMAGE_MODEL],
+        ['gpt-image-2.5-sunburst', OPENAI_SUNBURST_IMAGE_MODEL],
     ])('loads a %s draft as %s while preserving controls and the saved batch model', async (retiredModel, activeModel) => {
         const blobStorage = new InMemoryStorageProvider();
         const legacyDraft = {

@@ -3,6 +3,7 @@ import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
 import { createArchiveStore } from './ArchiveStore';
 import { saveArchiveImage, type SaveArchiveImageRequest } from './saveArchiveImage';
 import type { SaveLineageStepInput } from '../lineage/LineageStore';
+import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 
 type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
     storedUrl: string;
@@ -357,7 +358,7 @@ describe('ArchiveStore layer asset ownership', () => {
         const listing = store.list();
         await started;
         await store.save(createImageInput({
-            id: 'saved', model: 'gpt-image-2.6-flare', favorite: true,
+            id: 'saved', model: OPENAI_IMAGE_MODEL, favorite: true,
             references: ['data:image/png;base64,reference'], layerStack: createLayerStack('original', ['base']),
         }));
         const original = await store.get('saved');

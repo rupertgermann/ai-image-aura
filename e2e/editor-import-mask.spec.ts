@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL } from '../src/utils/openaiModels';
 
 const imageId = 'editor-import-mask';
 const prompt = 'Editor import and mask';
@@ -13,7 +14,7 @@ async function openEditor(page: Page) {
 
 async function seedEditor(page: Page) {
     await page.goto('/');
-    const dataUrl = await page.evaluate(async ({ imageId, prompt }) => {
+    const dataUrl = await page.evaluate(async ({ imageId, prompt, model }) => {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = 128;
         const context = canvas.getContext('2d');
@@ -24,10 +25,10 @@ async function seedEditor(page: Page) {
         const modulePath = '/src/archive/ArchiveStore.ts';
         const { archiveStore } = await import(modulePath);
         localStorage.setItem('aura_openapi_key', JSON.stringify('synthetic-never-sent'));
-        await archiveStore.save({ id: imageId, url, prompt, model: 'gpt-image-2.6-flare', timestamp: '2026-10-24',
+        await archiveStore.save({ id: imageId, url, prompt, model, timestamp: '2026-10-24',
             width: 128, height: 128, quality: 'medium', aspectRatio: '128x128', background: 'auto' });
         return url;
-    }, { imageId, prompt });
+    }, { imageId, prompt, model: OPENAI_IMAGE_MODEL });
     await page.reload();
     await openEditor(page);
     return dataUrl;
@@ -248,7 +249,7 @@ for (const order of [['a', 'b'], ['b', 'a']]) {
     });
 }
 
-for (const model of ['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst']) {
+for (const model of [OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL]) {
     test(`painted and replayed mask selects editable pixels for ${model}`, async ({ page }, testInfo) => {
         await seedEditor(page);
         const masks: string[] = [];
@@ -551,7 +552,7 @@ test('Load in Editor rejects a historical mask with different dimensions and doe
     await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: 'Archive', exact: true }).click();
     await page.getByRole('button', { name: `Open image: ${prompt}`, exact: true }).click();
     await page.getByRole('button', { name: 'Load in Editor', exact: true }).click();
-    await expect(page.locator('.editor-container').getByLabel('Image model', { exact: true })).toHaveValue('gpt-image-2.6-sunburst');
+    await expect(page.locator('.editor-container').getByLabel('Image model', { exact: true })).toHaveValue(OPENAI_SUNBURST_IMAGE_MODEL);
     await expect(page.getByRole('button', { name: 'Edit Mask', exact: true })).toBeVisible();
     let requests = 0;
     await page.route('https://api.openai.com/v1/images/edits', async (route) => { requests++; await route.abort(); });

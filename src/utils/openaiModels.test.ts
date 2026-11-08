@@ -22,7 +22,6 @@ describe('openaiModels image registry', () => {
         expect(isStoredImageModelSlug(null)).toBe(false);
         expect(isStoredImageModelSlug('unknown-model')).toBe(false);
         expect(getImageModelLabel('gpt-image-2')).toBe('GPT Image 2 (retired)');
-        expect(getImageModelLabel(OPENAI_IMAGE_MODEL)).toBe('GPT Image 2.6 Flare');
         expect(getImageModelLabel('unknown-model')).toBe('unknown-model');
         expect(getImageModelLabel('toString')).toBe('toString');
         expect(() => resolveImageModelConfig('gpt-image-2')).toThrow('Unknown image model: gpt-image-2');

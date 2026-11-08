@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { OPENAI_IMAGE_MODEL } from '../src/utils/openaiModels';
 
 test.use({ video: { mode: 'on', size: { width: 1440, height: 1000 } } });
 
@@ -172,7 +173,7 @@ test('reduced motion and rapid toggles never leave dismissed UI behind', async (
 test('archive filtering, confirmations, toasts and Editor panels remain usable through transitions', async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.evaluate(async () => {
+    await page.evaluate(async (model) => {
         const modulePath = '/src/archive/ArchiveStore.ts';
         const { archiveStore } = await import(modulePath);
         const canvas = document.createElement('canvas');
@@ -188,12 +189,12 @@ test('archive filtering, confirmations, toasts and Editor panels remain usable t
             drawing.fill();
             await archiveStore.save({
                 id: `motion-${index}`, prompt: ['Orange study', 'Blue study', 'Green study'][index],
-                url: canvas.toDataURL(), timestamp: '2026-09-29', model: 'gpt-image-2.6-flare',
+                url: canvas.toDataURL(), timestamp: '2026-09-29', model,
                 quality: 'medium', aspectRatio: '640x640', background: 'auto', width: 640, height: 640,
                 favorite: index === 0,
             });
         }
-    });
+    }, OPENAI_IMAGE_MODEL);
     await page.reload();
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
     await nav.getByRole('button', { name: 'Archive', exact: true }).click();

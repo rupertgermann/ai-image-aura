@@ -45,7 +45,8 @@ async function contractChecks(browser) {
       const { calculateApiCostTotals, sanitizeApiCostLedger } = await import('/src/costs/apiCost.ts');
       const { buildCostTotalRows } = await import('/src/components/CostSummaryPanel.tsx');
       const { sanitizeImageModelControls } = await import('/src/image-models/ImageModelControls.ts');
-      const image = { id: 'image', kind: 'image-generation', operation: 'image-generation', provider: 'openai', model: 'gpt-image-2.6-flare', label: 'Image', currency: 'USD', status: 'calculated', amountUsd: 0.02 };
+      const { OPENAI_IMAGE_MODEL } = await import('/src/utils/openaiModels.ts');
+      const image = { id: 'image', kind: 'image-generation', operation: 'image-generation', provider: 'openai', model: OPENAI_IMAGE_MODEL, label: 'Image', currency: 'USD', status: 'calculated', amountUsd: 0.02 };
       const reasoning = { ...image, id: 'reasoning', kind: 'reasoning', label: 'Reasoning', status: 'unavailable', amountUsd: undefined };
       const cases = [[], [image], [reasoning], [image, reasoning], [{ ...image, amountUsd: NaN }, reasoning], [image, { ...reasoning, status: 'calculated', amountUsd: 0.01 }]];
       return {
@@ -75,14 +76,15 @@ async function editorAndArchive(browser, imageBase64) {
     await page.goto(origin);
     await navigate(page, 'Archive');
     await page.getByRole('heading', { name: 'No images yet' }).waitFor();
-    await page.evaluate(async imageBase64 => {
+    const model = await page.evaluate(async () => (await import('/src/utils/openaiModels.ts')).OPENAI_IMAGE_MODEL);
+    await page.evaluate(async ({ imageBase64, model }) => {
       localStorage.setItem('aura_openapi_key', JSON.stringify('sk-test-never-sent'));
       const { archiveStore } = await import('/src/archive/ArchiveStore.ts');
       const { lineageStore } = await import('/src/lineage/LineageStore.ts');
-      const image = { id: 'source-image', url: `data:image/png;base64,${imageBase64}`, prompt: 'Workflow source', timestamp: '2026-09-01T00:00:00.000Z', model: 'gpt-image-2.6-flare', width: 128, height: 128, quality: 'medium', aspectRatio: '1024x1024', background: 'auto', references: [`data:image/png;base64,${imageBase64}`] };
+      const image = { id: 'source-image', url: `data:image/png;base64,${imageBase64}`, prompt: 'Workflow source', timestamp: '2026-09-01T00:00:00.000Z', model, width: 128, height: 128, quality: 'medium', aspectRatio: '1024x1024', background: 'auto', references: [`data:image/png;base64,${imageBase64}`] };
       await archiveStore.save(image);
       await lineageStore.save({ id: 'source-step', archiveImageId: image.id, stepType: 'reference-generation', timestamp: image.timestamp, metadata: {} });
-    }, imageBase64);
+    }, { imageBase64, model });
     await page.reload();
     await page.getByRole('button', { name: 'Open image: Workflow source', exact: true }).click();
     const detail = page.getByRole('dialog', { name: 'Image details' });
@@ -146,7 +148,7 @@ async function editorAndArchive(browser, imageBase64) {
     await expect(page.getByRole('button', { name: 'Undo', exact: true })).toBeDisabled();
 
     await page.locator('.ai-edit-section > summary').click();
-    await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption('gpt-image-2.6-flare');
+    await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption(model);
     await page.getByLabel('AI transformation prompt').fill('  Replace the colored squares  ');
     await page.getByRole('button', { name: 'Mask', exact: true }).click();
     const maskDialog = page.getByRole('dialog', { name: 'Transform mask' });

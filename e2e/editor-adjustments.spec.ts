@@ -1,7 +1,8 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { OPENAI_IMAGE_MODEL } from '../src/utils/openaiModels';
 
-const model = 'gpt-image-2.6-flare';
+const model = OPENAI_IMAGE_MODEL;
 const prompt = 'Editor adjustment pixels';
 
 async function seedEditor(page: Page, contrast: boolean, selectedLayer: boolean) {

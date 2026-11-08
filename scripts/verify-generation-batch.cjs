@@ -322,7 +322,6 @@ async function reasoningSelection(browser, model, editedField = null) {
 
 async function imageModelControls(browser, autopilotMode) {
   const name = autopilotMode ? 'nano-controls' : 'gpt-controls';
-  const model = autopilotMode ? 'nano-banana-pro' : 'gpt-image-2.6-flare';
   const { page, context, images, errors } = await createScenario(browser, name, 1);
   const requests = [];
   const endpoint = autopilotMode
@@ -333,6 +332,10 @@ async function imageModelControls(browser, autopilotMode) {
     : { quality: 'high', size: '1536x1024', background: 'transparent', batchSize: 2 };
   const draftKey = autopilotMode ? 'nanoBananaPro' : 'gptImage';
   try {
+    const model = await page.evaluate(async (autopilotMode) => {
+      const { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL } = await import('/src/utils/openaiModels.ts');
+      return autopilotMode ? NANO_BANANA_PRO_IMAGE_MODEL : OPENAI_IMAGE_MODEL;
+    }, autopilotMode);
     await page.route(endpoint, route => {
       const request = route.request();
       const body = autopilotMode ? request.postDataJSON() : request.postData();
