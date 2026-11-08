@@ -4,7 +4,7 @@ import { buildEditorLineageMetadata, type EditorLineageTransformMaskAsset } from
 import { buildGenerateLineageMetadata } from '../lineage/generateLineageMetadata';
 import { lineageStore, type LineageStore, type SaveLineageStepInput } from '../lineage/LineageStore';
 import { archiveStore, type ArchiveStore } from './ArchiveStore';
-import type { GenerateDraft, GenerateLineageSource } from '../generate-session/GenerateSession';
+import type { GenerateRunDraft, GenerateLineageSource } from '../generate-session/GenerateSession';
 import type { EditorAdjustments } from '../editor/layers';
 
 export interface EditorSaveContext {
@@ -27,7 +27,7 @@ export interface GenerationSaveRequest {
     kind: 'generation';
     image: ArchiveImage;
     source: GenerateLineageSource | null;
-    runDraft: GenerateDraft | null;
+    runDraft: GenerateRunDraft | null;
 }
 
 export type SaveArchiveImageRequest = GenerationSaveRequest | {

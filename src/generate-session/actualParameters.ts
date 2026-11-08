@@ -1,5 +1,5 @@
 import type { ActualImageParameters, ArchiveImage } from '../db/types';
-import { getActiveGenerateArchiveFields, type GenerateDraft } from './GenerateSession';
+import { getActiveGenerateArchiveFields, type GenerateRunDraft } from './GenerateSession';
 
 export interface RequestedImageParameters {
     size?: string;
@@ -19,7 +19,7 @@ export interface ActualParameterDetails {
     elapsedLabel?: string;
 }
 
-export function getRequestedGenerateParameters(draft: GenerateDraft): RequestedImageParameters {
+export function getRequestedGenerateParameters(draft: GenerateRunDraft): RequestedImageParameters {
     const fields = getActiveGenerateArchiveFields(draft);
 
     return {

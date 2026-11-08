@@ -17,7 +17,7 @@ describe('openAiImageClient', () => {
         }
     });
 
-    it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('sends %s quality and single-image streaming for generations and masked edits', async (model) => {
+    it.each(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'])('sends %s quality and single-image streaming for generations and masked edits', async (model) => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ b64_json: 'result' }] })));
         const reference = new File(['source'], 'source.png', { type: 'image/png' });
 
@@ -71,7 +71,7 @@ describe('openAiImageClient', () => {
 
             const body = JSON.parse(String(request.body));
             expect(body).toEqual({
-                model: 'gpt-image-2.5-flare',
+                model: 'gpt-image-2.6-flare',
                 prompt: 'a cat in a hat',
                 n: 1,
                 size: '1024x1024',
@@ -300,7 +300,7 @@ describe('openAiImageClient', () => {
         }
     });
 
-    it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('does not request streaming for %s batch generation', async (model) => {
+    it.each(['gpt-image-2.6-flare', 'gpt-image-2.6-sunburst'])('does not request streaming for %s batch generation', async (model) => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
             data: [
                 { b64_json: 'generated-0' },

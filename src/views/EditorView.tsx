@@ -8,7 +8,7 @@ import { LayerPanel } from '../editor/LayerPanel';
 import { resolveEditorShortcut } from '../editor/shortcuts';
 import { useEditorController } from '../editor/useEditorController';
 import type { EditorSaveContext } from '../archive/saveArchiveImage';
-import { LOCAL_PROVIDER, OPENAI_IMAGE_MODEL, getProviderLabel, isImageModelSlug, resolveImageModelConfig, type ImageModelSlug, type Provider } from '../utils/openaiModels';
+import { LOCAL_PROVIDER, getProviderLabel, isImageModelSlug, resolveImageModelConfig, sanitizeImageModel, type ImageModelSlug, type Provider } from '../utils/openaiModels';
 import { getImageModelUiChoices, imageModelSupportsTransformMask } from '../image-models/ImageModelControls';
 import { getImageFilesFromClipboard } from '../references/clipboard';
 import { getAiTransformReferenceWarning, renderAiTransformEditInput } from '../editor/aiTransform';
@@ -29,7 +29,7 @@ interface EditorViewProps {
 }
 
 const EditorView: React.FC<EditorViewProps> = ({ isActive, onBusyChange, image, replay, getProviderCredential, onSave, onOpenArchive, onOpenSettings }) => {
-    const defaultModel = image && isImageModelSlug(image.model) ? image.model : OPENAI_IMAGE_MODEL;
+    const defaultModel = sanitizeImageModel(image?.model);
     const [aiEditModel, setAiEditModel] = useState<ImageModelSlug>(defaultModel);
     const [adjustmentsOpen, setAdjustmentsOpen] = useLocalStorage('editor_adjustments_open', true);
     const [filtersOpen, setFiltersOpen] = useLocalStorage('editor_filters_open', true);

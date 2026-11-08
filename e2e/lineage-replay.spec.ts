@@ -14,7 +14,7 @@ test.beforeEach(async ({ page, context, baseURL }) => {
         const { lineageStore } = await import(lineagePath);
         const { generateSessionStore, DEFAULT_GENERATE_DRAFT } = await import(sessionPath);
         for (const id of ['A', 'B']) {
-            await archiveStore.save({ id, url, prompt: `Image ${id}`, model: 'gpt-image-2.5-flare', quality: 'high', aspectRatio: '1536x1024', background: 'transparent', width: 128, height: 128, timestamp: '2026-10-24' });
+            await archiveStore.save({ id, url, prompt: `Image ${id}`, model: 'gpt-image-2.6-flare', quality: 'high', aspectRatio: '1536x1024', background: 'transparent', width: 128, height: 128, timestamp: '2026-10-24' });
             await lineageStore.save({ id: `step${id}`, archiveImageId: id, parentStepId: null, stepType: 'generation', timestamp: '2026-10-24', metadata: {} });
         }
         await lineageStore.save({ id: 'editA', archiveImageId: 'A', parentStepId: 'stepA', stepType: 'ai-edit', timestamp: '2026-10-24T01:00:00Z', metadata: { aiEditPrompt: 'Earlier chosen edit' } });
@@ -59,7 +59,9 @@ test('intermediate Autopilot replay restores reference bytes and controls in the
         const lineagePath = '/src/lineage/LineageStore.ts';
         const { lineageStore } = await import(lineagePath);
         await lineageStore.save({ id: 'intermediate', archiveImageId: 'autopilot:synthetic:iteration:1', parentStepId: null, stepType: 'autopilot-iteration', timestamp: '2026-10-24', metadata: {
-            prompt: 'Intermediate reference request', model: 'gpt-image-2.5-flare', quality: 'high', aspectRatio: '1536x1024', background: 'transparent', references: [url], outputImageDataUrl: url,
+            prompt: 'Intermediate reference request',
+            imageModel: { slug: 'gpt-image-2.5-sunburst', controls: { quality: 'high', size: '1536x1024', background: 'transparent' } },
+            references: [url], outputImageDataUrl: url,
         } });
         await lineageStore.save({ id: 'stepB', archiveImageId: 'B', parentStepId: 'intermediate', stepType: 'generation', timestamp: '2026-10-24T01:00:00Z', metadata: {} });
         const archivePath = '/src/archive/ArchiveStore.ts';
@@ -86,7 +88,10 @@ test('intermediate Autopilot replay restores reference bytes and controls in the
     await nav.getByRole('button', { name: 'Archive', exact: true }).click();
     await page.getByRole('button', { name: 'Open image: Image B', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Image details' });
-    await dialog.locator('.lineage-entry').filter({ hasText: 'Autopilot Iteration' }).getByRole('button', { name: 'Load in Generate', exact: true }).click();
+    const iteration = dialog.locator('.lineage-entry').filter({ hasText: 'Autopilot Iteration' });
+    await expect(iteration.getByText('GPT Image 2.5 Sunburst (retired)', { exact: true })).toBeVisible();
+    await iteration.getByRole('button', { name: 'Load in Generate', exact: true }).click();
+    await expect(page.getByLabel('Image model', { exact: true })).toHaveValue('gpt-image-2.6-sunburst');
     await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Remove reference/ })).toHaveCount(1);
     let requestBody = '';
@@ -97,6 +102,7 @@ test('intermediate Autopilot replay restores reference bytes and controls in the
     await page.getByRole('button', { name: 'Generate image', exact: true }).click();
     await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toBeVisible();
     expect(requestBody).toContain('Intermediate reference request');
+    expect(requestBody).toContain('gpt-image-2.6-sunburst');
     expect(requestBody).toContain('1536x1024');
     expect(requestBody).toContain('transparent');
     expect(requestBody).toContain(Buffer.from(imageUrl.split(',')[1], 'base64').toString('latin1'));

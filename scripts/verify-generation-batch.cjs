@@ -322,7 +322,7 @@ async function reasoningSelection(browser, model, editedField = null) {
 
 async function imageModelControls(browser, autopilotMode) {
   const name = autopilotMode ? 'nano-controls' : 'gpt-controls';
-  const model = autopilotMode ? 'nano-banana-pro' : 'gpt-image-2.5-flare';
+  const model = autopilotMode ? 'nano-banana-pro' : 'gpt-image-2.6-flare';
   const { page, context, images, errors } = await createScenario(browser, name, 1);
   const requests = [];
   const endpoint = autopilotMode

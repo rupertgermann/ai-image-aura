@@ -357,7 +357,7 @@ describe('ArchiveStore layer asset ownership', () => {
         const listing = store.list();
         await started;
         await store.save(createImageInput({
-            id: 'saved', model: 'gpt-image-2.5-flare', favorite: true,
+            id: 'saved', model: 'gpt-image-2.6-flare', favorite: true,
             references: ['data:image/png;base64,reference'], layerStack: createLayerStack('original', ['base']),
         }));
         const original = await store.get('saved');

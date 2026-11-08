@@ -48,7 +48,7 @@ describe('runGenerateAutopilot', () => {
         const batch = outcome.batch;
         if (!batch?.draft) throw new Error('Missing candidate');
         await saveGenerateResultSlots({
-            results: batch.results, draft: batch.draft, runDraft: batch.draft,
+            results: batch.results, draft: DEFAULT_GENERATE_DRAFT, runDraft: batch.draft,
             usedReferences: batch.references, runLineageSource: batch.lineageSource,
             serializeReferences: async () => [], createArchiveImageId: () => 'final',
             saveImage: (request) => saveArchiveImage(request, { lineage, archive: {
@@ -125,7 +125,7 @@ describe('runGenerateAutopilot', () => {
         expect(referenceSession.loadLineageSource()).toEqual(batch.lineageSource);
         const saveImage = vi.fn(async (request: Parameters<Parameters<typeof saveGenerateResultSlots>[0]['saveImage']>[0]) => request.image);
         const saved = await saveGenerateResultSlots({
-            results: batch.results, draft: batch.draft, runDraft: batch.draft,
+            results: batch.results, draft: DEFAULT_GENERATE_DRAFT, runDraft: batch.draft,
             usedReferences: batch.references, runLineageSource: batch.lineageSource,
             serializeReferences: async () => [], saveImage,
         });

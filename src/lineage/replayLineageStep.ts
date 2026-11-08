@@ -1,6 +1,6 @@
 import type { ArchiveImage } from '../db/types';
 import { DEFAULT_GENERATE_DRAFT, sanitizeGenerateDraft, type GenerateDraft, type GenerateLineageSource } from '../generate-session/GenerateSession';
-import { DEFAULT_IMAGE_MODEL, NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isImageModelSlug, isStoredImageModelSlug, type ImageModelSlug } from '../utils/openaiModels';
+import { NANO_BANANA_PRO_IMAGE_MODEL, OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL, FLUX_2_KLEIN_4B_IMAGE_MODEL, assertNever, isStoredImageModelSlug, sanitizeImageModel, type ImageModelSlug } from '../utils/openaiModels';
 import { sanitizeImageModelControls } from '../image-models/ImageModelControls';
 import type { LineageStep } from './LineageStore';
 import { readLineageImageModel } from './generateLineageMetadata';
@@ -42,7 +42,7 @@ export function buildEditorReplay(step: LineageStep): EditorReplay | null {
     const model = readEditorLineageImageModel(step.metadata)?.slug;
     return {
         prompt: readEditorLineageEditPrompt(step.metadata),
-        model: model ? (isImageModelSlug(model) ? model : DEFAULT_IMAGE_MODEL) : null,
+        model: model ? sanitizeImageModel(model) : null,
         ...(dataUrl ? { maskImage: dataURLtoFile(dataUrl, 'transform-mask.png') } : {}),
     };
 }
@@ -53,10 +53,7 @@ export function buildGenerateReplay(image: ArchiveImage | null, step: LineageSte
 } {
     const replayMetadata = readGenerateReplayMetadata(step);
     const typedImageModel = replayMetadata.imageModel;
-    const storedModel = typedImageModel?.slug
-        ?? replayMetadata.model
-        ?? resolveReplayModel(image, step.stepType === 'autopilot-iteration' ? null : step);
-    const model = isImageModelSlug(storedModel) ? storedModel : DEFAULT_IMAGE_MODEL;
+    const model = sanitizeImageModel(typedImageModel?.slug ?? replayMetadata.model ?? image?.model);
     const replayAspectRatio = replayMetadata.aspectRatio ?? image?.aspectRatio;
 
     return {
@@ -123,25 +120,13 @@ function readGenerateReplayMetadata(step: LineageStep): GenerateReplayMetadata {
     };
 }
 
-function resolveReplayModel(image: ArchiveImage | null, step: LineageStep | null) {
-    if (isStoredImageModelSlug(step?.metadata.model)) {
-        return isImageModelSlug(step.metadata.model) ? step.metadata.model : DEFAULT_IMAGE_MODEL;
-    }
-
-    if (isImageModelSlug(image?.model)) {
-        return image.model;
-    }
-
-    return DEFAULT_IMAGE_MODEL;
-}
-
 function resolveGptImageReplayControls(
     typedImageModel: GenerateReplayImageModel | null,
     metadata: GenerateReplayMetadata,
     image: ArchiveImage | null,
     replayAspectRatio: string | undefined,
 ) {
-    if (typedImageModel?.slug === OPENAI_IMAGE_MODEL || typedImageModel?.slug === OPENAI_SUNBURST_IMAGE_MODEL || typedImageModel?.slug === 'gpt-image-2') {
+    if (typedImageModel && 'quality' in typedImageModel.controls) {
         return typedImageModel.controls;
     }
 
