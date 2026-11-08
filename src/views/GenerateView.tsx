@@ -149,7 +149,8 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         loading,
         saving,
         error,
-        autopilot,
+        autopilotPreview,
+        autopilotSummary,
         translatingGoal,
         translateGoal,
         updateDraft,
@@ -176,6 +177,7 @@ const GenerateView: React.FC<GenerateViewProps> = ({
         completionNotificationPort,
         isDocumentHidden,
     });
+    const latestAutopilotIteration = autopilotPreview?.iterations.at(-1);
     useEffect(() => { onBusyChange(loading || saving || translatingGoal); }, [loading, saving, translatingGoal, onBusyChange]);
 
     const handleNextReference = () => {
@@ -281,9 +283,13 @@ const GenerateView: React.FC<GenerateViewProps> = ({
     };
     const performAction = (action: 'generate' | 'autopilot' | 'clear') => {
         setPendingAction(null);
+        if (action === 'autopilot') {
+            setShowCostDisclosure(true);
+            return;
+        }
+        setAutopilotNotice(null);
         if (action === 'generate') void generate();
-        else if (action === 'clear') void clear();
-        else setShowCostDisclosure(true);
+        else void clear();
     };
     const showBatchGrid = currentBatchResults.length > 1 || currentBatchResults.some((result) => result.status === 'failed');
     const singleResultSlot = !showBatchGrid ? successfulBatchResults[0] : null;
@@ -615,18 +621,18 @@ const GenerateView: React.FC<GenerateViewProps> = ({
 
                     {currentBatchResults.length > 0 && !loading && <button className="btn-text-link jump-to-results" onClick={() => previewRef.current?.scrollIntoView({ block: 'start' })}>View {successfulBatchResults.length === 1 ? 'result' : 'results'} ↓</button>}
 
-                    <Presence>{isAutopilotMode && autopilot.running && (
+                    <Presence>{isAutopilotMode && autopilotPreview && (
                         <div className="autopilot-live-panel glass-panel">
                             <div className="autopilot-live-header">
-                                <strong>Iteration {autopilot.iterations.length}/{maxIterations}</strong>
+                                <strong>Iteration {autopilotPreview.iterations.length}/{maxIterations}</strong>
                                 <button className="btn-ghost" onClick={cancelAutopilot}>Stop after this iteration</button>
                             </div>
                             <p className="autopilot-live-feedback">
-                                {autopilot.iterations.at(-1)?.feedback[0] ?? 'Generating the first candidate...'}
+                                {latestAutopilotIteration?.feedback[0] ?? 'Generating the first candidate...'}
                             </p>
                             <div className="autopilot-thumbnail-strip">
-                                {autopilot.iterations.map((iteration) => (
-                                    <div key={iteration.iterationNumber} className={`autopilot-thumbnail ${autopilot.bestIterationNumber === iteration.iterationNumber ? 'best' : ''}`}>
+                                {autopilotPreview.iterations.map((iteration) => (
+                                    <div key={iteration.iterationNumber} className={`autopilot-thumbnail ${autopilotPreview.bestIterationNumber === iteration.iterationNumber ? 'best' : ''}`}>
                                         <img src={iteration.imageDataUrl} alt={`Autopilot iteration ${iteration.iterationNumber}`} />
                                         <span>#{iteration.iterationNumber} · {iteration.score}</span>
                                     </div>
@@ -729,17 +735,22 @@ const GenerateView: React.FC<GenerateViewProps> = ({
                         <div key="result" className="result-container has-result-summary">
                             {loading && <div className="run-status" role="status"><Loader2 size={18} className="spin" /> Generating a new image…</div>}
                             <img src={currentResult} alt="Generated result" className="result-image" />
-                            {isAutopilotMode && autopilot.iterations.length > 0 && (
+                            {isAutopilotMode && latestAutopilotIteration && (
+                                <div className="autopilot-result-banner glass-panel">
+                                    <strong>Autopilot candidate: iteration {latestAutopilotIteration.iterationNumber}</strong>
+                                    <span>Autopilot is evaluating and refining this run.</span>
+                                </div>
+                            )}
+                            {isAutopilotMode && autopilotSummary && (
                                 <div className="autopilot-result-banner glass-panel">
                                     <strong>
-                                        {autopilot.status === 'failed' ? 'Latest Autopilot Result' : autopilot.bestIterationNumber ? `Best Autopilot Result: iteration ${autopilot.bestIterationNumber}` : 'Autopilot result'}
+                                        {autopilotSummary.status === 'failed' ? 'Latest Autopilot Result' : autopilotSummary.bestIterationNumber ? `Best Autopilot Result: iteration ${autopilotSummary.bestIterationNumber}` : 'Autopilot result'}
                                     </strong>
                                     <span>
-                                        {autopilot.status === 'max-iterations' && 'Iteration limit reached. The satisfaction threshold was not met.'}
-                                        {autopilot.status === 'cancelled' && 'Run cancelled. Showing the best result to date.'}
-                                        {autopilot.status === 'failed' && autopilot.lastErrorIteration && `Run stopped at iteration ${autopilot.lastErrorIteration}.`}
-                                        {autopilot.status === 'satisfied' && 'Satisfaction threshold reached early.'}
-                                        {autopilot.status === 'running' && 'Autopilot is evaluating and refining this run.'}
+                                        {autopilotSummary.status === 'max-iterations' && 'Iteration limit reached. The satisfaction threshold was not met.'}
+                                        {autopilotSummary.status === 'cancelled' && 'Run cancelled. Showing the best result to date.'}
+                                        {autopilotSummary.status === 'failed' && autopilotSummary.lastErrorIteration && `Run stopped at iteration ${autopilotSummary.lastErrorIteration}.`}
+                                        {autopilotSummary.status === 'satisfied' && 'Satisfaction threshold reached early.'}
                                     </span>
                                 </div>
                             )}
