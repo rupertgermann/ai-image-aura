@@ -25,8 +25,10 @@ import {
     QWEN_IMAGE_2_1_IMAGE_MODEL,
     FLUX_2_KLEIN_4B_IMAGE_MODEL,
     assertNever,
-    isImageModelSlug,
+    isStoredImageModelSlug,
+    sanitizeImageModel,
     type ImageModelSlug,
+    type StoredImageModelSlug,
 } from '../utils/openaiModels';
 
 const GENERATE_DRAFT_KEY = 'aura_generate_draft';
@@ -60,6 +62,8 @@ export interface GenerateDraft {
     isSaved: boolean;
 }
 
+export type GenerateRunDraft = Omit<GenerateDraft, 'model'> & { model: StoredImageModelSlug };
+
 export interface GenerateLineageSource {
     archiveImageId: string;
     stepId?: string | null;
@@ -84,7 +88,7 @@ export type GenerateResultSlot =
 export interface GenerateBatchSnapshot {
     results: GenerateResultSlot[];
     references: string[] | null;
-    draft: GenerateDraft | null;
+    draft: GenerateRunDraft | null;
     lineageSource: GenerateLineageSource | null;
 }
 
@@ -161,7 +165,7 @@ class LocalGenerateSessionStore implements GenerateSessionStore {
     }
 
     transferFromArchive(image: ArchiveImage, lineageSource: GenerateLineageSource | null = { archiveImageId: image.id }, draftOverrides: Partial<GenerateDraft> = {}): Promise<void> {
-        const model = isImageModelSlug(image.model) ? image.model : DEFAULT_IMAGE_MODEL;
+        const model = sanitizeImageModel(image.model);
         return this.transfer({
             draft: sanitizeGenerateDraft({
                 ...DEFAULT_GENERATE_DRAFT,
@@ -468,7 +472,7 @@ export const sanitizeGenerateDraft = (draft: DraftLike): GenerateDraft => {
     });
 
     return {
-        model: isImageModelSlug(draft.model) ? draft.model : DEFAULT_GENERATE_DRAFT.model,
+        model: sanitizeImageModel(draft.model),
         prompt: typeof draft.prompt === 'string' ? draft.prompt : DEFAULT_GENERATE_DRAFT.prompt,
         style: typeof draft.style === 'string' ? draft.style : DEFAULT_GENERATE_DRAFT.style,
         lighting: typeof draft.lighting === 'string' ? draft.lighting : DEFAULT_GENERATE_DRAFT.lighting,
@@ -496,8 +500,9 @@ export function getActiveGenerateModel(draft: GenerateDraft): ImageModelSelectio
     }
 }
 
-export function getActiveGenerateArchiveFields(draft: GenerateDraft): ImageModelArchiveFields {
-    return buildImageModelArchiveFields(draft.model, draft[resolveImageModelDraftKey(draft.model)]);
+export function getActiveGenerateArchiveFields(draft: GenerateRunDraft): ImageModelArchiveFields {
+    const model = sanitizeImageModel(draft.model);
+    return buildImageModelArchiveFields(model, draft[resolveImageModelDraftKey(model)]);
 }
 
 export const getImageModelDraftKey = resolveImageModelDraftKey;
@@ -524,10 +529,13 @@ function sanitizeGenerateBatchSnapshot(value: unknown): GenerateBatchSnapshot | 
         return null;
     }
 
+    const storedDraft = asRecord(record.draft);
+    const draft = storedDraft ? sanitizeGenerateDraft(storedDraft) : null;
+
     return {
         results,
         references: sanitizeReferenceDataUrls(record.references),
-        draft: record.draft ? sanitizeGenerateDraft(record.draft as DraftLike) : null,
+        draft: draft && isStoredImageModelSlug(storedDraft?.model) ? { ...draft, model: storedDraft.model } : draft,
         lineageSource: sanitizeGenerateLineageSource(record.lineageSource),
     };
 }

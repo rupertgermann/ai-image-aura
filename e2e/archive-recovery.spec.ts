@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { OPENAI_IMAGE_MODEL } from '../src/utils/openaiModels';
 
 test.beforeEach(async ({ context, page, baseURL }) => {
     await context.route('**/*', (route) => new URL(route.request().url()).origin === baseURL
@@ -12,7 +13,7 @@ test.beforeEach(async ({ context, page, baseURL }) => {
 
 for (const missing of ['reference', 'layer', 'image']) {
     test(`incomplete conflicting ZIP preserves original assets and lineage when ${missing} is absent`, async ({ page }, testInfo) => {
-        const result = await page.evaluate(async (missing) => {
+        const result = await page.evaluate(async ({ missing, model }) => {
             const archivePath = '/src/archive/ArchiveStore.ts';
             const transferPath = '/src/archive/ArchiveTransfer.ts';
             const lineagePath = '/src/lineage/LineageStore.ts';
@@ -32,7 +33,7 @@ for (const missing of ['reference', 'layer', 'image']) {
             });
             await archiveStore.save({
                 id: 'saved', url: urls[0], prompt: 'Original artwork', quality: 'high',
-                aspectRatio: '64x64', model: 'gpt-image-2.5-flare', background: 'transparent', timestamp: '2026-10-24T12:00:00Z',
+                aspectRatio: '64x64', model, background: 'transparent', timestamp: '2026-10-24T12:00:00Z',
                 references: [urls[1]], layerStack: { canvasWidth: 64, canvasHeight: 64, layers: [{
                     id: 'base', name: 'Base', kind: 'base', assetUrl: urls[2], x: 0, y: 0,
                     width: 64, height: 64, rotation: 0, opacity: 1, blendMode: 'normal', visible: true, locked: false,
@@ -62,7 +63,7 @@ for (const missing of ['reference', 'layer', 'image']) {
             const layer = await exported.file('aura-saved-layer-base.png')?.async('base64');
             return { original, originalStep, preserved, steps, summary, reference, layer,
                 complete: Array.from(complete), partial: Array.from(partial), missingFile };
-        }, missing);
+        }, { missing, model: OPENAI_IMAGE_MODEL });
         await testInfo.attach('archive-transfer.json', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
         expect(result.summary.missingAssetFiles).toContain(result.missingFile);
         expect(result.summary.importedImageIds).toEqual([]);
@@ -104,7 +105,7 @@ for (const missing of ['reference', 'layer', 'image']) {
 }
 
 test('stale listing preserves the rich save and concurrent recovery inserts a true orphan once', async ({ page }, testInfo) => {
-    const result = await page.evaluate(async () => {
+    const result = await page.evaluate(async (model) => {
         const archivePath = '/src/archive/ArchiveStore.ts';
         const metadataPath = '/src/archive/SQLiteArchiveMetadataPort.ts';
         const storagePath = '/src/services/StorageService.ts';
@@ -133,7 +134,7 @@ test('stale listing preserves the rich save and concurrent recovery inserts a tr
         canvas.height = 64;
         const url = canvas.toDataURL();
         await saveStore.save({ id: 'rich', url, prompt: 'Rich saved artwork', quality: 'medium',
-            aspectRatio: '96x64', background: 'auto', model: 'gpt-image-2.5-flare', width: 96, height: 64,
+            aspectRatio: '96x64', background: 'auto', model, width: 96, height: 64,
             favorite: true, style: 'cinematic', lighting: 'sunlight', palette: 'warm',
             actualParameters: { revisedPrompt: 'Rich revised prompt', size: '96x64' },
             costLedger: buildImageCostLedger({ provider: 'local', model: 'local-model', operation: 'image-generation' }),
@@ -153,7 +154,7 @@ test('stale listing preserves the rich save and concurrent recovery inserts a tr
         ]);
         const orphan = await saveStore.get('orphan');
         return { original, listed, saved, orphan, recovered: recoveries.map((images) => images.find((image) => image.id === 'orphan')) };
-    });
+    }, OPENAI_IMAGE_MODEL);
     await testInfo.attach('archive-recovery.json', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
     expect(result.saved).toEqual(result.original);
     expect(result.listed).toEqual([result.original]);

@@ -1,11 +1,12 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { OPENAI_IMAGE_MODEL } from '../src/utils/openaiModels';
 
 const imageId = 'editor-draft-provenance';
 const imagePrompt = 'Artwork with a restored Editor draft';
 const firstPrompt = 'Make the artwork red';
 const secondPrompt = 'Make the artwork blue';
-const model = 'gpt-image-2.5-flare';
+const model = OPENAI_IMAGE_MODEL;
 
 async function readSavedImage(page: Page) {
     return page.evaluate(async (id) => {

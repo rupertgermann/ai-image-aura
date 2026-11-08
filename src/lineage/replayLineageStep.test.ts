@@ -26,7 +26,7 @@ describe('replayLineageStep', () => {
             },
         });
         expect(buildGenerateReplay(null, step).draft).toMatchObject({
-            model: 'gpt-image-2.5-flare', prompt: 'historical prompt', gptImage: controls,
+            model: OPENAI_IMAGE_MODEL, prompt: 'historical prompt', gptImage: controls,
         });
         expect(step.metadata.imageModel).toEqual({ slug: 'gpt-image-2', controls });
     });
@@ -37,7 +37,7 @@ describe('replayLineageStep', () => {
                 aiEdit: { prompt: 'historical edit', imageModel: { slug: 'gpt-image-2' } },
             },
         });
-        expect(buildEditorReplay(step)).toEqual({ model: 'gpt-image-2.5-flare', prompt: 'historical edit' });
+        expect(buildEditorReplay(step)).toEqual({ model: OPENAI_IMAGE_MODEL, prompt: 'historical edit' });
     });
 
     it('hydrates a generate draft from lineage metadata and preserves an exact fork source', () => {

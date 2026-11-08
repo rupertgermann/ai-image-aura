@@ -7,6 +7,7 @@ import {
     mergeApiCostLedgers,
     sanitizeApiCostLedger,
 } from './apiCost';
+import { OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL } from '../utils/openaiModels';
 
 describe('apiCost', () => {
     it('records local image inference as a calculated zero-cost call', () => {
@@ -29,7 +30,7 @@ describe('apiCost', () => {
         });
     });
 
-    it.each(['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'])('calculates %s cost from image usage tokens', (model) => {
+    it.each([OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL])('calculates %s cost from image usage tokens', (model) => {
         const ledger = buildImageCostLedger({
             provider: 'openai',
             model,
@@ -69,7 +70,7 @@ describe('apiCost', () => {
     it('allocates shared OpenAI image request cost across returned images', () => {
         const ledger = buildImageCostLedger({
             provider: 'openai',
-            model: 'gpt-image-2.5-flare',
+            model: OPENAI_IMAGE_MODEL,
             operation: 'image-generation',
             usageScope: 'request',
             usageImageCount: 2,

@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
+import { OPENAI_SUNBURST_IMAGE_MODEL, getImageModelLabel } from '../src/utils/openaiModels';
 
 const prompt = 'Four colored squares for the durable archive test';
-const model = 'gpt-image-2.5-sunburst';
+const model = OPENAI_SUNBURST_IMAGE_MODEL;
 const imageBase64 = readFileSync(new URL('./fixtures/four-colors.png', import.meta.url)).toString('base64');
 
 test('generated image survives Save to Archive and a full reload', async ({ page, context, baseURL }, testInfo) => {
@@ -46,7 +47,7 @@ test('generated image survives Save to Archive and a full reload', async ({ page
     const details = page.getByRole('dialog', { name: 'Image details' });
     await expect(details.locator('.prompt-container p')).toHaveText(prompt);
     await expect(details.locator('.info-cell').filter({ hasText: 'MODEL' }).locator('span'))
-        .toHaveText('GPT Image 2.5 Sunburst');
+        .toHaveText(getImageModelLabel(OPENAI_SUNBURST_IMAGE_MODEL));
     const restored = details.locator('.modal-image');
     await expect(restored).toBeVisible();
     await expect(restored).toHaveJSProperty('naturalWidth', 128);
