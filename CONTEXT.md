@@ -11,8 +11,7 @@ into an image. The image model is chosen **per generation** in the Generate view
 and per AI transform in the Editor view. It is recorded on every saved image and
 every lineage step.
 
-Current values: `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`,
-`nano-banana-pro`, `qwen-image-2.1`, `flux-2-klein-4b`.
+See [Supported models](README.md#supported-models) for the available choices.
 
 `gpt-image-2`, `gpt-image-2.5-flare`, and `gpt-image-2.5-sunburst` are retired
 image models that can appear in saved history.

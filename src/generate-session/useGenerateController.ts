@@ -28,12 +28,22 @@ import { getProviderLabel, LOCAL_PROVIDER, resolveImageModelConfig, type Provide
 
 export type { GenerateResultSlot };
 
-interface AutopilotProgressState {
-    running: boolean;
+interface AutopilotPreview {
+    previousImageUrl: string | null;
+    lineageSource: GenerateLineageSource | null;
     iterations: AutopilotIteration[];
-    status: 'idle' | 'running' | 'satisfied' | 'max-iterations' | 'cancelled' | 'failed';
+    bestIterationNumber: number | null;
+}
+
+interface AutopilotResultSummary {
+    status: AutopilotSessionResult['status'];
     bestIterationNumber: number | null;
     lastErrorIteration: number | null;
+}
+
+interface DisplayedBatch {
+    snapshot: GenerateBatchSnapshot;
+    autopilotSummary: AutopilotResultSummary | null;
 }
 
 interface UseGenerateControllerOptions {
@@ -53,6 +63,12 @@ interface UseGenerateControllerOptions {
     completionNotificationsEnabled?: boolean;
     completionNotificationPort?: Pick<CompletionNotificationPort, 'showCompletion'>;
     isDocumentHidden?: () => boolean;
+}
+
+interface GenerateSessionRestoration {
+    session: NonNullable<UseGenerateControllerOptions['session']>;
+    batch: Promise<GenerateBatchSnapshot | null> | null;
+    references: Promise<string[]> | null;
 }
 
 interface BuildGeneratedArchiveImageInput {
@@ -358,11 +374,8 @@ export function useGenerateController({
     completionNotificationPort = browserCompletionNotificationPort,
     isDocumentHidden = () => typeof document !== 'undefined' && document.hidden,
 }: UseGenerateControllerOptions) {
-    const [batch, setBatch] = useState<GenerateBatchSnapshot | null>(null);
-    const [autopilotPreview, setAutopilotPreview] = useState<{
-        previousImageUrl: string | null;
-        lineageSource: GenerateLineageSource | null;
-    } | null>(null);
+    const [displayedBatch, setDisplayedBatch] = useState<DisplayedBatch | null>(null);
+    const [autopilotPreview, setAutopilotPreview] = useState<AutopilotPreview | null>(null);
     const [currentPartialResult, setCurrentPartialResult] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -375,18 +388,13 @@ export function useGenerateController({
     const runningRef = useRef(false);
     const savingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
-    const [autopilot, setAutopilot] = useState<AutopilotProgressState>({
-        running: false,
-        iterations: [],
-        status: 'idle',
-        bestIterationNumber: null,
-        lastErrorIteration: null,
-    });
     const autopilotSessionRef = useRef<AutopilotSession | null>(null);
     const autopilotCancelRequested = useRef(false);
     const partialRunIdRef = useRef(0);
+    const restorationRef = useRef<GenerateSessionRestoration | null>(null);
 
-    const latestIteration = autopilot.iterations.at(-1);
+    const latestIteration = autopilotPreview?.iterations.at(-1);
+    const batch = displayedBatch?.snapshot ?? null;
     const currentBatch = useMemo<GenerateBatchSnapshot | null>(() => autopilotPreview ? {
         results: latestIteration ? [buildAutopilotResultSlot(latestIteration)] : [],
         references: null,
@@ -399,10 +407,11 @@ export function useGenerateController({
         ? latestIteration?.imageDataUrl ?? autopilotPreview.previousImageUrl
         : getFirstSuccessfulResultSlot(currentBatchResults)?.imageUrl ?? null;
 
-    const adoptBatch = useCallback(async (next: GenerateBatchSnapshot, persistedDraft = next.draft) => {
-        setBatch(next);
+    const adoptBatch = useCallback(async (next: DisplayedBatch, persistedDraft = next.snapshot.draft) => {
+        if (restorationRef.current?.session === session) restorationRef.current.batch = null;
+        setDisplayedBatch(next);
         setAutopilotPreview(null);
-        await session.saveCurrentBatch({ ...next, draft: persistedDraft });
+        await session.saveCurrentBatch({ ...next.snapshot, draft: persistedDraft });
     }, [session]);
 
     const updateDraft = useCallback((patch: Partial<GenerateDraft>) => {
@@ -410,19 +419,42 @@ export function useGenerateController({
     }, [setDraft]);
 
     useEffect(() => {
-        session.loadCurrentBatch().then((batch) => {
-            if (!batch) {
-                return;
-            }
+        // StrictMode reattaches the observer, but transferred references can only be consumed once.
+        if (restorationRef.current?.session !== session) {
+            restorationRef.current = {
+                session,
+                batch: session.loadCurrentBatch(),
+                references: session.consumeTransferredReferences(),
+            };
+        }
+        const restoration = restorationRef.current;
+        let active = true;
 
-            setBatch(batch);
+        void restoration.batch?.then((batch) => {
+            if (active && restoration.batch && batch) {
+                setDisplayedBatch({ snapshot: batch, autopilotSummary: null });
+            }
+        }, () => {
+            if (active && restoration.batch && !runningRef.current && !savingRef.current) {
+                setError('Could not restore the saved generation results.');
+            }
         });
 
-        session.consumeTransferredReferences().then((references) => {
+        void restoration.references?.then((references) => {
+            if (!active) return;
+            restoration.references = null;
             if (references.length > 0) {
                 replaceReferences(references);
             }
+        }, () => {
+            if (!active) return;
+            restoration.references = null;
+            if (!runningRef.current && !savingRef.current) {
+                setError('Could not restore transferred reference images.');
+            }
         });
+
+        return () => { active = false; };
     }, [replaceReferences, session]);
 
     const generate = useCallback(async () => {
@@ -446,11 +478,6 @@ export function useGenerateController({
             },
             setCurrentPartialResult,
         });
-        setAutopilot((current) => ({
-            ...current,
-            running: false,
-        }));
-
         let completionNotification: CompletionNotificationPayload | null = null;
 
         try {
@@ -477,9 +504,14 @@ export function useGenerateController({
             });
             const batchResults = buildGenerateResultSlots(results);
             const successfulResult = getFirstSuccessfulResultSlot(batchResults);
-            if (!successfulResult && getFirstSuccessfulResultSlot(currentBatch?.results ?? [])) {
-                const failure = batchResults.find((result) => result.status === 'failed');
-                throw new Error(failure?.error ?? 'Generation failed for every batch result.');
+            if (!successfulResult) {
+                const restoration = restorationRef.current;
+                const previousBatch = currentBatch
+                    ?? (restoration?.session === session ? await restoration.batch : null);
+                if (getFirstSuccessfulResultSlot(previousBatch?.results ?? [])) {
+                    const failure = batchResults.find((result) => result.status === 'failed');
+                    throw new Error(failure?.error ?? 'Generation failed for every batch result.');
+                }
             }
             const batchSnapshot: GenerateBatchSnapshot = {
                 results: batchResults,
@@ -489,7 +521,7 @@ export function useGenerateController({
             };
 
             partialPreviewRun.clear();
-            await adoptBatch(batchSnapshot);
+            await adoptBatch({ snapshot: batchSnapshot, autopilotSummary: null });
 
             if (!successfulResult) {
                 updateDraft({ isSaved: false });
@@ -569,16 +601,12 @@ export function useGenerateController({
         setAutopilotPreview({
             previousImageUrl: currentResult,
             lineageSource: session.loadLineageSource(),
-        });
-        setAutopilot({
-            running: true,
             iterations: [],
-            status: 'running',
             bestIterationNumber: null,
-            lastErrorIteration: null,
         });
 
         let completionNotification: CompletionNotificationPayload | null = null;
+        let lastErrorIteration: number | null = null;
 
         try {
             const initialCostLedger = goalTranslationCostContext
@@ -606,18 +634,15 @@ export function useGenerateController({
                 maxIterations: input.maxIterations,
                 satisfactionThreshold: input.satisfactionThreshold,
                 onIterationComplete: (iteration, runningBest) => {
-                    setAutopilot((current) => ({
+                    setAutopilotPreview((current) => current && ({
                         ...current,
                         iterations: [...current.iterations, iteration],
                         bestIterationNumber: runningBest.iterationNumber,
                     }));
                 },
                 onError: (error, iterationNumber) => {
+                    lastErrorIteration = iterationNumber;
                     setError(error.message);
-                    setAutopilot((current) => ({
-                        ...current,
-                        lastErrorIteration: iterationNumber,
-                    }));
                 },
             });
 
@@ -626,7 +651,14 @@ export function useGenerateController({
                     prompt: outcome.batch.draft.prompt,
                     isSaved: false,
                 });
-                await adoptBatch(outcome.batch);
+                await adoptBatch({
+                    snapshot: outcome.batch,
+                    autopilotSummary: {
+                        status: outcome.result.status,
+                        bestIterationNumber: outcome.result.bestIteration?.iterationNumber ?? null,
+                        lastErrorIteration,
+                    },
+                });
                 if (outcome.batch.lineageSource) {
                     session.saveLineageSource(outcome.batch.lineageSource);
                 }
@@ -636,24 +668,12 @@ export function useGenerateController({
                 setError(outcome.result.error.message);
             }
 
-            setAutopilot((current) => ({
-                ...current,
-                running: false,
-                status: outcome.result.status,
-                bestIterationNumber: outcome.result.bestIteration?.iterationNumber ?? current.bestIterationNumber,
-            }));
-
             completionNotification = createAutopilotCompletionNotification(outcome.result);
 
             return outcome.result;
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Autopilot failed';
             setError(message);
-            setAutopilot((current) => ({
-                ...current,
-                running: false,
-                status: 'failed',
-            }));
             completionNotification = {
                 title: 'Autopilot failed',
                 body: message,
@@ -681,25 +701,27 @@ export function useGenerateController({
     }, []);
 
     const saveResults = useCallback(async (slotIndexes?: number[]) => {
-        if (savingRef.current || runningRef.current || !currentBatch || !hasUnsavedSuccessfulResults(currentBatch.results)) return;
+        if (savingRef.current || runningRef.current || !displayedBatch) return;
+        const { snapshot } = displayedBatch;
+        if (!hasUnsavedSuccessfulResults(snapshot.results)) return;
         savingRef.current = true;
         setSaving(true);
         setError(null);
         try {
             await saveGenerateResultSlots({
-                results: currentBatch.results,
+                results: snapshot.results,
                 slotIndexes,
                 draft,
-                runDraft: currentBatch.draft,
-                usedReferences: currentBatch.references,
-                runLineageSource: currentBatch.lineageSource,
+                runDraft: snapshot.draft,
+                usedReferences: snapshot.references,
+                runLineageSource: snapshot.lineageSource,
                 serializeReferences,
                 saveImage: onSaveImage,
                 onSaved: async (results) => {
                     session.clearLineageSource();
                     updateDraft({ isSaved: areAllSuccessfulResultsSaved(results) });
                     // Legacy results keep unknown run inputs in memory, but persist the draft used to save.
-                    await adoptBatch({ ...currentBatch, results }, currentBatch.draft ?? draft);
+                    await adoptBatch({ ...displayedBatch, snapshot: { ...snapshot, results } }, snapshot.draft ?? draft);
                 },
             });
         } catch (err: unknown) {
@@ -708,7 +730,7 @@ export function useGenerateController({
             savingRef.current = false;
             setSaving(false);
         }
-    }, [adoptBatch, currentBatch, draft, onSaveImage, serializeReferences, session, updateDraft]);
+    }, [adoptBatch, displayedBatch, draft, onSaveImage, serializeReferences, session, updateDraft]);
 
     const saveResult = (slotIndex: number) => saveResults([slotIndex]);
     const saveAllResults = () => saveResults();
@@ -731,8 +753,9 @@ export function useGenerateController({
 
     const clear = useCallback(async () => {
         if (runningRef.current || savingRef.current) return;
+        if (restorationRef.current?.session === session) restorationRef.current.batch = null;
         setError(null);
-        setBatch(null);
+        setDisplayedBatch(null);
         setAutopilotPreview(null);
         setCurrentPartialResult(null);
         await session.clearCurrentResult();
@@ -747,7 +770,8 @@ export function useGenerateController({
         loading,
         saving,
         error,
-        autopilot,
+        autopilotPreview,
+        autopilotSummary: autopilotPreview ? null : displayedBatch?.autopilotSummary ?? null,
         translatingGoal,
         translateGoal,
         updateDraft,

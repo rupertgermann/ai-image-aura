@@ -1,10 +1,10 @@
 # AURA AI
 
-AURA AI is a local-first browser studio for generating, organizing, editing, and iterating on AI images with OpenAI, Google, and user-run Qwen Image 2.1 or FLUX.2 klein 4B servers.
+AURA AI is a local-first browser studio for AI image generation and layered editing. Use OpenAI, Google, or your own Qwen Image 2.1 and FLUX.2 klein 4B servers, refine results with Autopilot, and keep an archive with replayable creative history.
 
-The app runs entirely in the browser. Provider API keys, the local server URL, generated images, reference images, layer assets, working session state, archive metadata, and lineage history stay on the local device instead of passing through an application backend.
+The app runs in the browser without an application backend or account. API keys, drafts, archive images, layer assets, and lineage history are stored on your device. Generation and AI editing send prompts and image inputs directly to the selected provider or user-run server; Autopilot also sends goals and images to its selected reasoning provider.
 
-The interface uses monochrome panels, orange accents, and compact controls. See `docs/DESIGN.md` for the Telepathic Instruments reference.
+The interface has light and dark modes, monochrome panels, orange accents, and compact controls. See `docs/DESIGN.md` for the Telepathic Instruments reference.
 
 ## Screens
 
@@ -16,13 +16,28 @@ The interface uses monochrome panels, orange accents, and compact controls. See 
 |--------|--------|
 | ![Editor view](docs/screens/Editor.png) | ![Detail view](docs/screens/Detail.png) |
 
-## Highlights
+## Current state and features
 
-- Generate up to four images per run, with optional reference images.
-- Use Autopilot to evaluate results and refine prompts against a goal.
-- Edit image layers, apply adjustments, and target AI edits with masks.
-- Search saved images, mark favorites, and transfer archives as ZIP files.
-- Reopen editor drafts and replay or branch from saved lineage steps.
+Version `0.2.0` includes Generate, Archive, Editor, and Settings views. It runs locally through Vite and builds as a static browser app.
+
+- Generate one to four images per run with model-specific controls, style modifiers, and reference images from uploads, drag-and-drop, or clipboard paste.
+- Use Autopilot to translate a goal into a prompt, evaluate results, and refine the prompt across iterations while retaining the best result.
+- Build layered compositions with blend modes, image transforms, adjustments, filters, undo, and redo. AI edits create new layers; supported models also accept painted masks.
+- Keep drafts across reloads and save editable layers alongside flattened archive previews.
+- Search the archive, mark favorites, manage selections, and export ZIP bundles with images, references, layers, and lineage metadata.
+- Inspect saved parameters and lineage, replay earlier steps, and branch from a previous generation or edit.
+- Inspect API cost breakdowns for image generation and Autopilot reasoning when usage data is available. Missing costs are shown as unavailable or partial.
+- Switch between light and dark modes and enable completion notifications for runs that finish in the background.
+
+### Supported models
+
+| Provider | Image models | Autopilot reasoning |
+|----------|--------------|---------------------|
+| OpenAI | GPT Image 2.6 Flare (`gpt-image-2.6-flare`), GPT Image 2.6 Sunburst (`gpt-image-2.6-sunburst`) | GPT 6 Sol (`gpt-6-sol`) |
+| Google | Nano Banana Pro (`nano-banana-pro`) | Gemini 2.5 Flash (`gemini-2.5-flash`) |
+| User-run server | Qwen Image 2.1 (`qwen-image-2.1`), FLUX.2 klein 4B (`flux-2-klein-4b`) | Uses a configured OpenAI or Google reasoning provider |
+
+Hosted models require your own API keys. Local image models require a compatible server configured in Settings. Local image inference has no API charge; Autopilot can still incur hosted reasoning charges.
 
 ## Tech Stack
 
@@ -48,7 +63,7 @@ npm install
 npm run dev
 ```
 
-Open the app in your browser, go to **Settings**, and configure the providers for the models you want to use. OpenAI powers `gpt-image-2.6-flare` and `gpt-image-2.6-sunburst` for images, and `gpt-6-sol` for reasoning; Google powers `nano-banana-pro` and `gemini-2.5-flash`. Qwen Image 2.1 and FLUX.2 klein 4B use a Local server URL instead of an API key.
+Open the app in your browser and configure the provider for your chosen [model](#supported-models) in **Settings**.
 
 ### Qwen Image 2.1 local server
 
@@ -114,21 +129,22 @@ If `sd-server` runs behind [llama-swap](https://github.com/mostlygeek/llama-swap
 
 The Generate view supports:
 
-- Image model selection among `GPT Image 2.6 Flare`, `GPT Image 2.6 Sunburst`, `Nano Banana Pro`, `Qwen Image 2.1`, and `FLUX.2 klein 4B` directly in Generate
+- [Image model](#supported-models) selection directly in Generate
 - Mode toggle between `Single Shot` and `Autopilot`
 - Free-form text prompts plus example prompt presets
 - Goal-to-prompt translation for Autopilot mode
-- Reasoning model selection between `GPT 6 Sol` and `Gemini 2.5 Flash` in Autopilot mode
-- GPT Image 2.6 quality options: `low`, `medium`, `high`, `xhigh`, `max`, `auto` (default: `medium`)
-- GPT Image 2.6 size options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
-- GPT Image 2.6 background options: `auto`, `opaque`, `transparent`
+- [Reasoning model](#supported-models) selection in Autopilot mode
+- GPT Image quality options: `low`, `medium`, `high`, `xhigh`, `max`, `auto` (default: `medium`)
+- GPT Image size options: `auto`, `1024x1024`, `1536x1024`, `1024x1536`
+- GPT Image background options: `auto`, `opaque`, `transparent`
 - `Nano Banana Pro` aspect ratio options: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
 - `Nano Banana Pro` resolution options: `1K`, `2K`, `4K`
 - `Qwen Image 2.1` aspect ratios: `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `16:9`, `9:16`
 - `Qwen Image 2.1` resolution options: `1K`, `2K`; background options: `Auto`, `Transparent`
-- GPT Image 2.6 batch size options: `1`, `2`, `3`, `4`
+- GPT Image batch size options: `1`, `2`, `3`, `4`
 - `Nano Banana Pro` batch size options: `1`, `2`, `3`, `4`
 - `Qwen Image 2.1` batch size options: `1`, `2`, `3`, `4`
+- `FLUX.2 klein 4B` aspect ratios: `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `16:9`, `9:16`; resolution options: `1K`, `2K`; batch size options: `1`, `2`, `3`, `4`
 - Style, lighting, and palette modifiers that are merged into the request prompt
 - Configurable Autopilot iteration count from `1` to `8`
 - Configurable Autopilot satisfaction threshold from `50` to `100`
@@ -137,6 +153,7 @@ The Generate view supports:
 - Multiple reference image uploads through file picker, drag-and-drop, and clipboard paste
 - `Nano Banana Pro` reference inputs are capped to the first `14` images for provider compatibility
 - `Qwen Image 2.1` reference inputs are capped to the first `10` images
+- `FLUX.2 klein 4B` reference inputs are capped to the first `4` images
 - Reference preview modal with next and previous navigation
 - Streaming partial-image previews during single-shot generation for models that support partial streaming
 - A batch result grid for multi-image runs with per-slot save, download, use-as-reference, and isolated per-slot failure reporting
@@ -145,7 +162,7 @@ The Generate view supports:
 - Actual parameter panels show provider-reported values and measured elapsed time. Unavailable values are omitted.
 - Save-to-archive, download, and clear-result actions
 
-Prompt-only GPT Image 2.6 generations use the OpenAI generations endpoint. GPT Image 2.6 requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts. `Qwen Image 2.1` uses the local server's OpenAI-compatible image generations and edits endpoints. For Transparent background, AURA adds Qwen's RGBA wording to the request prompt while keeping the saved prompt unchanged; PNG results preserve any alpha channel the model returns.
+Prompt-only GPT Image generations use the OpenAI generations endpoint. GPT Image requests with reference images use the OpenAI edits endpoint so the request can include uploaded image inputs. `Nano Banana Pro` generation and reference-guided generation use Google Gemini `generateContent` requests with text and inline image parts. `Qwen Image 2.1` uses the local server's OpenAI-compatible image generations and edits endpoints. For Transparent background, AURA adds Qwen's RGBA wording to the request prompt while keeping the saved prompt unchanged; PNG results preserve any alpha channel the model returns.
 
 Batch runs request multiple images per generation. `Nano Banana Pro` fans batch requests out into parallel `generateContent` calls so a failed slot stays isolated while the rest of the batch succeeds. `Qwen Image 2.1` requests the whole batch in one local call, so a failed call marks every slot failed.
 
@@ -153,7 +170,7 @@ Saved Generate results use the provider-run reference image snapshot, so archive
 
 Autopilot reuses the current image model settings and provider-used reference snapshot for every iteration, evaluates results against the goal with the selected reasoning model, refines the prompt between iterations, and keeps the best-scoring result as the primary output. Autopilot result slots carry lineage and actual parameter metadata like regular generated results. With `Qwen Image 2.1`, image inference has no API charge; the selected OpenAI or Google reasoning model may still incur a charge.
 
-Flare is the default image model. Flare and Sunburst share quality, size, background, batch, streaming-preview, and transform-mask controls. Archive images and lineage keep their original model labels. When you reopen a draft or replay a step from GPT Image 2.5, AURA selects the matching GPT Image 2.6 model and restores the compatible controls. GPT Image 2 uses GPT Image 2.6 Flare for replay. Saved `gpt-5.4` reasoning preferences fall back to GPT 6 Sol.
+Flare is the default image model. Flare and Sunburst share quality, size, background, batch, streaming-preview, and transform-mask controls. Archive images and lineage keep their original model labels. When you reopen a draft or replay a step from GPT Image 2.5, AURA selects the current version of the same variant and restores the compatible controls. GPT Image 2 uses the current Flare for replay. Saved `gpt-5.4` reasoning preferences fall back to GPT 6 Sol.
 
 ### Archive
 
@@ -222,7 +239,7 @@ The Settings view supports:
 - A completion notifications toggle that surfaces a desktop notification when a run finishes while the app is in the background
 - Notification readiness status that reflects unsupported browsers and insecure contexts
 
-The sidebar includes a collapsible navigation rail.
+The sidebar includes a collapsible navigation rail and a light/dark mode toggle. The selected theme persists across reloads.
 
 ## Storage Model
 
@@ -252,9 +269,7 @@ The app calls provider APIs directly from the browser.
 - Google image generation and editing use Gemini `generateContent`
 - Google Autopilot reasoning uses Gemini `generateContent`
 - Local server generation uses `POST /v1/images/generations`; reference-based generation and Editor AI transforms use `POST /v1/images/edits`; the Settings connection test uses `GET /v1/models`
-- Local image requests send the selected model ID, `qwen-image-2.1` or `flux-2-klein-4b`, with no Authorization header or hosted-provider key
-- Image models: `gpt-image-2.6-flare`, `gpt-image-2.6-sunburst`, `nano-banana-pro`, `qwen-image-2.1`, `flux-2-klein-4b`
-- Reasoning models: `gpt-6-sol`, `gemini-2.5-flash`
+- Local image requests send the selected model ID without an Authorization header or hosted-provider key
 - Shared image-model control facts drive UI choices, default values, validation, provider request mapping, reference limits, mask capability, streaming capability, and archive metadata
 - The app requests between one and four images per generation, fanning `Nano Banana Pro` batches out into isolated parallel requests
 - Local server image inference has a calculated $0.00 API cost; Autopilot totals still include hosted reasoning calls
@@ -293,6 +308,8 @@ These outputs are replaced by the next run; copy them first to retain a run.
 ## Privacy and Security
 
 - The project is designed for local use in the browser
+- Prompts and image inputs are sent directly to the selected provider or user-run server. Autopilot uses a hosted reasoning provider even with local image models
+- Browser storage holds API keys and archive data. Export archive ZIP bundles before clearing site data or moving to another browser
 - Secrets are not committed to the repository
 - The repository does not ship with embedded API keys, `.env` files, or private key material
 - Sensitive provider request payloads are not logged by the client helpers

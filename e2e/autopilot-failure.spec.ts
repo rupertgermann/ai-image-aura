@@ -4,6 +4,95 @@ import { expect, test } from '@playwright/test';
 const imageBase64 = readFileSync(new URL('./fixtures/four-colors.png', import.meta.url)).toString('base64');
 const prompt = 'Keep the completed Autopilot image';
 
+test('the Autopilot summary follows its result when runs fail or replace it', async ({ page, context, baseURL }, testInfo) => {
+    let failImage = false;
+    let firstRun = true;
+    let imageRequests = 0;
+    let evaluations = 0;
+    let releaseImage = () => {};
+    const imageReady = new Promise<void>((resolve) => { releaseImage = resolve; });
+    await context.route('**/*', async (route) => {
+        const url = route.request().url();
+        if (url === 'https://api.openai.com/v1/images/generations') {
+            if (failImage) await route.fulfill({ status: 429, json: { error: { message: 'Synthetic image quota exceeded' } } });
+            else {
+                if (firstRun && ++imageRequests === 3) await imageReady;
+                await route.fulfill({ json: { data: [{ b64_json: imageBase64 }] } });
+            }
+        } else if (url === 'https://api.openai.com/v1/responses') {
+            const evaluation = route.request().postData()?.includes('satisfaction-evaluator.v1');
+            const outputText = evaluation
+                ? JSON.stringify({ score: firstRun ? (++evaluations === 1 ? 80 : 20) : 100, feedback: ['Keep the squares.'] })
+                : 'Four colorful squares';
+            await route.fulfill({ json: { output_text: outputText } });
+        } else if (new URL(url).origin === baseURL) {
+            await route.continue();
+        } else {
+            await route.abort();
+        }
+    });
+
+    await page.goto('/');
+    const navigation = page.getByRole('navigation', { name: 'Main navigation' });
+    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByLabel('OpenAI API Key', { exact: true }).fill('synthetic-provider-key');
+    await page.locator('section').filter({ has: page.getByRole('heading', { name: 'OpenAI API Key', exact: true }) })
+        .getByRole('button', { name: 'Save key', exact: true }).click();
+    await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
+    const autopilot = page.getByRole('button', { name: 'Autopilot', exact: true });
+    const run = page.getByRole('button', { name: 'Run Autopilot', exact: true });
+    const confirm = page.getByRole('button', { name: 'Confirm Run', exact: true });
+    const replace = page.getByRole('button', { name: 'Continue', exact: true });
+    const summary = page.getByText('Best Autopilot Result: iteration 1', { exact: true });
+    const result = page.getByRole('img', { name: 'Generated result', exact: true });
+    await autopilot.click();
+    await page.getByLabel('Starting prompt', { exact: true }).fill(prompt);
+    await page.getByLabel('Goal', { exact: true }).fill('Keep four colored squares');
+    await page.getByLabel('Max iterations', { exact: true }).fill('3');
+    await run.click();
+    await confirm.click();
+    try {
+        await expect(page.getByText('Autopilot candidate: iteration 2', { exact: true })).toBeVisible();
+        await expect(page.locator('.autopilot-thumbnail.best').getByAltText('Autopilot iteration 1', { exact: true })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath('live-candidate-and-best.png') });
+    } finally {
+        releaseImage();
+    }
+    await expect(summary).toBeVisible();
+    firstRun = false;
+
+    failImage = true;
+    await run.click();
+    await replace.click();
+    await confirm.click();
+    await expect(page.getByRole('alert')).toContainText('Synthetic image quota exceeded');
+    await expect(result).toBeVisible();
+    await expect.soft(summary).toBeVisible({ timeout: 1500 });
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+    await expect.soft(summary).toBeVisible({ timeout: 1500 });
+    await page.screenshot({ path: testInfo.outputPath('retained-result-and-summary.png') });
+
+    failImage = false;
+    await run.click();
+    await confirm.click();
+    await expect(page.getByText('Best result selected from iteration 1.', { exact: true })).toBeVisible();
+    await expect(summary).toBeVisible();
+    await page.getByRole('button', { name: 'Single Shot', exact: true }).click();
+    await page.getByLabel('Prompt', { exact: true }).fill('A new Single Shot result');
+    await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+    await replace.click();
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+    await autopilot.click();
+    await expect(result).toBeVisible();
+    await expect.soft(summary).toHaveCount(0, { timeout: 1500 });
+    await expect.soft(page.getByText('Best result selected from iteration 1.', { exact: true })).toHaveCount(0, { timeout: 1500 });
+    await page.screenshot({ path: testInfo.outputPath('single-shot-result.png') });
+    await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Open image: A new Single Shot result', exact: true })).toBeVisible();
+});
+
 for (const failedIteration of [1, 2]) {
     test(`a failed evaluation on iteration ${failedIteration} leaves its image available to save`, async ({ page, context, baseURL }, testInfo) => {
         let generations = 0;

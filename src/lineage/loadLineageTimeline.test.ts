@@ -2,25 +2,26 @@ import { describe, expect, it } from 'vitest';
 import type { ApiCostKind, ApiCostLedger } from '../db/types';
 import type { LineageStep } from './LineageStore';
 import { loadLineageTimeline } from './loadLineageTimeline';
+import { OPENAI_IMAGE_MODEL, getImageModelLabel } from '../utils/openaiModels';
 
 describe('loadLineageTimeline', () => {
     it.each([
         ['generation', { imageModel: { slug: 'gpt-image-2' } }],
         ['reference-generation', { model: 'gpt-image-2' }],
         ['autopilot-iteration', { imageModel: { slug: 'gpt-image-2' } }],
-        ['ai-edit', { aiEdit: { imageModel: { slug: 'gpt-image-2' } }, model: 'gpt-image-2.6-flare' }],
+        ['ai-edit', { aiEdit: { imageModel: { slug: 'gpt-image-2' } }, model: OPENAI_IMAGE_MODEL }],
     ] as const)('labels a retired %s ancestor independently of the current Flare step', async (stepType, metadata) => {
         const ancestor = createStep({ id: 'retired', archiveImageId: 'old-image', stepType,
             timestamp: '2026-04-04', metadata,
         });
         const current = createStep({ id: 'current', archiveImageId: 'flare-image', parentStepId: 'retired',
-            stepType: 'generation', timestamp: '2026-09-26', metadata: { imageModel: { slug: 'gpt-image-2.6-flare' } },
+            stepType: 'generation', timestamp: '2026-09-26', metadata: { imageModel: { slug: OPENAI_IMAGE_MODEL } },
         });
         const timeline = await loadLineageTimeline('flare-image', createStore({
             byArchiveImageId: { 'flare-image': [current] }, byId: { retired: ancestor }, children: {},
         }));
         expect(timeline.entries.map(entry => [entry.id, entry.imageModelLabel])).toEqual([
-            ['retired', 'GPT Image 2 (retired)'], ['current', 'GPT Image 2.6 Flare'],
+            ['retired', 'GPT Image 2 (retired)'], ['current', getImageModelLabel(OPENAI_IMAGE_MODEL)],
         ]);
     });
 

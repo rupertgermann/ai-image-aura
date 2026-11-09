@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
+import { OPENAI_IMAGE_MODEL } from '../src/utils/openaiModels';
 
 const cases = [
     { name: 'right angle', x: 250, y: 120, rotation: 90, mask: false, whole: false },
@@ -69,7 +70,7 @@ for (const scenario of cases) {
             }
         });
         await page.goto('/');
-        await page.evaluate(async (geometry) => {
+        await page.evaluate(async ({ geometry, model }) => {
             const canvas = document.createElement('canvas');
             canvas.width = canvas.height = 500;
             const drawing = canvas.getContext('2d');
@@ -92,13 +93,13 @@ for (const scenario of cases) {
             const common = { opacity: 1, blendMode: 'normal', visible: true };
             await archiveStore.save({
                 id: 'rotation-test', url: base, prompt: 'Rotated artwork', timestamp: '2026-09-29',
-                model: 'gpt-image-2.6-flare', width: 500, height: 500, quality: 'medium', aspectRatio: '500x500', background: 'auto',
+                model, width: 500, height: 500, quality: 'medium', aspectRatio: '500x500', background: 'auto',
                 layerStack: { canvasWidth: 500, canvasHeight: 500, layers: [
                     { ...common, id: 'base', name: 'Base', kind: 'base', assetUrl: base, x: 0, y: 0, width: 500, height: 500, rotation: 0, locked: true },
                     { ...common, id: 'rotated', name: 'Rotated', kind: 'uploaded', assetUrl: artwork, x: geometry.x, y: geometry.y, width: 200, height: 220, rotation: geometry.rotation, locked: false },
                 ] },
             });
-        }, scenario);
+        }, { geometry: scenario, model: OPENAI_IMAGE_MODEL });
         await page.reload();
         await openEditor(page);
         const expected = await page.evaluate(async () => {
@@ -147,7 +148,7 @@ for (const scenario of cases) {
             await expect.poll(readLayer).toMatchObject({ x: 250, y: 120, width: 200, height: 220, rotation: 90 });
         }
         await page.locator('.ai-edit-section > summary').click();
-        await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption('gpt-image-2.6-flare');
+        await page.locator('.editor-container').getByLabel('Image model', { exact: true }).selectOption(OPENAI_IMAGE_MODEL);
         let maskPixels: number[] | undefined;
         if (scenario.mask) {
             await page.getByRole('button', { name: 'Mask', exact: true }).click();
