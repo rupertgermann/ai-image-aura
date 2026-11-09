@@ -1,10 +1,5 @@
-import {
-    openAiImageClient,
-    type ImageBackground,
-    type ImageQuality,
-    type OpenAiImageClient,
-    type OpenAiImageResponse,
-} from '../utils/openai';
+import type { ImageBackground, ImageQuality } from '../utils/openai';
+import { openAiImageProvider } from './OpenAiImageProvider';
 import { GOOGLE_PROVIDER, OPENAI_PROVIDER, type ImageModelConfig, type NanoBananaAspectRatio, type NanoBananaImageSize, type Provider } from '../utils/openaiModels';
 import { createLocalImageProvider } from './LocalImageProvider';
 
@@ -24,7 +19,16 @@ export interface ImageProviderRequest {
     onPartialImage?: (partial: ImageProviderResponse) => void;
 }
 
-export type ImageProviderResponse = OpenAiImageResponse;
+export interface ImageProviderResponse {
+    b64_json?: string;
+    error?: string;
+    revised_prompt?: string;
+    size?: string;
+    quality?: string;
+    usage?: unknown;
+    usageScope?: 'result' | 'request';
+    usageImageCount?: number;
+}
 
 export interface ImageProvider {
     generate(request: ImageProviderRequest): Promise<ImageProviderResponse[]>;
@@ -32,29 +36,6 @@ export interface ImageProvider {
 }
 
 export type ImageProviderRegistry = Partial<Record<Provider, ImageProvider>>;
-
-export function createOpenAiImageProvider(client: OpenAiImageClient = openAiImageClient): ImageProvider {
-    const toOpenAiRequest = (request: ImageProviderRequest) => ({
-        apiKey: request.credential,
-        apiModel: request.model.apiModel,
-        endpoints: request.model.endpoints,
-        prompt: request.prompt,
-        quality: request.quality,
-        size: request.size,
-        background: request.background,
-        batchSize: request.batchSize,
-        referenceImages: request.referenceImages,
-        maskImage: request.maskImage,
-        onPartialImage: request.onPartialImage,
-    });
-
-    return {
-        generate: (request) => client.createImages(toOpenAiRequest(request)),
-        edit: (request) => client.createImage(toOpenAiRequest(request)),
-    };
-}
-
-export const openAiImageProvider = createOpenAiImageProvider();
 
 export function createGoogleImageProvider(fetchImpl: typeof fetch = fetch): ImageProvider {
     const createImage = async (request: ImageProviderRequest): Promise<ImageProviderResponse> => {
@@ -173,28 +154,35 @@ function coerceProviderBatchSize(value: unknown): number {
 }
 
 export function extractGoogleImageData(data: unknown): string | null {
-    if (!data || typeof data !== 'object') {
-        return null;
+    if (!isRecord(data) || (data.candidates !== undefined && !Array.isArray(data.candidates))) {
+        throw new Error('Malformed response from Google Gemini');
     }
+    for (const candidate of data.candidates ?? []) {
+        if (!isRecord(candidate) || (candidate.content !== undefined && !isRecord(candidate.content))) {
+            throw new Error('Malformed response from Google Gemini');
+        }
+        const parts = candidate.content?.parts;
+        if (parts !== undefined && !Array.isArray(parts)) {
+            throw new Error('Malformed response from Google Gemini');
+        }
+        for (const part of parts ?? []) {
+            if (!isRecord(part)) {
+                throw new Error('Malformed response from Google Gemini');
+            }
+            for (const inlineData of [part.inlineData, part.inline_data]) {
+                if (inlineData === undefined) continue;
+                if (!isRecord(inlineData) || typeof inlineData.data !== 'string') {
+                    throw new Error('Malformed response from Google Gemini');
+                }
+                if (inlineData.data) return inlineData.data;
+            }
+        }
+    }
+    return null;
+}
 
-    const record = data as {
-        candidates?: Array<{
-            content?: {
-                parts?: Array<{
-                    inlineData?: { data?: unknown };
-                    inline_data?: { data?: unknown };
-                }>;
-            };
-        }>;
-    };
-
-    const parts = record.candidates?.flatMap((candidate) => candidate.content?.parts ?? []) ?? [];
-    const imagePart = parts.find((part) => (
-        typeof part.inlineData?.data === 'string' ||
-        typeof part.inline_data?.data === 'string'
-    ));
-
-    return (imagePart?.inlineData?.data ?? imagePart?.inline_data?.data ?? null) as string | null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function extractGoogleUsageMetadata(data: unknown): Record<string, unknown> | null {

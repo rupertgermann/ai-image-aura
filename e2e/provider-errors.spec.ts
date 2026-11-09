@@ -176,3 +176,49 @@ test('malformed Gemini reasoning shows a deliberate error and can be retried', a
     expect(requests).toBe(2);
     await page.screenshot({ path: testInfo.outputPath('gemini-retry.png'), fullPage: true });
 });
+
+test('malformed OpenAI batch entries keep successful results in their original slots', async ({ page }, testInfo) => {
+    await page.route('https://api.openai.com/v1/images/generations', (route) => route.fulfill({
+        json: { data: [{ b64_json: imageBase64 }, null, { b64_json: imageBase64 }, { b64_json: { invalid: true } }] },
+    }));
+    await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('4');
+    await page.getByRole('button', { name: 'Generate 4 images', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Generated result 1', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('img', { name: 'Generated result 3', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
+    await expect(page.getByText('Malformed image result from OpenAI', { exact: true })).toHaveCount(2);
+    await page.reload();
+    const thirdResult = page.locator('.result-slot-card').filter({ hasText: 'Result 3' });
+    await thirdResult.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(thirdResult.getByRole('button', { name: 'Saved', exact: true })).toBeDisabled();
+    await expect(page.getByRole('img', { name: 'Generated result 3', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await page.screenshot({ path: testInfo.outputPath('malformed-openai-slots.png'), fullPage: true });
+});
+
+test('malformed Google image candidates and parts show deliberate errors and allow retry', async ({ page }, testInfo) => {
+    await configureKey(page, 'Google');
+    await page.getByLabel('Image model', { exact: true }).selectOption('nano-banana-pro');
+    const malformedResponses = [
+        { candidates: {} },
+        { candidates: [null] },
+        { candidates: [{ content: { parts: {} } }] },
+        { candidates: [{ content: { parts: [null] } }] },
+        { candidates: [{ content: { parts: [{ inlineData: { data: 123 } }] } }] },
+    ];
+    let requests = 0;
+    await page.route('https://generativelanguage.googleapis.com/**', (route) => route.fulfill({
+        json: malformedResponses[requests++] ?? { candidates: [{ content: { parts: [{ inlineData: { data: imageBase64 } }] } }] },
+    }));
+    for (let attempt = 0; attempt < malformedResponses.length; attempt += 1) {
+        await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+        await expect(page.getByRole('alert')).toHaveText('Malformed response from Google Gemini');
+        await expect(page.getByRole('button', { name: 'Generate image', exact: true })).toBeEnabled();
+        await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath('malformed-google-image.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(requests).toBe(6);
+    await page.screenshot({ path: testInfo.outputPath('google-image-retry.png'), fullPage: true });
+});
