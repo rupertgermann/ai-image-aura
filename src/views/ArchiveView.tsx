@@ -48,7 +48,7 @@ const ArchiveView: React.FC<ArchiveViewProps> = ({
 
         setIsZipping(true);
         try {
-            const { downloadArchiveImagesAsZip } = await import('../archive/ArchiveExport');
+            const { downloadArchiveImagesAsZip } = await import('../archive/ArchiveTransfer');
             await downloadArchiveImagesAsZip(images.filter((image) => selectedIds.has(image.id)));
         } catch (error) {
             onBulkDownloadError(error instanceof Error ? error : new Error('Failed to create ZIP archive'));

@@ -51,20 +51,6 @@ export interface LineageManifest {
     steps: LineageStep[];
 }
 
-export function createArchiveManifest(images: ArchiveManifestImage[]): ArchiveManifest {
-    return parseArchiveManifest({
-        version: ARCHIVE_MANIFEST_VERSION,
-        images,
-    });
-}
-
-export function createLineageManifest(steps: LineageStep[]): LineageManifest {
-    return parseLineageManifest({
-        version: LINEAGE_MANIFEST_VERSION,
-        steps,
-    });
-}
-
 export function createEmptyLineageManifest(): LineageManifest {
     return {
         version: LINEAGE_MANIFEST_VERSION,
@@ -94,33 +80,6 @@ export function parseLineageManifest(value: unknown): LineageManifest {
         version: LINEAGE_MANIFEST_VERSION,
         steps: value.steps.map(parseLineageStep),
     };
-}
-
-export function createArchiveManifestLayerStack(
-    imageId: string,
-    layerStack: ArchiveLayerStack,
-    getLayerAssetFileName: (imageId: string, layerId: string) => string,
-): ArchiveManifestLayerStack {
-    return parseArchiveManifestLayerStack({
-        canvasWidth: layerStack.canvasWidth,
-        canvasHeight: layerStack.canvasHeight,
-        adjustments: layerStack.adjustments,
-        layers: layerStack.layers.map((layer) => ({
-            id: layer.id,
-            name: layer.name,
-            kind: layer.kind,
-            x: layer.x,
-            y: layer.y,
-            width: layer.width,
-            height: layer.height,
-            rotation: layer.rotation,
-            opacity: layer.opacity,
-            blendMode: layer.blendMode,
-            visible: layer.visible,
-            locked: layer.locked,
-            assetFileName: getLayerAssetFileName(imageId, layer.id),
-        })),
-    });
 }
 
 export function createLayerStackMetadata(layerStack: ArchiveManifestLayerStack): ArchiveLayerStack {
