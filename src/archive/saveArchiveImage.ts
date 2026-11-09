@@ -67,14 +67,24 @@ export async function saveArchiveImage(
         };
     } else {
         const timestamp = clock();
-        image = buildSavedImage(request.sourceImage, request.updatedUrl, request.context, timestamp, makeId);
+        const { sourceImage, context } = request;
+        image = {
+            ...sourceImage,
+            ...(context.isCopy ? { id: makeId(), timestamp } : {}),
+            url: request.updatedUrl,
+            references: context.references ?? sourceImage.references,
+            costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
+            layerStack: context.layerStack
+                ? { ...context.layerStack, adjustments: context.adjustments }
+                : undefined,
+        };
         const parentStepId = request.parentStepId ?? (await lineage.getByArchiveImageId(request.sourceImage.id)).at(-1)?.id ?? null;
         step = {
             archiveImageId: image.id,
             parentStepId,
-            stepType: resolveStepType(request.context),
+            stepType: context.aiEditPrompt?.trim() ? 'ai-edit' : context.isCopy ? 'save-as-copy' : 'overwrite',
             timestamp,
-            metadata: buildMetadata(request.sourceImage, image, request.context),
+            metadata: buildEditorLineageMetadata({ ...context, sourceImage, savedImage: image }),
         };
     }
 
@@ -96,62 +106,4 @@ export async function saveArchiveImage(
         throw error;
     }
     return savedImage;
-}
-
-function buildSavedImage(
-    sourceImage: ArchiveImage,
-    updatedUrl: string,
-    context: EditorSaveContext,
-    timestamp: string,
-    makeId: () => string,
-): ArchiveImage {
-    const layerStack = context.layerStack
-        ? { ...context.layerStack, adjustments: context.adjustments }
-        : undefined;
-    if (context.isCopy) {
-        return {
-            ...sourceImage,
-            id: makeId(),
-            url: updatedUrl,
-            timestamp,
-            references: context.references ?? sourceImage.references,
-            costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
-            layerStack,
-        };
-    }
-
-    return {
-        ...sourceImage,
-        url: updatedUrl,
-        references: context.references ?? sourceImage.references,
-        costLedger: mergeApiCostLedgers(sourceImage.costLedger, context.costLedger),
-        layerStack,
-    };
-}
-
-function resolveStepType(context: EditorSaveContext) {
-    if (context.aiEditPrompt?.trim()) {
-        return 'ai-edit' as const;
-    }
-
-    return context.isCopy ? 'save-as-copy' as const : 'overwrite' as const;
-}
-
-function buildMetadata(sourceImage: ArchiveImage, savedImage: ArchiveImage, context: EditorSaveContext) {
-    return buildEditorLineageMetadata({
-        sourceImage,
-        savedImage,
-        isCopy: context.isCopy,
-        adjustments: context.adjustments,
-        layerStack: context.layerStack,
-        targetMode: context.targetMode,
-        targetLayerCount: context.targetLayerCount,
-        targetIncludesBaseLayer: context.targetIncludesBaseLayer,
-        aiResultLayerId: context.aiResultLayerId,
-        aiResultLayerName: context.aiResultLayerName,
-        costLedger: context.costLedger,
-        aiEditPrompt: context.aiEditPrompt,
-        aiEditModel: context.aiEditModel,
-        transformMask: context.transformMask,
-    });
 }

@@ -1,5 +1,6 @@
 import { SQLocal } from 'sqlocal';
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
+import type { ArchiveMetadataRecord } from './ArchiveStore';
 import { OPENAI_IMAGE_MODEL } from '../utils/openaiModels';
 import { createDurableLayerStackMetadata } from './ArchiveAssets';
 import { sanitizeApiCostLedger } from '../costs/apiCost';
@@ -10,12 +11,6 @@ type ArchiveImageRow = ArchiveImage & {
     layer_stack?: string;
     actual_parameters?: string | null;
     cost_ledger?: string | null;
-};
-
-type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
-    storedUrl: string;
-    referenceIds: number[];
-    layerStack?: ArchiveLayerStack;
 };
 
 export class SQLiteArchiveMetadataPort {

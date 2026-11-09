@@ -1,22 +1,7 @@
 import type { ArchiveImage, ArchiveLayerStack } from '../db/types';
-import { storage } from '../services/StorageService';
+import { storage, type StorageProvider } from '../services/StorageService';
 import { archiveMetadataPort } from '../db/AuraPersistence';
-import {
-    captureArchiveAssetSnapshot,
-    createDurableLayerStackMetadata,
-    getArchiveImageBlobKey,
-    getArchiveImageIdFromBlobKey,
-    getArchiveLayerBlobKey,
-    getArchiveReferenceBlobKey,
-    getLayerIds,
-    getTouchedLayerIds,
-    getTouchedReferenceIds,
-    hydrateLayerStackAssets,
-    restoreArchiveAssetSnapshot,
-    syncLayerAssets,
-    syncReferenceAssets,
-    type ArchiveBlobPort,
-} from './ArchiveAssets';
+import { createDurableLayerStackMetadata, getArchiveImageBlobKey } from './ArchiveAssets';
 
 export type SaveArchiveImageInput = Omit<ArchiveImage, 'id' | 'timestamp'> & {
     id?: string;
@@ -31,10 +16,9 @@ export interface ArchiveStore {
     remove(id: string): Promise<void>;
 }
 
-type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
+export type ArchiveMetadataRecord = Omit<ArchiveImage, 'url' | 'references'> & {
     storedUrl: string;
     referenceIds: number[];
-    layerStack?: ArchiveLayerStack;
 };
 
 interface ArchiveMetadataPort {
@@ -48,20 +32,20 @@ interface ArchiveMetadataPort {
 
 interface CreateArchiveStoreDeps {
     metadata?: ArchiveMetadataPort;
-    blobs?: ArchiveBlobPort;
+    blobs?: StorageProvider;
     clock?: () => string;
     makeId?: () => string;
 }
 
 class LocalArchiveStore implements ArchiveStore {
     private readonly metadata: ArchiveMetadataPort;
-    private readonly blobs: ArchiveBlobPort;
+    private readonly blobs: StorageProvider;
     private readonly clock: () => string;
     private readonly makeId: () => string;
 
     constructor(
         metadata: ArchiveMetadataPort,
-        blobs: ArchiveBlobPort,
+        blobs: StorageProvider,
         clock: () => string,
         makeId: () => string,
     ) {
@@ -91,18 +75,24 @@ class LocalArchiveStore implements ArchiveStore {
         const existing = await this.metadata.get(id);
         const timestamp = input.timestamp ?? existing?.timestamp ?? this.clock();
         const referenceIds = input.references?.map((_, index) => index) ?? [];
-        const layerIds = getLayerIds(input.layerStack);
-        const previousLayerIds = getLayerIds(existing?.layerStack);
+        const layerIds = new Set(input.layerStack?.layers.map((layer) => layer.id) ?? []);
+        const previousLayerIds = existing?.layerStack?.layers.map((layer) => layer.id) ?? [];
         const snapshot = await captureArchiveAssetSnapshot(this.blobs, id, existing?.referenceIds ?? [], previousLayerIds);
-        const touchedReferenceIds = getTouchedReferenceIds(existing?.referenceIds ?? [], referenceIds);
-        const touchedLayerIds = getTouchedLayerIds(previousLayerIds, layerIds);
+        const touchedReferenceIds = [...new Set([...(existing?.referenceIds ?? []), ...referenceIds])];
+        const touchedLayerIds = [...new Set([...previousLayerIds, ...layerIds])];
         const durableLayerStack = createDurableLayerStackMetadata(input.layerStack);
         const favoriteMetadata = input.favorite ? { favorite: true } : {};
 
         try {
             await this.blobs.save(getArchiveImageBlobKey(id), input.url);
-            await syncReferenceAssets(this.blobs, id, existing?.referenceIds ?? [], input.references ?? []);
-            await syncLayerAssets(this.blobs, id, previousLayerIds, input.layerStack);
+            await Promise.all((input.references ?? []).map((reference, index) => this.blobs.save(getArchiveReferenceBlobKey(id, index), reference)));
+            const nextReferenceIds = new Set(referenceIds);
+            const staleReferenceIds = (existing?.referenceIds ?? []).filter((index) => !nextReferenceIds.has(index));
+            await Promise.all(staleReferenceIds.map((index) => this.blobs.remove(getArchiveReferenceBlobKey(id, index))));
+
+            await Promise.all((input.layerStack?.layers ?? []).map((layer) => this.blobs.save(getArchiveLayerBlobKey(id, layer.id), layer.assetUrl)));
+            const staleLayerIds = previousLayerIds.filter((layerId) => !layerIds.has(layerId));
+            await Promise.all(staleLayerIds.map((layerId) => this.blobs.remove(getArchiveLayerBlobKey(id, layerId))));
 
             await this.metadata.save({
                 id,
@@ -159,7 +149,7 @@ class LocalArchiveStore implements ArchiveStore {
 
     async remove(id: string): Promise<void> {
         const existing = await this.metadata.get(id);
-        const previousLayerIds = getLayerIds(existing?.layerStack);
+        const previousLayerIds = existing?.layerStack?.layers.map((layer) => layer.id) ?? [];
         const snapshot = await captureArchiveAssetSnapshot(
             this.blobs,
             id,
@@ -242,9 +232,9 @@ class LocalArchiveStore implements ArchiveStore {
             return null;
         }
 
-        const recoveredImage: ArchiveImage = {
+        await this.metadata.insertIfAbsent({
             id,
-            url,
+            storedUrl: id,
             prompt: 'Recovered image',
             quality: 'high',
             aspectRatio: '1024x1024',
@@ -252,23 +242,106 @@ class LocalArchiveStore implements ArchiveStore {
             timestamp: this.clock(),
             width: 1024,
             height: 1024,
-            references: [],
-        };
-
-        await this.metadata.insertIfAbsent({
-            id,
-            storedUrl: id,
-            prompt: recoveredImage.prompt,
-            quality: recoveredImage.quality,
-            aspectRatio: recoveredImage.aspectRatio,
-            background: recoveredImage.background,
-            timestamp: recoveredImage.timestamp,
-            width: recoveredImage.width,
-            height: recoveredImage.height,
             referenceIds: [],
         });
 
         return this.get(id);
+    }
+}
+
+interface ArchiveAssetSnapshot {
+    image: string | null;
+    references: Map<number, string>;
+    layers: Map<string, string>;
+}
+
+const getArchiveReferenceBlobKey = (id: string, index: number) => `ref_${id}_${index}`;
+
+const getArchiveLayerBlobKey = (id: string, layerId: string) => `layer_${id}_${layerId}`;
+
+const getArchiveImageIdFromBlobKey = (key: string) => {
+    if (!key.startsWith('img_') || key.length === 'img_'.length) {
+        return null;
+    }
+
+    return key.slice('img_'.length);
+};
+
+async function hydrateLayerStackAssets(
+    blobs: Pick<StorageProvider, 'load'>,
+    id: string,
+    layerStack?: ArchiveLayerStack,
+): Promise<ArchiveLayerStack | undefined> {
+    if (!layerStack) {
+        return undefined;
+    }
+
+    const layers = await Promise.all(layerStack.layers.map(async (layer) => ({
+        ...layer,
+        assetUrl: await blobs.load(getArchiveLayerBlobKey(id, layer.id)) ?? layer.assetUrl,
+    })));
+
+    return { ...layerStack, layers };
+}
+
+async function captureArchiveAssetSnapshot(
+    blobs: Pick<StorageProvider, 'load'>,
+    id: string,
+    referenceIds: number[],
+    layerIds: string[],
+): Promise<ArchiveAssetSnapshot> {
+    const [image, references, layers] = await Promise.all([
+        blobs.load(getArchiveImageBlobKey(id)),
+        Promise.all(referenceIds.map(async (index) => [index, await blobs.load(getArchiveReferenceBlobKey(id, index))] as const)),
+        Promise.all(layerIds.map(async (layerId) => [layerId, await blobs.load(getArchiveLayerBlobKey(id, layerId))] as const)),
+    ]);
+
+    return {
+        image,
+        references: new Map(references.filter((entry): entry is readonly [number, string] => entry[1] !== null)),
+        layers: new Map(layers.filter((entry): entry is readonly [string, string] => entry[1] !== null)),
+    };
+}
+
+async function restoreArchiveAssetSnapshot(
+    blobs: Pick<StorageProvider, 'save' | 'remove'>,
+    id: string,
+    snapshot: ArchiveAssetSnapshot,
+    touchedReferenceIds: number[],
+    touchedLayerIds: string[],
+): Promise<void> {
+    const referenceIds = [...new Set([...snapshot.references.keys(), ...touchedReferenceIds])];
+    const layerIds = [...new Set([...snapshot.layers.keys(), ...touchedLayerIds])];
+    const restorations = await Promise.allSettled([
+        snapshot.image !== null
+            ? blobs.save(getArchiveImageBlobKey(id), snapshot.image)
+            : blobs.remove(getArchiveImageBlobKey(id)),
+        ...referenceIds.map(async (index) => {
+            const previousReference = snapshot.references.get(index);
+            if (previousReference !== undefined) {
+                await blobs.save(getArchiveReferenceBlobKey(id, index), previousReference);
+                return;
+            }
+
+            await blobs.remove(getArchiveReferenceBlobKey(id, index));
+        }),
+        ...layerIds.map(async (layerId) => {
+            const previousLayer = snapshot.layers.get(layerId);
+            if (previousLayer !== undefined) {
+                await blobs.save(getArchiveLayerBlobKey(id, layerId), previousLayer);
+                return;
+            }
+
+            await blobs.remove(getArchiveLayerBlobKey(id, layerId));
+        }),
+    ]);
+    const failures = restorations.flatMap((result) => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length === 1) {
+        throw failures[0];
+    }
+    if (failures.length > 1) {
+        const details = failures.map((error) => error instanceof Error ? error.message : String(error)).join('; ');
+        throw new AggregateError(failures, `Archive asset restoration failed: ${details}`);
     }
 }
 
