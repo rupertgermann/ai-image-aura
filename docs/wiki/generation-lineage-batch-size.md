@@ -6,4 +6,6 @@ On 2026-11-09, inspection of the `control-snapshots` JSON attachments in [baseli
 
 On 2026-11-09, the coordinator retained that serialization behavior outside [control ticket #181](https://github.com/rupertgermann/ai-image-aura/issues/181), consistent with the persistence-format exclusion in [spec #179](https://github.com/rupertgermann/ai-image-aura/issues/179). The [control report](/tmp/aura-generation-planning/controls-report.md) records the initial expectation correction. This was a documented limitation, not a claim that lineage preserves the original OpenAI request batch size or that the refactor introduced the discrepancy.
 
+On 2026-11-09, final verification at `rupertgermann/ai-image-aura@d5be3c1097aa6510f1864f29bd535bfd46cd6539` retained this limitation outside the approved serialization scope; the [final report](/tmp/aura-generation-planning/integration-verification/final-verification.md) did not claim original request batch size in saved OpenAI lineage.
+
 Related: [generation simplification decisions](generation-simplification.md), [verification evidence](generation-verification.md).

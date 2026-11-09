@@ -21,4 +21,36 @@ On 2026-11-09, the [control report](/tmp/aura-generation-planning/controls-repor
 
 On 2026-11-09, the above reports limited browser evidence to installed isolated Chromium, dedicated port 5183, fresh storage and mocked provider HTTP. They did not test paid providers, production or daily-driver state. These temporary artifact paths preserve session evidence only while the files remain available; committed E2E cases provide repeatable scenarios. Final controller/batch-verifier and combined browser acceptance remained pending at `rupertgermann/ai-image-aura@9923b843dc2d5f782ff9fd945d40e6b6e49d0d6f`.
 
+## Final integration evidence
+
+On 2026-11-09, the [independent verification report](/tmp/aura-generation-planning/integration-verification/final-verification.md) completed the approved browser seams at `rupertgermann/ai-image-aura@d5be3c1097aa6510f1864f29bd535bfd46cd6539`, superseding the earlier final-verification-pending entry. It newly ran 22 Editor import/mask and draft-provenance scenarios in an isolated clean checkout; combined with the 22 retained final-controller scenarios, completed-source evidence covered 44 passing browser scenarios. [Editor artifacts](/tmp/aura-generation-planning/integration-verification/editor-e2e) and [controller artifacts](/tmp/aura-generation-planning/controller-after-e2e) retained traces, screenshots and saved-state attachments. The [mechanical evidence audit](/tmp/aura-generation-planning/integration-verification/evidence-audit.json) matched all 44 embedded test sources to the final checkout and found no trace error records; earlier application-source attribution also relied on the controller report and committed checkout.
+
+On 2026-11-09, that audit verified all 11 named [final batch checkpoints](/tmp/aura-generation-planning/controller-after-batch/summary.json), stored-state archive/lineage counts and unique archive IDs. The summary matched the [baseline](/tmp/aura-generation-planning/controller-baseline-batch/summary.json) byte for byte. The [controller report](/tmp/aura-generation-planning/controller-report.md) supplied the completed-source 349 tests across 38 files, typecheck, lint and build passes; the independent verifier reused those results and reran the baseline-to-final diff check. It did not claim fresh execution of every check.
+
+On 2026-11-09, the coordinator reported no blocking findings from architectural, standards and spec reviews at `rupertgermann/ai-image-aura@d5be3c1097aa6510f1864f29bd535bfd46cd6539`. Browser tests observed partial previews, completion, a subsequent run and reload; stale callbacks after provider resolution were not injected, so preservation of their run-identity guard rested on inspection. Some screenshots captured loading/transition states; assertions, trace sequences and stored-state/pixel checks established outcomes. These checks excluded paid-provider availability, production/daily-driver state and unrelated E2E scenarios; temporary local artifacts were not published attachments.
+
+## Repeatable verification recorded on 2026-11-09
+
+On 2026-11-09, the recipe for `rupertgermann/ai-image-aura@d5be3c1097aa6510f1864f29bd535bfd46cd6539` used the committed [batch verifier](https://github.com/rupertgermann/ai-image-aura/blob/d5be3c1097aa6510f1864f29bd535bfd46cd6539/scripts/verify-generation-batch.cjs) and [Playwright configuration](https://github.com/rupertgermann/ai-image-aura/blob/d5be3c1097aa6510f1864f29bd535bfd46cd6539/playwright.config.ts), completing the setup scope of [#182](https://github.com/rupertgermann/ai-image-aura/issues/182). Rupert approved removing the separate validation document from the working tree; this recipe makes repetition independent of it. The [previous document at that commit](https://github.com/rupertgermann/ai-image-aura/blob/d5be3c1097aa6510f1864f29bd535bfd46cd6539/docs/generation-batch-validation.md) remains an immutable historical source.
+
+At that commit, run the following inside a dedicated checkout. Install its own dependencies so SQLocal workers load from the same Vite root. Chromium installation and execution must use the same `PLAYWRIGHT_BROWSERS_PATH` if one is set; no special cache path is required.
+
+```sh
+npm ci --ignore-scripts
+npx playwright install chromium
+npm run dev -- --host 127.0.0.1 --port 5177 --strictPort
+```
+
+In a second terminal in that checkout, with the same optional browser-cache environment:
+
+```sh
+node scripts/verify-generation-batch.cjs http://127.0.0.1:5177 /tmp/aura-generation-batch
+```
+
+At `d5be3c1097aa6510f1864f29bd535bfd46cd6539`, success meant all 11 checkpoints completed and the output directory contained screenshots, stored-state JSON and `summary.json`. Fresh contexts used mocked provider HTTP and blocked other external calls. Stop the dedicated server when finished. The corresponding browser scenarios used the following command; Playwright owned port 5183 and refused server reuse, so parallel agents handed off that port and used separate artifact directories.
+
+```sh
+npm run test:e2e -- e2e/provider-errors.spec.ts e2e/autopilot-failure.spec.ts e2e/generate-save-reload.spec.ts e2e/generate-session-restoration.spec.ts e2e/editor-import-mask.spec.ts e2e/editor-draft-provenance.spec.ts --output=/tmp/aura-generation-e2e
+```
+
 Related: [generation simplification scope and constraints](generation-simplification.md).
