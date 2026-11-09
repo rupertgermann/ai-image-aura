@@ -18,7 +18,7 @@ The interface has light and dark modes, monochrome panels, orange accents, and c
 
 ## Current state and features
 
-Version `0.2.0` includes Generate, Archive, Editor, and Settings views. It runs locally through Vite and builds as a static browser app.
+Version `0.2.1` includes Generate, Archive, Editor, and Settings views. It runs locally through Vite and builds as a static browser app.
 
 - Generate one to four images per run with model-specific controls, style modifiers, and reference images from uploads, drag-and-drop, or clipboard paste.
 - Use Autopilot to translate a goal into a prompt, evaluate results, and refine the prompt across iterations while retaining the best result.
