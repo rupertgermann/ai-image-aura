@@ -2,15 +2,15 @@ import JSZip from 'jszip';
 import type { ArchiveStore } from './ArchiveStore';
 import type { ArchiveImage, ArchiveLayer, ArchiveLayerStack } from '../db/types';
 import type { LineageStep } from '../lineage/types';
-import type { LineageStore } from '../lineage/LineageStore';
+import { lineageStore, type LineageStore } from '../lineage/LineageStore';
+import { downloadBlob } from '../download/download';
 import { readEditorLineageTransformMask, type EditorLineageTransformMaskAsset } from '../lineage/editorLineageMetadata';
 import {
     ARCHIVE_MANIFEST_FILE,
     LINEAGE_MANIFEST_FILE,
-    createArchiveManifest,
-    createArchiveManifestLayerStack,
+    ARCHIVE_MANIFEST_VERSION,
+    LINEAGE_MANIFEST_VERSION,
     createEmptyLineageManifest,
-    createLineageManifest,
     parseArchiveManifest,
     parseLineageManifest,
     type ArchiveManifestImage,
@@ -42,6 +42,12 @@ export interface ArchiveImportSummary {
     missingAssetFiles: string[];
 }
 
+export async function downloadArchiveImagesAsZip(images: ArchiveImage[]) {
+    const bytes = await buildArchiveZip(images, { lineageStore });
+    const content = new Blob([new Uint8Array(bytes)], { type: 'application/zip' });
+    downloadBlob(content, `aura-collection-${Date.now()}.zip`);
+}
+
 export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchiveZipDeps): Promise<Uint8Array> {
     const zip = deps.createZip?.() ?? new JSZip();
     const lineageCollections = await Promise.all(images.map((image) => deps.lineageStore.getByArchiveImageId(image.id)));
@@ -52,11 +58,18 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
         zip.file(imageFileName, await imageUrlToBytes(image.url));
 
         const references = await Promise.all((image.references ?? []).map(async (reference, index) => {
-            const fileName = getReferenceFileName(image.id, index);
+            const fileName = `aura-${image.id}-reference-${index}.png`;
             zip.file(fileName, await imageUrlToBytes(reference));
             return { fileName };
         }));
-        const layerStack = image.layerStack ? await addLayerStackToZip(zip, image.id, image.layerStack) : undefined;
+        const layerStack = image.layerStack ? {
+            ...image.layerStack,
+            layers: await Promise.all(image.layerStack.layers.map(async ({ assetUrl, ...layer }) => {
+                const assetFileName = `aura-${image.id}-layer-${layer.id}.png`;
+                zip.file(assetFileName, await imageUrlToBytes(assetUrl));
+                return { ...layer, assetFileName };
+            })),
+        } : undefined;
 
         archiveManifestImages.push({
             id: image.id,
@@ -80,11 +93,11 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
         });
     }
 
-    zip.file(ARCHIVE_MANIFEST_FILE, JSON.stringify(createArchiveManifest(archiveManifestImages), null, 2));
+    zip.file(ARCHIVE_MANIFEST_FILE, JSON.stringify(parseArchiveManifest({ version: ARCHIVE_MANIFEST_VERSION, images: archiveManifestImages }), null, 2));
 
     const collectedSteps = await collectLineageSteps(lineageCollections, deps.lineageStore);
     const lineageSteps = await addLineageAssetsToZip(zip, collectedSteps);
-    zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify(createLineageManifest(lineageSteps), null, 2));
+    zip.file(LINEAGE_MANIFEST_FILE, JSON.stringify(parseLineageManifest({ version: LINEAGE_MANIFEST_VERSION, steps: lineageSteps }), null, 2));
 
     return zip.generateAsync({ type: 'uint8array' });
 }
@@ -92,8 +105,15 @@ export async function buildArchiveZip(images: ArchiveImage[], deps: BuildArchive
 export async function importArchiveZip(zipInput: Blob | Uint8Array | ArrayBuffer, deps: ImportArchiveZipDeps): Promise<ArchiveImportSummary> {
     const normalizedZipInput = zipInput instanceof Blob ? await zipInput.arrayBuffer() : zipInput;
     const zip = await (deps.loadZip?.(normalizedZipInput) ?? JSZip.loadAsync(normalizedZipInput));
-    const archiveManifest = parseArchiveManifest(await readJsonFile(zip, ARCHIVE_MANIFEST_FILE));
-    const lineageManifest = parseLineageManifest(await readOptionalJsonFile(zip, LINEAGE_MANIFEST_FILE));
+    const archiveFile = zip.file(ARCHIVE_MANIFEST_FILE);
+    if (!archiveFile) {
+        throw new Error(`Missing ${ARCHIVE_MANIFEST_FILE} in archive ZIP`);
+    }
+    const archiveManifest = parseArchiveManifest(JSON.parse(await archiveFile.async('text')));
+    const lineageFile = zip.file(LINEAGE_MANIFEST_FILE);
+    const lineageManifest = lineageFile
+        ? parseLineageManifest(JSON.parse(await lineageFile.async('text')))
+        : createEmptyLineageManifest();
     const missingAssetFiles: string[] = [];
     const importedImageIds: string[] = [];
     const skippedImageIds = new Set<string>();
@@ -193,53 +213,11 @@ async function collectLineageSteps(stepCollections: LineageStep[][], store: Pick
         }
     }
 
-    return Array.from(stepsById.values()).sort(compareLineageSteps);
-}
-
-function compareLineageSteps(left: LineageStep, right: LineageStep) {
-    return left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id);
-}
-
-async function readJsonFile(zip: JSZip, fileName: string): Promise<unknown> {
-    const file = zip.file(fileName);
-    if (!file) {
-        throw new Error(`Missing ${fileName} in archive ZIP`);
-    }
-
-    return JSON.parse(await file.async('text')) as unknown;
-}
-
-async function readOptionalJsonFile(zip: JSZip, fileName: string): Promise<unknown> {
-    const file = zip.file(fileName);
-    if (!file) {
-        return createEmptyLineageManifest();
-    }
-
-    return JSON.parse(await file.async('text')) as unknown;
+    return Array.from(stepsById.values()).sort((left, right) => left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id));
 }
 
 function getImageFileName(id: string) {
     return `aura-${id}.png`;
-}
-
-function getReferenceFileName(id: string, index: number) {
-    return `aura-${id}-reference-${index}.png`;
-}
-
-function getLayerFileName(imageId: string, layerId: string) {
-    return `aura-${imageId}-layer-${layerId}.png`;
-}
-
-function getTransformMaskFileName(stepId: string, mimeType: string) {
-    return `aura-${stepId}-transform-mask.${mimeType === 'image/png' ? 'png' : 'bin'}`;
-}
-
-async function addLayerStackToZip(zip: JSZip, imageId: string, layerStack: ArchiveLayerStack): Promise<ArchiveManifestLayerStack> {
-    await Promise.all(layerStack.layers.map(async (layer) => {
-        zip.file(getLayerFileName(imageId, layer.id), await imageUrlToBytes(layer.assetUrl));
-    }));
-
-    return createArchiveManifestLayerStack(imageId, layerStack, getLayerFileName);
 }
 
 async function addLineageAssetsToZip(zip: JSZip, steps: LineageStep[]): Promise<LineageStep[]> {
@@ -251,7 +229,7 @@ async function addLineageAssetsToZip(zip: JSZip, steps: LineageStep[]): Promise<
             return nextStep;
         }
 
-        const fileName = getTransformMaskFileName(step.id, transformMask.mimeType);
+        const fileName = `aura-${step.id}-transform-mask.${transformMask.mimeType === 'image/png' ? 'png' : 'bin'}`;
         zip.file(fileName, await imageUrlToBytes(transformMask.dataUrl));
         setTransformMaskAsset(nextStep.metadata, {
             assetId: transformMask.assetId,

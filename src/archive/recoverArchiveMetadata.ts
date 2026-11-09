@@ -1,5 +1,5 @@
 import { archiveMetadataPort } from '../db/AuraPersistence';
-import type { ActualImageParameters, ApiCostLedger, ArchiveLayerStack } from '../db/types';
+import type { ArchiveMetadataRecord } from './ArchiveStore';
 import { lineageStore, type LineageStore } from '../lineage/LineageStore';
 import { storage, type StorageProvider } from '../services/StorageService';
 import { getArchiveImageBlobKey } from './ArchiveAssets';
@@ -9,27 +9,6 @@ import {
     parseArchiveManifest,
     parseLineageManifest,
 } from './ArchiveManifest';
-
-interface ArchiveMetadataRecord {
-    id: string;
-    storedUrl: string;
-    prompt: string;
-    quality: string;
-    aspectRatio: string;
-    background: string;
-    timestamp: string;
-    model?: string;
-    width?: number;
-    height?: number;
-    favorite?: boolean;
-    style?: string;
-    lighting?: string;
-    palette?: string;
-    actualParameters?: ActualImageParameters;
-    costLedger?: ApiCostLedger;
-    referenceIds: number[];
-    layerStack?: ArchiveLayerStack;
-}
 
 interface ArchiveMetadataPort {
     save(record: ArchiveMetadataRecord): Promise<void>;
