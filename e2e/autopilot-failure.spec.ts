@@ -292,3 +292,86 @@ for (const failedIteration of [1, 2]) {
         await details.screenshot({ path: testInfo.outputPath('saved-paid-candidate.png') });
     });
 }
+
+test('Autopilot preserves non-default controls and the next manual batch', async ({ page, context, baseURL }, testInfo) => {
+    const requests: Record<string, unknown>[] = [];
+    await context.route('**/*', async (route) => {
+        const request = route.request();
+        if (request.url() === 'https://api.openai.com/v1/images/generations') {
+            const body = request.postDataJSON();
+            requests.push(body);
+            await route.fulfill({ json: { data: Array.from({ length: body.n }, () => ({ b64_json: imageBase64 })) } });
+        } else if (request.url() === 'https://api.openai.com/v1/responses') {
+            await route.fulfill({ json: { output_text: JSON.stringify({ score: 100, feedback: ['Matches the goal.'] }) } });
+        } else if (new URL(request.url()).origin === baseURL) await route.continue();
+        else await route.abort();
+    });
+    await page.goto('/');
+    const navigation = page.getByRole('navigation', { name: 'Main navigation' });
+    await navigation.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByLabel('OpenAI API Key', { exact: true }).fill('synthetic-provider-key');
+    await page.locator('section').filter({ has: page.getByRole('heading', { name: 'OpenAI API Key', exact: true }) })
+        .getByRole('button', { name: 'Save key', exact: true }).click();
+    await navigation.getByRole('button', { name: 'Generate', exact: true }).click();
+    await page.getByLabel('Prompt', { exact: true }).fill('Autopilot control snapshot');
+    await page.getByLabel('QUALITY', { exact: true }).selectOption('high');
+    await page.getByLabel('SIZE', { exact: true }).selectOption('1536x1024');
+    await page.getByLabel('BACKGROUND', { exact: true }).selectOption('transparent');
+    await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('3');
+    await page.getByRole('button', { name: 'Autopilot', exact: true }).click();
+    await page.getByLabel('Goal', { exact: true }).fill('Four colored squares');
+    await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
+    await expect(page.getByText('Best Autopilot Result: iteration 1', { exact: true })).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ n: 1, quality: 'high', size: '1536x1024', background: 'transparent' });
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Single Shot', exact: true }).click();
+    await expect(page.getByLabel('BATCH SIZE', { exact: true })).toHaveValue('3');
+    await page.reload();
+    await expect(page.getByLabel('BATCH SIZE', { exact: true })).toHaveValue('3');
+    await expect(page.getByLabel('QUALITY', { exact: true })).toHaveValue('high');
+    await expect(page.getByLabel('SIZE', { exact: true })).toHaveValue('1536x1024');
+    await expect(page.getByLabel('BACKGROUND', { exact: true })).toHaveValue('transparent');
+    await page.getByLabel('Prompt', { exact: true }).fill('Manual control snapshot');
+    await page.getByRole('button', { name: 'Generate 3 images', exact: true }).click();
+    await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(3);
+    expect(requests).toHaveLength(2);
+    expect(requests[1]).toMatchObject({ n: 3, quality: 'high', size: '1536x1024', background: 'transparent' });
+    await page.getByLabel('Prompt', { exact: true }).fill('Later draft');
+    await page.getByLabel('QUALITY', { exact: true }).selectOption('low');
+    await page.getByLabel('SIZE', { exact: true }).selectOption('1024x1536');
+    await page.getByLabel('BACKGROUND', { exact: true }).selectOption('opaque');
+    await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('2');
+    await page.getByRole('button', { name: 'Save all', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'All saved', exact: true })).toBeDisabled();
+    await page.reload();
+    await expect(page.getByLabel('BATCH SIZE', { exact: true })).toHaveValue('2');
+    await navigation.getByRole('button', { name: 'Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Open image: Manual control snapshot', exact: true })).toHaveCount(3);
+    await page.getByRole('button', { name: 'Open image: Manual control snapshot', exact: true }).first().click();
+    const details = page.getByRole('dialog', { name: 'Image details' });
+    await expect(details.locator('.prompt-container p')).toHaveText('Manual control snapshot');
+    const saved = await page.evaluate(async () => {
+        const archivePath = '/src/archive/ArchiveStore.ts';
+        const lineagePath = '/src/lineage/LineageStore.ts';
+        const { archiveStore } = await import(archivePath);
+        const { lineageStore } = await import(lineagePath);
+        const sessionPath = '/src/generate-session/GenerateSession.ts';
+        const { generateSessionStore } = await import(sessionPath);
+        const images = (await archiveStore.list()).filter((image: { prompt: string }) => image.prompt === 'Manual control snapshot');
+        return {
+            batch: await generateSessionStore.loadCurrentBatch(),
+            images: await Promise.all(images.map(async (image: { id: string }) => ({ image, steps: await lineageStore.getByArchiveImageId(image.id) }))),
+        };
+    });
+    expect(saved.batch?.draft?.gptImage).toEqual({ quality: 'high', size: '1536x1024', background: 'transparent', batchSize: 3 });
+    expect(saved.images).toHaveLength(3);
+    for (const entry of saved.images) {
+        expect(entry.image).toMatchObject({ quality: 'high', aspectRatio: '1536x1024', background: 'transparent' });
+        expect(entry.steps.at(-1)?.metadata.imageModel.controls).toMatchObject({ quality: 'high', size: '1536x1024', background: 'transparent' });
+    }
+    await testInfo.attach('control-snapshots', { body: JSON.stringify({ requests, saved }, null, 2), contentType: 'application/json' });
+    await details.screenshot({ path: testInfo.outputPath('saved-manual-controls.png') });
+});

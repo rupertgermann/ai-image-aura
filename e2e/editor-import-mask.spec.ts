@@ -283,12 +283,14 @@ for (const model of [OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL]) {
         await expect(page.getByRole('heading', { name: 'Archive', exact: true })).toBeVisible();
         await page.evaluate(async ({ imageId, model }) => {
             const storePath = '/src/archive/ArchiveStore.ts';
-            const clientPath = '/src/utils/openai.ts';
+            const providerPath = '/src/image-workflow/OpenAiImageProvider.ts';
+            const modelPath = '/src/utils/openaiModels.ts';
             const filePath = '/src/utils/file.ts';
             const lineagePath = '/src/lineage/LineageStore.ts';
             const replayPath = '/src/lineage/replayLineageStep.ts';
             const { archiveStore } = await import(storePath);
-            const { openAiImageClient } = await import(clientPath);
+            const { openAiImageProvider } = await import(providerPath);
+            const { resolveImageModelConfig } = await import(modelPath);
             const { dataURLtoFile } = await import(filePath);
             const image = await archiveStore.get(imageId);
             const { lineageStore } = await import(lineagePath);
@@ -296,7 +298,7 @@ for (const model of [OPENAI_IMAGE_MODEL, OPENAI_SUNBURST_IMAGE_MODEL]) {
             const steps = await lineageStore.getByArchiveImageId(imageId);
             const replay = steps.map(buildEditorReplay).find((replay: { maskImage?: File } | null) => replay?.maskImage);
             if (!replay?.maskImage) throw new Error('Saved lineage mask missing');
-            await openAiImageClient.createImage({ apiKey: 'synthetic-never-sent', model, prompt: 'Replay saved mask', referenceImages: [dataURLtoFile(image.url, 'source.png')], maskImage: replay.maskImage });
+            await openAiImageProvider.edit({ credential: 'synthetic-never-sent', model: resolveImageModelConfig(model), prompt: 'Replay saved mask', referenceImages: [dataURLtoFile(image.url, 'source.png')], maskImage: replay.maskImage });
         }, { imageId, model });
         expect(masks).toHaveLength(2);
         expect(await inspectMask(masks[1])).toEqual(await inspectMask(masks[0]));
@@ -313,8 +315,10 @@ test('a restored mask with different dimensions is rejected before the provider 
         await route.fulfill({ json: { data: [{ b64_json: 'unused' }] } });
     });
     const error = await page.evaluate(async () => {
-        const clientPath = '/src/utils/openai.ts';
-        const { openAiImageClient } = await import(clientPath);
+        const providerPath = '/src/image-workflow/OpenAiImageProvider.ts';
+        const modelPath = '/src/utils/openaiModels.ts';
+        const { openAiImageProvider } = await import(providerPath);
+        const { resolveImageModelConfig } = await import(modelPath);
         const canvas = document.createElement('canvas');
         const blob = () => new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG unavailable'))));
         canvas.width = canvas.height = 128;
@@ -322,7 +326,7 @@ test('a restored mask with different dimensions is rejected before the provider 
         canvas.width = 64;
         const mask = await blob();
         try {
-            await openAiImageClient.createImage({ apiKey: 'synthetic-never-sent', prompt: 'Replay', referenceImages: [source], maskImage: mask });
+            await openAiImageProvider.edit({ credential: 'synthetic-never-sent', model: resolveImageModelConfig(), prompt: 'Replay', referenceImages: [source], maskImage: mask });
             return null;
         } catch (error) {
             return error instanceof Error ? error.message : String(error);

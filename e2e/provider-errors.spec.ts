@@ -23,6 +23,51 @@ test.beforeEach(async ({ context, baseURL, page }) => {
     await page.getByLabel('Prompt', { exact: true }).fill(prompt);
 });
 
+test('single-image runs show partial previews and replace them with completed results', async ({ page }, testInfo) => {
+    await page.evaluate((base64) => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+            if (String(input) !== 'https://api.openai.com/v1/images/generations') return originalFetch(input, init);
+            const request = JSON.parse(String(init?.body));
+            if (request.n !== 1 || request.stream !== true) throw new Error('Expected one streaming image');
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 32;
+            const partial = canvas.toDataURL().split(',')[1];
+            return new Response(new ReadableStream({
+                start(controller) {
+                    const emit = (type: string, image: string) => controller.enqueue(new TextEncoder().encode(
+                        `event: ${type}\ndata: ${JSON.stringify({ type, b64_json: image })}\n\n`,
+                    ));
+                    emit('image_generation.partial_image', partial);
+                    window.addEventListener('complete-generation', () => {
+                        emit('image_generation.completed', base64);
+                        controller.close();
+                    }, { once: true });
+                },
+            }), { headers: { 'content-type': 'text/event-stream' } });
+        };
+    }, imageBase64);
+    const preview = page.getByRole('img', { name: 'In-progress generation preview', exact: true });
+    const result = page.getByRole('img', { name: 'Generated result', exact: true });
+    for (const run of [1, 2]) {
+        await page.getByLabel('Prompt', { exact: true }).fill(`Streaming run ${run}`);
+        await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+        if (run === 2) await page.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect(preview).toHaveJSProperty('naturalWidth', 32);
+        await page.screenshot({ path: testInfo.outputPath(`run-${run}-partial.png`) });
+        await page.evaluate(() => window.dispatchEvent(new Event('complete-generation')));
+        await expect(preview).toHaveCount(0);
+        await expect(result).toHaveJSProperty('naturalWidth', 128);
+        await expect(page.getByRole('button', { name: 'Save to Archive', exact: true })).toBeEnabled();
+    }
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+    await page.reload();
+    await expect(preview).toHaveCount(0);
+    await expect(result).toHaveJSProperty('naturalWidth', 128);
+    await page.screenshot({ path: testInfo.outputPath('completed-stream-reloaded.png') });
+});
+
 test('a completed streaming image survives a trailing reset and remains downloadable and saveable', async ({ page }, testInfo) => {
     await page.evaluate((base64) => {
         const originalFetch = window.fetch.bind(window);
@@ -175,4 +220,50 @@ test('malformed Gemini reasoning shows a deliberate error and can be retried', a
     await expect(page.getByText('Malformed response from Google Gemini', { exact: true })).toHaveCount(0);
     expect(requests).toBe(2);
     await page.screenshot({ path: testInfo.outputPath('gemini-retry.png'), fullPage: true });
+});
+
+test('malformed OpenAI batch entries keep successful results in their original slots', async ({ page }, testInfo) => {
+    await page.route('https://api.openai.com/v1/images/generations', (route) => route.fulfill({
+        json: { data: [{ b64_json: imageBase64 }, null, { b64_json: imageBase64 }, { b64_json: { invalid: true } }] },
+    }));
+    await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('4');
+    await page.getByRole('button', { name: 'Generate 4 images', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Generated result 1', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('img', { name: 'Generated result 3', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('img', { name: /^Generated result/ })).toHaveCount(2);
+    await expect(page.getByText('Malformed image result from OpenAI', { exact: true })).toHaveCount(2);
+    await page.reload();
+    const thirdResult = page.locator('.result-slot-card').filter({ hasText: 'Result 3' });
+    await thirdResult.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(thirdResult.getByRole('button', { name: 'Saved', exact: true })).toBeDisabled();
+    await expect(page.getByRole('img', { name: 'Generated result 3', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await page.screenshot({ path: testInfo.outputPath('malformed-openai-slots.png'), fullPage: true });
+});
+
+test('malformed Google image candidates and parts show deliberate errors and allow retry', async ({ page }, testInfo) => {
+    await configureKey(page, 'Google');
+    await page.getByLabel('Image model', { exact: true }).selectOption('nano-banana-pro');
+    const malformedResponses = [
+        { candidates: {} },
+        { candidates: [null] },
+        { candidates: [{ content: { parts: {} } }] },
+        { candidates: [{ content: { parts: [null] } }] },
+        { candidates: [{ content: { parts: [{ inlineData: { data: 123 } }] } }] },
+    ];
+    let requests = 0;
+    await page.route('https://generativelanguage.googleapis.com/**', (route) => route.fulfill({
+        json: malformedResponses[requests++] ?? { candidates: [{ content: { parts: [{ inlineData: { data: imageBase64 } }] } }] },
+    }));
+    for (let attempt = 0; attempt < malformedResponses.length; attempt += 1) {
+        await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+        await expect(page.getByRole('alert')).toHaveText('Malformed response from Google Gemini');
+        await expect(page.getByRole('button', { name: 'Generate image', exact: true })).toBeEnabled();
+        await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveCount(0);
+    }
+    await page.screenshot({ path: testInfo.outputPath('malformed-google-image.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+    await expect(page.getByRole('img', { name: 'Generated result', exact: true })).toHaveJSProperty('naturalWidth', 128);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(requests).toBe(6);
+    await page.screenshot({ path: testInfo.outputPath('google-image-retry.png'), fullPage: true });
 });
