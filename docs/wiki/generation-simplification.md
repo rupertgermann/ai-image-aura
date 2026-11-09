@@ -1,0 +1,16 @@
+# Generation simplification history
+
+On 2026-11-09, inspection used `rupertgermann/ai-image-aura@d823cc31ec67b4a371492ca82fa986d4ae7d5740`, the merge commit of [archive simplification PR #178](https://github.com/rupertgermann/ai-image-aura/pull/178). That PR documented smaller interfaces while retaining archive recovery and legacy normalization; it supplied the precedent for the next bounded simplification.
+
+At that commit:
+
+- The [image provider](https://github.com/rupertgermann/ai-image-aura/blob/d823cc31ec67b4a371492ca82fa986d4ae7d5740/src/image-workflow/ImageProvider.ts) translated its shared request to a second OpenAI image request shape in the [OpenAI utility](https://github.com/rupertgermann/ai-image-aura/blob/d823cc31ec67b4a371492ca82fa986d4ae7d5740/src/utils/openai.ts). The utility also owned a separate reasoning Responses client; image-contract consolidation must not remove that independent responsibility.
+- [Generate session selection](https://github.com/rupertgermann/ai-image-aura/blob/d823cc31ec67b4a371492ca82fa986d4ae7d5740/src/generate-session/GenerateSession.ts) returned freshly sanitized controls. [Autopilot coordination](https://github.com/rupertgermann/ai-image-aura/blob/d823cc31ec67b4a371492ca82fa986d4ae7d5740/src/generate-session/runGenerateAutopilot.ts) mutated that returned control object's batch size to one. Removing repeated normalization without first removing that mutation would risk aliasing the form draft.
+- The [Generate controller](https://github.com/rupertgermann/ai-image-aura/blob/d823cc31ec67b4a371492ca82fa986d4ae7d5740/src/generate-session/useGenerateController.ts) contained one-use reference snapshot and archive-save forwarding, plus preview getter/setter plumbing. Their behavior included asynchronous reference copies, legacy null fallback, a run-identity preview guard, and progress after each sequential save. Any consolidation must preserve those behaviors.
+- The [domain glossary](https://github.com/rupertgermann/ai-image-aura/blob/d823cc31ec67b4a371492ca82fa986d4ae7d5740/CONTEXT.md) distinguished image model, provider, reasoning model, generation batch, batch result, actual parameters, and lineage. Those distinctions govern the simplification scope.
+
+On 2026-11-09, planning scoped the work to provider image boundaries, owned control snapshots, and controller one-offs. Reasoning redesign, Autopilot lifecycle changes, persistence-format changes, and new features were excluded. This entry records planning, not completed implementation or validation. Approval of the testing seams and ticket breakdown was pending at the first draft; the approval entry below supersedes that status.
+
+On 2026-11-09, Rupert approved the browser testing seams and three-ticket graph. The approved [spec #179](https://github.com/rupertgermann/ai-image-aura/issues/179) was published with [provider ownership #180](https://github.com/rupertgermann/ai-image-aura/issues/180) and [control snapshots #181](https://github.com/rupertgermann/ai-image-aura/issues/181) independent, followed by [controller consolidation #182](https://github.com/rupertgermann/ai-image-aura/issues/182), blocked by both. Those issues record the acceptance contract; publication did not establish completion.
+
+Related: [verification evidence and isolated environments](generation-verification.md).
