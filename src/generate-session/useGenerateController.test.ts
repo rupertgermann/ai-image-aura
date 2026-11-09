@@ -3,7 +3,6 @@ import { createAutopilotSession } from '../autopilot/AutopilotSession';
 import { saveArchiveImage, type GenerationSaveRequest } from '../archive/saveArchiveImage';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { buildImageModelGenerateReferenceRunPlan } from '../image-models/ImageModelControls';
 import { NANO_BANANA_PRO_IMAGE_MODEL, QWEN_IMAGE_2_1_IMAGE_MODEL } from '../utils/openaiModels';
 import { DEFAULT_GENERATE_DRAFT, type GenerateBatchSnapshot, type GenerateDraft } from './GenerateSession';
 import type { SaveLineageStepInput } from '../lineage/LineageStore';
@@ -11,10 +10,7 @@ import {
     addGeneratedResultAsReference,
     addGeneratedResultAsReferenceFromAction,
     buildGenerateResultSlots,
-    buildGeneratedArchiveImageForSave,
     saveGenerateResultSlots,
-    snapshotGeneratedReferenceImages,
-    startGeneratePartialPreviewRun,
     useGenerateController,
 } from './useGenerateController';
 
@@ -78,6 +74,20 @@ describe('Generate controller batch result slots', () => {
         expect(saveImage.mock.calls.map(([image]) => image.url)).toEqual([
             'data:image/png;base64,one', 'data:image/png;base64,two', 'data:image/png;base64,two',
         ]);
+    });
+
+    it.each([
+        { usedReferences: null, expected: ['data:image/png;base64,current-reference'] },
+        { usedReferences: [], expected: [] },
+    ])('uses current references only for a legacy unknown snapshot: $usedReferences', async ({ usedReferences, expected }) => {
+        const saveImage = vi.fn(async (request: GenerationSaveRequest) => request.image);
+        await saveGenerateResultSlots({
+            results: buildGenerateResultSlots([{ slotIndex: 0, status: 'success', imageUrl: 'data:image/png;base64,result' }]),
+            draft: createDraft({}), runDraft: null, usedReferences, runLineageSource: null,
+            serializeReferences: async () => ['data:image/png;base64,current-reference'],
+            saveImage,
+        });
+        expect(saveImage.mock.calls[0]?.[0].image.references).toEqual(expected);
     });
 
     it('save-all archives each unsaved successful slot without duplicating saved or failed slots', async () => {
@@ -163,46 +173,6 @@ describe('Generate controller batch result slots', () => {
                 archiveImageId: 'archive-3',
             },
         ]);
-    });
-});
-
-describe('Generate controller partial preview gating', () => {
-    it('updates and clears partial preview state only for the active run', () => {
-        let currentRunId = 0;
-        let currentPartialResult: string | null = 'data:image/png;base64,old';
-        const setCurrentPartialResult = vi.fn((imageUrl: string | null) => {
-            currentPartialResult = imageUrl;
-        });
-
-        const firstRun = startGeneratePartialPreviewRun({
-            getCurrentRunId: () => currentRunId,
-            setCurrentRunId: (runId) => {
-                currentRunId = runId;
-            },
-            setCurrentPartialResult,
-        });
-
-        expect(currentPartialResult).toBeNull();
-
-        firstRun.update('data:image/png;base64,partial-1');
-        expect(currentPartialResult).toBe('data:image/png;base64,partial-1');
-
-        const secondRun = startGeneratePartialPreviewRun({
-            getCurrentRunId: () => currentRunId,
-            setCurrentRunId: (runId) => {
-                currentRunId = runId;
-            },
-            setCurrentPartialResult,
-        });
-
-        secondRun.update('data:image/png;base64,partial-2');
-        firstRun.update('data:image/png;base64,stale-partial');
-        firstRun.clear();
-
-        expect(currentPartialResult).toBe('data:image/png;base64,partial-2');
-
-        secondRun.clear();
-        expect(currentPartialResult).toBeNull();
     });
 });
 
@@ -303,8 +273,11 @@ describe('Generate controller result Reference iteration', () => {
 });
 
 describe('Generate controller Reference image provenance', () => {
-    it('uses only Qwen provider references in the batch snapshot, archive image, and lineage', async () => {
-        const selectedFiles = Array.from({ length: 12 }, (_, index) =>
+    it.each([
+        { model: QWEN_IMAGE_2_1_IMAGE_MODEL, limit: 10 },
+        { model: NANO_BANANA_PRO_IMAGE_MODEL, limit: 14 },
+    ] as const)('saves only the $model run references after the selection changes', async ({ model, limit }) => {
+        const selectedFiles = Array.from({ length: 15 }, (_, index) =>
             new File([`reference-${index}`], `reference-${index}.png`, { type: 'image/png' }),
         );
         const selectedDataUrls = selectedFiles.map((_, index) => `data:image/png;base64,reference-${index}`);
@@ -317,7 +290,7 @@ describe('Generate controller Reference image provenance', () => {
             imageUrl: 'data:image/png;base64,result',
         }]);
         const saveCurrentBatch = vi.fn(async (batch: GenerateBatchSnapshot) => { void batch; });
-        const draft = createDraft({ model: QWEN_IMAGE_2_1_IMAGE_MODEL });
+        const draft = createDraft({ model });
         const controller: { current: ReturnType<typeof useGenerateController> | null } = { current: null };
 
         renderToStaticMarkup(createElement(() => {
@@ -346,12 +319,14 @@ describe('Generate controller Reference image provenance', () => {
         await controller.current!.generate();
 
         expect(generate).toHaveBeenCalledWith(expect.objectContaining({
-            referenceImages: selectedFiles.slice(0, 10),
+            referenceImages: selectedFiles.slice(0, limit),
         }));
-        expect(serializeReferenceFiles).toHaveBeenCalledWith(selectedFiles.slice(0, 10));
+        expect(serializeReferenceFiles).toHaveBeenCalledWith(selectedFiles.slice(0, limit));
         const snapshot = saveCurrentBatch.mock.calls[0]?.[0];
-        expect(snapshot?.references).toEqual(selectedDataUrls.slice(0, 10));
+        expect(snapshot?.references).toEqual(selectedDataUrls.slice(0, limit));
 
+        selectedFiles.length = 0;
+        const serializeCurrentReferences = vi.fn(async () => ['data:image/png;base64,changed']);
         const saveImage = vi.fn(async (image) => image);
         const saveLineage = vi.fn(async (step: SaveLineageStepInput) => ({ ...step, id: 'step-1' }));
         await saveGenerateResultSlots({
@@ -360,59 +335,19 @@ describe('Generate controller Reference image provenance', () => {
             runDraft: snapshot!.draft,
             usedReferences: snapshot!.references,
             runLineageSource: snapshot!.lineageSource,
-            serializeReferences: vi.fn(async () => selectedDataUrls),
+            serializeReferences: serializeCurrentReferences,
             saveImage: (request: GenerationSaveRequest) => saveArchiveImage(request, { archive: { get: async () => null, save: saveImage, remove: vi.fn() }, lineage: { getByArchiveImageId: vi.fn(async () => []), save: saveLineage } }),
-            createArchiveImageId: () => 'qwen-archive'
+            createArchiveImageId: () => 'reference-archive'
         });
 
-        expect(saveImage.mock.calls[0]?.[0].references).toEqual(selectedDataUrls.slice(0, 10));
+        expect(serializeCurrentReferences).not.toHaveBeenCalled();
+        expect(saveImage.mock.calls[0]?.[0].references).toEqual(selectedDataUrls.slice(0, limit));
         expect(saveLineage).toHaveBeenCalledWith(expect.objectContaining({
             metadata: expect.objectContaining({
-                referenceCount: 10,
-                referenceImages: expect.objectContaining({ count: 10 }),
+                referenceCount: limit,
+                referenceImages: expect.objectContaining({ count: limit }),
             }),
         }));
-    });
-
-    it('saves an over-limit Nano Banana Pro result from the used Reference image snapshot', async () => {
-        const draft = createDraft({
-            model: NANO_BANANA_PRO_IMAGE_MODEL,
-        });
-        const selectedReferenceFiles = Array.from({ length: 15 }, (_, index) =>
-            new File([`reference-${index}`], `ref-${index}.png`, { type: 'image/png' }),
-        );
-        const selectedReferenceDataUrls = selectedReferenceFiles.map((file, index) =>
-            `data:${file.type};base64,reference-${index}`,
-        );
-        const changedReferenceDataUrls = [
-            'data:image/png;base64,new-reference',
-            ...selectedReferenceDataUrls,
-        ];
-        const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(
-            NANO_BANANA_PRO_IMAGE_MODEL,
-            selectedReferenceFiles,
-        );
-        const serializeReferenceFiles = vi.fn(async (files: File[]) =>
-            files.map((file) => selectedReferenceDataUrls[selectedReferenceFiles.indexOf(file)]),
-        );
-        const serializeReferences = vi.fn(async () => changedReferenceDataUrls);
-
-        const usedReferences = await snapshotGeneratedReferenceImages({
-            referenceImages: referenceRunPlan.providerReferenceImages,
-            serializeReferenceFiles,
-        });
-        const image = await buildGeneratedArchiveImageForSave({
-            id: 'generated-nano-with-refs',
-            url: 'data:image/png;base64,nano-result',
-            timestamp: '2026-06-05T12:00:00.000Z',
-            draft,
-            usedReferences,
-            serializeReferences,
-        });
-
-        expect(serializeReferenceFiles).toHaveBeenCalledWith(selectedReferenceFiles.slice(0, 14));
-        expect(serializeReferences).not.toHaveBeenCalled();
-        expect(image.references).toEqual(selectedReferenceDataUrls.slice(0, 14));
     });
 });
 

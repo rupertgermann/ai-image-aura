@@ -81,22 +81,6 @@ interface BuildGeneratedArchiveImageInput {
     costLedger?: ApiCostLedger;
 }
 
-interface SnapshotGeneratedReferenceImagesInput {
-    referenceImages: File[];
-    serializeReferenceFiles: (files: File[]) => Promise<string[]>;
-}
-
-interface BuildGeneratedArchiveImageForSaveInput {
-    id: string;
-    url: string;
-    timestamp: string;
-    draft: GenerateRunDraft;
-    usedReferences: string[] | null;
-    actualParameters?: ActualImageParameters;
-    costLedger?: ApiCostLedger;
-    serializeReferences: () => Promise<string[]>;
-}
-
 interface SaveGenerateResultSlotsInput {
     results: GenerateResultSlot[];
     slotIndexes?: number[];
@@ -123,38 +107,7 @@ interface AddGeneratedResultAsReferenceActionInput extends AddGeneratedResultAsR
     setNotice: (message: string | null) => void;
 }
 
-interface StartGeneratePartialPreviewRunInput {
-    getCurrentRunId: () => number;
-    setCurrentRunId: (runId: number) => void;
-    setCurrentPartialResult: (imageUrl: string | null) => void;
-}
-
-export function startGeneratePartialPreviewRun({
-    getCurrentRunId,
-    setCurrentRunId,
-    setCurrentPartialResult,
-}: StartGeneratePartialPreviewRunInput) {
-    const runId = getCurrentRunId() + 1;
-    setCurrentRunId(runId);
-    setCurrentPartialResult(null);
-
-    const isCurrentRun = () => getCurrentRunId() === runId;
-
-    return {
-        update(imageUrl: string) {
-            if (isCurrentRun()) {
-                setCurrentPartialResult(imageUrl);
-            }
-        },
-        clear() {
-            if (isCurrentRun()) {
-                setCurrentPartialResult(null);
-            }
-        },
-    };
-}
-
-export function buildGeneratedArchiveImage({
+function buildGeneratedArchiveImage({
     id,
     url,
     timestamp,
@@ -185,36 +138,6 @@ export function buildGeneratedArchiveImage({
     };
 }
 
-export function snapshotGeneratedReferenceImages({
-    referenceImages,
-    serializeReferenceFiles,
-}: SnapshotGeneratedReferenceImagesInput): Promise<string[]> {
-    return serializeReferenceFiles(referenceImages.slice());
-}
-
-export async function buildGeneratedArchiveImageForSave({
-    id,
-    url,
-    timestamp,
-    draft,
-    usedReferences,
-    actualParameters,
-    costLedger,
-    serializeReferences,
-}: BuildGeneratedArchiveImageForSaveInput): Promise<ArchiveImage> {
-    const references = usedReferences ?? await serializeReferences();
-
-    return buildGeneratedArchiveImage({
-        id,
-        url,
-        timestamp,
-        draft,
-        actualParameters,
-        costLedger,
-        references,
-    });
-}
-
 export async function saveGenerateResultSlots({
     results,
     slotIndexes,
@@ -238,15 +161,14 @@ export async function saveGenerateResultSlots({
 
     for (const slot of results.filter(shouldSaveSlot)) {
         const archiveImageId = createArchiveImageId();
-        const image = await buildGeneratedArchiveImageForSave({
+        const image = buildGeneratedArchiveImage({
             id: archiveImageId,
             url: slot.imageUrl,
             timestamp: now().toISOString(),
             draft: runDraft ?? draft,
-            usedReferences,
+            references: usedReferences ?? await serializeReferences(),
             actualParameters: slot.actualParameters,
             costLedger: slot.costLedger,
-            serializeReferences,
         });
         const savedImage = await saveImage({
             kind: 'generation',
@@ -471,13 +393,8 @@ export function useGenerateController({
         runningRef.current = true;
         setLoading(true);
         setError(null);
-        const partialPreviewRun = startGeneratePartialPreviewRun({
-            getCurrentRunId: () => partialRunIdRef.current,
-            setCurrentRunId: (runId) => {
-                partialRunIdRef.current = runId;
-            },
-            setCurrentPartialResult,
-        });
+        const partialRunId = ++partialRunIdRef.current;
+        setCurrentPartialResult(null);
         let completionNotification: CompletionNotificationPayload | null = null;
 
         try {
@@ -486,12 +403,11 @@ export function useGenerateController({
             const runDraft = cloneGenerateDraft(draft);
             const runLineageSource = session.loadLineageSource();
             const onPartialImage = shouldStreamGeneratePartials(draft)
-                ? partialPreviewRun.update
+                ? (imageUrl: string) => {
+                    if (partialRunIdRef.current === partialRunId) setCurrentPartialResult(imageUrl);
+                }
                 : undefined;
-            const usedReferences = await snapshotGeneratedReferenceImages({
-                referenceImages: usedReferenceImages,
-                serializeReferenceFiles: workflow.serializeReferences,
-            });
+            const usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
             const results = await workflow.generate({
                 credential: imageCredential,
                 ...imageModel,
@@ -520,7 +436,7 @@ export function useGenerateController({
                 lineageSource: runLineageSource,
             };
 
-            partialPreviewRun.clear();
+            if (partialRunIdRef.current === partialRunId) setCurrentPartialResult(null);
             await adoptBatch({ snapshot: batchSnapshot, autopilotSummary: null });
 
             if (!successfulResult) {
@@ -540,7 +456,7 @@ export function useGenerateController({
             };
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Failed to generate image';
-            partialPreviewRun.clear();
+            if (partialRunIdRef.current === partialRunId) setCurrentPartialResult(null);
             setError(message);
             completionNotification = {
                 title: 'Generation failed',

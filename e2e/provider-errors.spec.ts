@@ -23,6 +23,51 @@ test.beforeEach(async ({ context, baseURL, page }) => {
     await page.getByLabel('Prompt', { exact: true }).fill(prompt);
 });
 
+test('single-image runs show partial previews and replace them with completed results', async ({ page }, testInfo) => {
+    await page.evaluate((base64) => {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+            if (String(input) !== 'https://api.openai.com/v1/images/generations') return originalFetch(input, init);
+            const request = JSON.parse(String(init?.body));
+            if (request.n !== 1 || request.stream !== true) throw new Error('Expected one streaming image');
+            const canvas = document.createElement('canvas');
+            canvas.width = canvas.height = 32;
+            const partial = canvas.toDataURL().split(',')[1];
+            return new Response(new ReadableStream({
+                start(controller) {
+                    const emit = (type: string, image: string) => controller.enqueue(new TextEncoder().encode(
+                        `event: ${type}\ndata: ${JSON.stringify({ type, b64_json: image })}\n\n`,
+                    ));
+                    emit('image_generation.partial_image', partial);
+                    window.addEventListener('complete-generation', () => {
+                        emit('image_generation.completed', base64);
+                        controller.close();
+                    }, { once: true });
+                },
+            }), { headers: { 'content-type': 'text/event-stream' } });
+        };
+    }, imageBase64);
+    const preview = page.getByRole('img', { name: 'In-progress generation preview', exact: true });
+    const result = page.getByRole('img', { name: 'Generated result', exact: true });
+    for (const run of [1, 2]) {
+        await page.getByLabel('Prompt', { exact: true }).fill(`Streaming run ${run}`);
+        await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+        if (run === 2) await page.getByRole('button', { name: 'Continue', exact: true }).click();
+        await expect(preview).toHaveJSProperty('naturalWidth', 32);
+        await page.screenshot({ path: testInfo.outputPath(`run-${run}-partial.png`) });
+        await page.evaluate(() => window.dispatchEvent(new Event('complete-generation')));
+        await expect(preview).toHaveCount(0);
+        await expect(result).toHaveJSProperty('naturalWidth', 128);
+        await expect(page.getByRole('button', { name: 'Save to Archive', exact: true })).toBeEnabled();
+    }
+    await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Saved to Archive', exact: true })).toBeDisabled();
+    await page.reload();
+    await expect(preview).toHaveCount(0);
+    await expect(result).toHaveJSProperty('naturalWidth', 128);
+    await page.screenshot({ path: testInfo.outputPath('completed-stream-reloaded.png') });
+});
+
 test('a completed streaming image survives a trailing reset and remains downloadable and saveable', async ({ page }, testInfo) => {
     await page.evaluate((base64) => {
         const originalFetch = window.fetch.bind(window);

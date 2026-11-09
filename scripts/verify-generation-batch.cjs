@@ -131,7 +131,7 @@ async function mixedBatch(browser) {
     assertOriginalImages(state, 'mixed original prompt', [images[0]]);
     assert.equal(state.batch.results[1].status, 'failed');
     await page.getByRole('button', { name: 'Clear results', exact: true }).click();
-    await page.locator('.result-slot-card').waitFor({ state: 'detached' });
+    await page.waitForFunction(() => document.querySelectorAll('.result-slot-card').length === 0);
     await page.waitForFunction(async () => {
       const { generateSessionStore } = await import('/src/generate-session/GenerateSession.ts');
       return await generateSessionStore.loadCurrentBatch() === null;
@@ -170,6 +170,9 @@ async function autopilot(browser, kind) {
       return route.fulfill({ json: { output_text: outputText, usage: { input_tokens: 20, output_tokens: 10 } } });
     });
     if (kind === 'serialization-failure') {
+      await page.getByLabel('BATCH SIZE', { exact: true }).selectOption('1');
+      await page.getByRole('button', { name: 'Generate image', exact: true }).click();
+      await page.getByRole('button', { name: 'Save to Archive', exact: true }).waitFor();
       await page.evaluate(async () => {
         const moduleUrl = performance.getEntriesByType('resource').find(entry => new URL(entry.name).pathname === '/src/image-workflow/ImageWorkflow.ts').name;
         const { imageWorkflow } = await import(moduleUrl);
@@ -196,7 +199,21 @@ async function autopilot(browser, kind) {
     await page.getByLabel('Max iterations').fill(String(stopAt));
     await page.getByLabel('Satisfaction threshold').fill('90');
     await page.getByRole('button', { name: 'Run Autopilot', exact: true }).click();
+    if (kind === 'serialization-failure') await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm Run', exact: true }).click();
+    if (kind === 'serialization-failure') {
+      await page.getByText('Controlled reference serialization failure', { exact: true }).waitFor();
+      assert.equal(await page.getByAltText('Generated result', { exact: true }).getAttribute('src'), images[0], 'Prior completed result stays saveable after preflight serialization failure');
+      await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
+      await waitForSaved(page, 1);
+      const state = await capture(page, 'autopilot-serialization-failure-saved');
+      assert.equal(calls.length, 1, 'Serialization failure prevents a new provider request');
+      assert.equal(state.images.length, 1);
+      assert.equal(state.images[0].url, images[0]);
+      assertOriginalImages(state, 'autopilot-serialization-failure original prompt', [images[0]]);
+      assert.deepEqual(errors, []);
+      return;
+    }
     await Promise.race([blocked, new Promise((_, reject) => setTimeout(() => reject(new Error('Autopilot never reached the held image request')), 15000).unref())]);
     assert.equal(await page.getByAltText('Generated result', { exact: true }).getAttribute('src'), images[stopAt - 2], 'Live preview is the latest iteration');
     await page.screenshot({ path: path.join(output, `autopilot-${kind}-live.png`), fullPage: true, animations: 'disabled' });
@@ -204,18 +221,6 @@ async function autopilot(browser, kind) {
     releaseImage();
     await page.getByRole('button', { name: 'Save to Archive', exact: true }).waitFor();
     await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find(button => button.textContent.trim() === 'Save to Archive')?.disabled);
-    if (kind === 'serialization-failure') {
-      await page.getByText('Controlled reference serialization failure', { exact: true }).waitFor();
-      assert.equal(await page.getByAltText('Generated result', { exact: true }).getAttribute('src'), images[1], 'Latest iteration stays saveable after serialization failure');
-      await page.getByRole('button', { name: 'Save to Archive', exact: true }).click();
-      await waitForSaved(page, 1);
-      const state = await capture(page, 'autopilot-serialization-failure-saved');
-      assert.equal(state.images.length, 1);
-      assert.equal(state.images[0].url, images[1]);
-      assertOriginalImages(state, 'autopilot-serialization-failure original prompt', [images[0]]);
-      assert.deepEqual(errors, []);
-      return;
-    }
     assert.equal(await page.getByAltText('Generated result', { exact: true }).getAttribute('src'), images[0], 'Final preview is the best iteration');
     if (kind === 'persistence-failure') {
       await page.getByText('Controlled batch persistence failure', { exact: true }).waitFor();
@@ -418,7 +423,7 @@ async function imageModelControls(browser, autopilotMode) {
 
 (async () => {
   await fs.mkdir(output, { recursive: true });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   try {
     await mixedBatch(browser);
     await autopilot(browser, 'completed');
