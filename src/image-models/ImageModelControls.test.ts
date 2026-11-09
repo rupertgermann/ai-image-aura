@@ -113,9 +113,9 @@ describe('Image model controls', () => {
             batchSize: 4,
         });
         expect(coerceImageModelControlValue(NANO_BANANA_PRO_IMAGE_MODEL, 'aspectRatio', '1024x1536')).toBe('2:3');
-        expect(coerceImageModelControlValue(NANO_BANANA_PRO_IMAGE_MODEL, 'batchSize', '3')).toBe('3');
+        expect(coerceImageModelControlValue(NANO_BANANA_PRO_IMAGE_MODEL, 'batchSize', '3')).toBe(3);
         expect(coerceImageModelControlValue(OPENAI_IMAGE_MODEL, 'quality', 'best')).toBe('medium');
-        expect(coerceImageModelControlValue(OPENAI_IMAGE_MODEL, 'batchSize', '9')).toBe('4');
+        expect(coerceImageModelControlValue(OPENAI_IMAGE_MODEL, 'batchSize', '9')).toBe(4);
     });
 
     it('builds archive metadata dimensions for Generate saves through shared Image model controls', () => {
@@ -149,7 +149,7 @@ describe('Image model controls', () => {
 
         expect(mapImageModelGenerateProviderRequest({
             model: OPENAI_IMAGE_MODEL,
-            controls: { quality: 'high', size: ' 1536x1024 ', background: 'transparent', batchSize: 3 },
+            controls: sanitizeImageModelControls(OPENAI_IMAGE_MODEL, { quality: 'high', size: ' 1536x1024 ', background: 'transparent', batchSize: 3 }),
         }, references)).toEqual({
             quality: 'high',
             size: '1536x1024',

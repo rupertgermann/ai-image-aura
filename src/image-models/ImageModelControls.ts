@@ -446,7 +446,7 @@ export function sanitizeArchiveImageModelControls(model: ImageModelSlug, image: 
     }
 }
 
-export function coerceImageModelControlValue(model: ImageModelSlug, controlId: string, value: unknown): string {
+export function coerceImageModelControlValue(model: ImageModelSlug, controlId: string, value: unknown): string | number {
     switch (model) {
         case OPENAI_IMAGE_MODEL:
         case OPENAI_SUNBURST_IMAGE_MODEL: {
@@ -454,14 +454,14 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
             if (controlId === 'quality') return coerceImageQuality(value, defaults.quality);
             if (controlId === 'size') return coerceGptImageSize(value, defaults.size);
             if (controlId === 'background') return coerceImageBackground(value, defaults.background);
-            if (controlId === 'batchSize') return String(coerceGptBatchSize(value, defaults.batchSize));
+            if (controlId === 'batchSize') return coerceGptBatchSize(value, defaults.batchSize);
             return '';
         }
         case NANO_BANANA_PRO_IMAGE_MODEL: {
             const defaults = getDefaultImageModelControls(model);
             if (controlId === 'aspectRatio') return coerceNanoAspectRatio(value, defaults.aspectRatio);
             if (controlId === 'imageSize') return coerceNanoImageSize(value, defaults.imageSize);
-            if (controlId === 'batchSize') return String(coerceGptBatchSize(value, defaults.batchSize));
+            if (controlId === 'batchSize') return coerceGptBatchSize(value, defaults.batchSize);
             return '';
         }
         case QWEN_IMAGE_2_1_IMAGE_MODEL: {
@@ -469,14 +469,14 @@ export function coerceImageModelControlValue(model: ImageModelSlug, controlId: s
             if (controlId === 'aspectRatio') return coerceLocalAspectRatio(value, defaults.aspectRatio);
             if (controlId === 'imageSize') return coerceLocalImageSize(value, defaults.imageSize);
             if (controlId === 'background') return coerceQwenBackground(value, defaults.background);
-            if (controlId === 'batchSize') return String(coerceGptBatchSize(value, defaults.batchSize));
+            if (controlId === 'batchSize') return coerceGptBatchSize(value, defaults.batchSize);
             return '';
         }
         case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
             const defaults = getDefaultImageModelControls(model);
             if (controlId === 'aspectRatio') return coerceLocalAspectRatio(value, defaults.aspectRatio);
             if (controlId === 'imageSize') return coerceLocalImageSize(value, defaults.imageSize);
-            if (controlId === 'batchSize') return String(coerceGptBatchSize(value, defaults.batchSize));
+            if (controlId === 'batchSize') return coerceGptBatchSize(value, defaults.batchSize);
             return '';
         }
         default: return assertNever(model);
@@ -543,32 +543,18 @@ export function mapImageModelGenerateProviderRequest(
     switch (input.model) {
         case OPENAI_IMAGE_MODEL:
         case OPENAI_SUNBURST_IMAGE_MODEL:
+        case NANO_BANANA_PRO_IMAGE_MODEL:
             return {
-                ...sanitizeImageModelControls(input.model, input.controls),
+                ...input.controls,
                 referenceImages: referenceRunPlan.providerReferenceImages,
             };
-        case NANO_BANANA_PRO_IMAGE_MODEL: {
+        case QWEN_IMAGE_2_1_IMAGE_MODEL:
+        case FLUX_2_KLEIN_4B_IMAGE_MODEL:
             return {
-                ...sanitizeImageModelControls(input.model, input.controls),
+                size: LOCAL_SIZE_TABLE[input.controls.aspectRatio][input.controls.imageSize],
+                batchSize: input.controls.batchSize,
                 referenceImages: referenceRunPlan.providerReferenceImages,
             };
-        }
-        case QWEN_IMAGE_2_1_IMAGE_MODEL: {
-            const controls = sanitizeImageModelControls(input.model, input.controls);
-            return {
-                size: LOCAL_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
-                batchSize: controls.batchSize,
-                referenceImages: referenceRunPlan.providerReferenceImages,
-            };
-        }
-        case FLUX_2_KLEIN_4B_IMAGE_MODEL: {
-            const controls = sanitizeImageModelControls(input.model, input.controls);
-            return {
-                size: LOCAL_SIZE_TABLE[controls.aspectRatio][controls.imageSize],
-                batchSize: controls.batchSize,
-                referenceImages: referenceRunPlan.providerReferenceImages,
-            };
-        }
         default: return assertNever(input);
     }
 }

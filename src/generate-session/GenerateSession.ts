@@ -489,13 +489,13 @@ export function getActiveGenerateModel(draft: GenerateDraft): ImageModelSelectio
     switch (draft.model) {
         case OPENAI_IMAGE_MODEL:
         case OPENAI_SUNBURST_IMAGE_MODEL:
-            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.gptImage) };
+            return { model: draft.model, controls: { ...draft.gptImage } };
         case NANO_BANANA_PRO_IMAGE_MODEL:
-            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.nanoBananaPro) };
+            return { model: draft.model, controls: { ...draft.nanoBananaPro } };
         case QWEN_IMAGE_2_1_IMAGE_MODEL:
-            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.qwenImage2_1) };
+            return { model: draft.model, controls: { ...draft.qwenImage2_1 } };
         case FLUX_2_KLEIN_4B_IMAGE_MODEL:
-            return { model: draft.model, controls: sanitizeImageModelControls(draft.model, draft.flux2Klein4b) };
+            return { model: draft.model, controls: { ...draft.flux2Klein4b } };
         default: return assertNever(draft.model);
     }
 }

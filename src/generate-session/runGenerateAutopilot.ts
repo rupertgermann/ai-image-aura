@@ -34,9 +34,10 @@ export interface RunGenerateAutopilotOutcome {
 export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Promise<RunGenerateAutopilotOutcome> {
     const createSession = input.createSession ?? createAutopilotSession;
     const workflow = input.workflow ?? imageWorkflow;
-    const imageModel = getActiveGenerateModel(input.draft);
-    imageModel.controls.batchSize = 1;
-    const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(input.draft.model, input.referenceImages);
+    const runDraft = structuredClone(input.draft);
+    runDraft[getImageModelDraftKey(runDraft.model)].batchSize = 1;
+    const imageModel = getActiveGenerateModel(runDraft);
+    const referenceRunPlan = buildImageModelGenerateReferenceRunPlan(runDraft.model, input.referenceImages);
     const usedReferenceImages = referenceRunPlan.providerReferenceImages.slice();
     const usedReferences = await workflow.serializeReferences(usedReferenceImages.slice());
     const source = input.sessionStore.loadLineageSource();
@@ -47,12 +48,12 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     const session = createSession({
         goal: input.goal,
         references: usedReferences,
-        initialPrompt: input.draft.prompt,
+        initialPrompt: runDraft.prompt,
         settings: {
             ...imageModel,
-            style: input.draft.style,
-            lighting: input.draft.lighting,
-            palette: input.draft.palette,
+            style: runDraft.style,
+            lighting: runDraft.lighting,
+            palette: runDraft.palette,
             referenceImages: usedReferenceImages,
         },
         imageCredential: input.imageCredential,
@@ -77,9 +78,7 @@ export async function runGenerateAutopilot(input: RunGenerateAutopilotInput): Pr
     let batch: GenerateBatchSnapshot | null = null;
 
     if (selectedIteration) {
-        const runDraft = structuredClone(input.draft);
         runDraft.prompt = selectedIteration.prompt;
-        runDraft[getImageModelDraftKey(runDraft.model)].batchSize = 1;
         const durableIteration = selectedIteration.stepId
             ? selectedIteration
             : result.iterations.filter((iteration) => iteration.stepId !== null).at(-1);
