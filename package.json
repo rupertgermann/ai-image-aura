@@ -5,6 +5,9 @@
   "description": "Local-first AI image generation and editing studio built with React, Vite, SQLocal, and the OpenAI Images API.",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=26.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "test": "vitest run",
@@ -40,6 +43,10 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
-    "vitest": "^3.2.4"
+    "vitest": "5.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.27.2": true,
+    "fsevents@2.3.3": true
   }
 }

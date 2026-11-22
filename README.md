@@ -53,7 +53,7 @@ Hosted models require your own API keys. Local image models require a compatible
 
 ## Runtime Requirements
 
-- Node.js `20.19+` or `22.12+`
+- Node.js `26.0.0+`
 - npm `10+`
 
 ## Getting Started
