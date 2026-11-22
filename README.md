@@ -10,11 +10,11 @@ The interface has light and dark modes, monochrome panels, orange accents, and c
 
 | Generate | Archive |
 |----------|---------|
-| ![Generate view](docs/screens/Generate.png) | ![Archive view](docs/screens/Archive.png) |
+| ![Generate view](docs/screens/Generate.jpg) | ![Archive view](docs/screens/Archive.jpg) |
 
 | Editor | Detail |
 |--------|--------|
-| ![Editor view](docs/screens/Editor.png) | ![Detail view](docs/screens/Detail.png) |
+| ![Editor view](docs/screens/Editor.jpg) | ![Detail view](docs/screens/Detail.jpg) |
 
 ## Current state and features
 
