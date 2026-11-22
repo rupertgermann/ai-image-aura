@@ -1138,6 +1138,15 @@ textarea.aura-input {
     min-height: 100%;
 }
 
+.archive-container > .view-header {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin-block: calc(-1 * var(--spacing-16));
+    padding-block: var(--spacing-16);
+    background: var(--color-canvas);
+}
+
 .archive-toolbar {
     align-items: center;
 }
