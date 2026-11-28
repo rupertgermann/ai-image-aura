@@ -167,6 +167,26 @@ section { padding: clamp(72px, 10vw, 136px) 0 0; }
 .themes i:first-child { width: 60%; opacity: .9; }
 .themes i:last-child { width: 44%; height: 14px; border-radius: 8px; background: var(--accent); opacity: 1; margin-top: 4px; }
 
+/* prompt kit */
+.kit { grid-template-columns: repeat(2, 1fr); }
+.kit .art { height: 190px; }
+.picks { width: 100%; display: grid; gap: 5px; font: 400 12px var(--mono); }
+.picks div { padding: 7px 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picks div.on { border-color: var(--accent); color: var(--text); }
+.cloud { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.cloud .chip { font-size: 11px; }
+.palettes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; width: 100%; font: 400 11px var(--mono); color: var(--muted); }
+.palettes div { display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; }
+.palettes i { width: 12px; height: 12px; border-radius: 2px; flex: none; margin-right: -6px; box-shadow: 0 0 0 1px #0006; }
+.palettes i:last-of-type { margin-right: 2px; }
+.matrix { margin-top: 12px; overflow-x: auto; }
+.matrix table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+.matrix th { font: 400 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 12px 12px; border-bottom: 1px solid var(--line-strong); }
+.matrix td { padding: 14px 12px; border-bottom: 1px solid var(--line); color: var(--muted); vertical-align: top; }
+.matrix tr:last-child td { border-bottom: 0; }
+.matrix td:first-child { color: var(--text); font-weight: 500; white-space: nowrap; }
+.matrix td span { display: block; font: 400 11px var(--mono); color: var(--accent-text); margin-top: 3px; }
+
 /* autopilot */
 .pilot { display: grid; grid-template-columns: 5fr 6fr; gap: 12px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: grid; gap: 16px; align-content: start; }
@@ -261,6 +281,8 @@ footer .mono { margin-right: auto; }
 }
 @media (max-width: 560px) {
   .grid { grid-template-columns: 1fr; }
+  .palettes { grid-template-columns: 1fr; gap: 5px; }
+  .kit .art { height: 210px; }
   .frame-bar .url { display: none; }
   .fields { grid-template-columns: 1fr; }
 }
@@ -292,6 +314,7 @@ footer .mono { margin-right: auto; }
     <nav>
       <a href="#demo">Demo</a>
       <a href="#features">Features</a>
+      <a href="#prompt">Prompt kit</a>
       <a href="#autopilot">Autopilot</a>
       <a href="#archive">Archive</a>
       <a href="#local">Local-first</a>
@@ -454,10 +477,84 @@ footer .mono { margin-right: auto; }
     </div>
   </section>
 
+  <section id="prompt">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="mono">02 — Prompt kit</span>
+        <h2>Start from a spark,<br>steer with presets</h2>
+        <p class="lede">Write your own prompt or pick a starter. Then add style, lighting and a colour palette from the optional Style &amp; mood panel. Each choice is added to the prompt and saved with the image.</p>
+      </div>
+      <div class="grid kit">
+        <article class="card reveal">
+          <div class="art" aria-hidden="true">
+            <div class="picks">
+              <div>a raccoon librarian in a tiny art-deco library</div>
+              <div class="on">a glass whale floating above a desert</div>
+              <div>a midnight train station built inside a giant clock</div>
+              <div>a koi pond shaped like a circuit board</div>
+            </div>
+          </div>
+          <h3>12 example prompts</h3>
+          <p>Stuck on a blank box? Pick a starter, from a lobster piloting a vintage scooter to a porcelain teapot city in the clouds, and edit it from there.</p>
+        </article>
+        <article class="card reveal">
+          <div class="art" aria-hidden="true">
+            <div class="cloud">
+              <span class="chip">ultra-detailed studio photo</span><span class="chip on">35mm film still</span><span class="chip">risograph poster</span>
+              <span class="chip">oil painting on linen</span><span class="chip">watercolor with ink linework</span><span class="chip">isometric diorama</span>
+              <span class="chip">mid-century editorial illustration</span><span class="chip">high-end product shot</span><span class="chip">painterly</span>
+              <span class="chip">anime</span><span class="chip">cyberpunk</span><span class="chip">vintage</span>
+            </div>
+          </div>
+          <h3>12 styles</h3>
+          <p>Set the look in one click, from film stills and risograph posters to isometric dioramas and anime.</p>
+        </article>
+        <article class="card reveal">
+          <div class="art" aria-hidden="true">
+            <div class="cloud">
+              <span class="chip">softbox lighting</span><span class="chip on">golden hour</span><span class="chip">neon rim light</span>
+              <span class="chip">overcast diffuse light</span><span class="chip">candlelight with deep shadows</span><span class="chip">dramatic chiaroscuro</span>
+            </div>
+          </div>
+          <h3>6 lighting setups</h3>
+          <p>Light the scene like a photographer would, from a soft studio box to golden hour or hard chiaroscuro.</p>
+        </article>
+        <article class="card reveal">
+          <div class="art" aria-hidden="true">
+            <div class="palettes">
+              <div><i style="background:#b87333"></i><i style="background:#009688"></i><i style="background:#f5f0e8"></i>copper · teal · cream</div>
+              <div><i style="background:#0047ab"></i><i style="background:#e34234"></i><i style="background:#e8dcc8"></i>cobalt · vermilion · bone</div>
+              <div><i style="background:#9caf88"></i><i style="background:#c2b280"></i><i style="background:#36454f"></i>sage · sand · charcoal</div>
+              <div><i style="background:#cc00cc"></i><i style="background:#003366"></i><i style="background:#c0c0c0"></i>magenta · midnight · silver</div>
+              <div><i style="background:#2e8b57"></i><i style="background:#800020"></i><i style="background:#d4af37"></i>emerald · burgundy · gold</div>
+              <div><i style="background:#c4a4a4"></i><i style="background:#708090"></i><i style="background:#fffff0"></i>dusty rose · slate · ivory</div>
+              <div><i style="background:#cc5500"></i><i style="background:#002147"></i><i style="background:#faf9f0"></i>burnt orange · navy · white</div>
+            </div>
+          </div>
+          <h3>7 colour palettes</h3>
+          <p>Three-colour palettes with swatch previews keep a series of images in the same colour family.</p>
+        </article>
+      </div>
+      <div class="panel matrix reveal">
+        <table>
+          <thead>
+            <tr><th>Image model</th><th>Quality</th><th>Shape</th><th>Resolution</th><th>Background</th><th>Batch</th><th>References</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>GPT Image 2.6 Flare<br>GPT Image 2.6 Sunburst<span>OpenAI</span></td><td>Low, Medium, High, Extra high, Max, Auto</td><td>Auto, Square 1:1, Wide 3:2, Tall 2:3</td><td>Set by shape</td><td>Auto, Opaque, Transparent</td><td>1 to 4</td><td>No app limit</td></tr>
+            <tr><td>Nano Banana Pro<span>Google</span></td><td>Model default</td><td>10 ratios, from 1:1 and 9:16 to Cinema 21:9</td><td>1K, 2K, 4K</td><td>Model default</td><td>1 to 4</td><td>Up to 14</td></tr>
+            <tr><td>Qwen Image 2.1<span>Local GPU</span></td><td>Model default</td><td>7 ratios, from 1:1 to 16:9 and 9:16</td><td>768, 1K, 2K</td><td>Auto, Transparent</td><td>1 to 4</td><td>Up to 10</td></tr>
+            <tr><td>FLUX.2 klein 4B<span>Local GPU</span></td><td>Model default</td><td>7 ratios, from 1:1 to 16:9 and 9:16</td><td>1K, 2K</td><td>Model default</td><td>1 to 4</td><td>Up to 4</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section id="autopilot">
     <div class="wrap">
       <div class="head reveal">
-        <span class="mono">02 — Autopilot</span>
+        <span class="mono">03 — Autopilot</span>
         <h2>Describe the goal.<br>Autopilot writes the prompts.</h2>
         <p class="lede">A reasoning model turns your goal into a prompt, looks at each result, scores it, and rewrites the prompt until the image is good enough.</p>
       </div>
@@ -508,7 +605,7 @@ footer .mono { margin-right: auto; }
   <section id="archive">
     <div class="wrap">
       <div class="head reveal">
-        <span class="mono">03 — Archive</span>
+        <span class="mono">04 — Archive</span>
         <h2>Every image remembers<br>how it was made</h2>
       </div>
       <div class="two">
@@ -549,7 +646,7 @@ footer .mono { margin-right: auto; }
   <section id="local">
     <div class="wrap">
       <div class="head reveal">
-        <span class="mono">04 — Local-first</span>
+        <span class="mono">05 — Local-first</span>
         <h2>Nothing sits between<br>you and the model</h2>
         <p class="lede">AURA has no server of its own. Your keys and images stay on your device, and requests go straight to the provider you pick.</p>
       </div>
@@ -580,7 +677,7 @@ footer .mono { margin-right: auto; }
   <section id="start">
     <div class="wrap start reveal">
       <div>
-        <span class="mono">05 — Start</span>
+        <span class="mono">06 — Start</span>
         <h2>Run it locally</h2>
         <p class="lede">Needs Node.js 26 or newer. Open the app, add an API key or a local server URL in Settings, and generate.</p>
         <a class="btn" href="https://github.com/rupertgermann/ai-image-aura#readme">Read the docs</a>
