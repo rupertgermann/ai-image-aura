@@ -187,6 +187,30 @@ section { padding: clamp(72px, 10vw, 136px) 0 0; }
 .matrix td:first-child { color: var(--text); font-weight: 500; white-space: nowrap; }
 .matrix td span { display: block; font: 400 11px var(--mono); color: var(--accent-text); margin-top: 3px; }
 
+/* spec lists */
+.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-top: 12px; }
+.specs > div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: grid; gap: 14px; align-content: start; }
+.specs ul { list-style: none; padding: 0; display: grid; gap: 9px; }
+.specs li { font-size: 14px; color: var(--muted); padding-left: 16px; position: relative; }
+.specs li::before { content: ""; position: absolute; left: 0; top: .62em; width: 7px; height: 1px; background: var(--accent); }
+.specs code, .matrix code { font: 400 12px var(--mono); color: var(--accent-text); }
+.sub { margin: clamp(40px, 5vw, 64px) 0 0; display: grid; gap: 6px; }
+.sub h3 { font-size: 22px; letter-spacing: -.02em; }
+.sub p { color: var(--muted); font-size: 15px; max-width: 640px; }
+
+/* editor */
+.blends { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.blends figure { margin: 0; display: grid; gap: 6px; }
+.blends figcaption { font: 400 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.blend { position: relative; isolation: isolate; }
+.blend::after { content: ""; position: absolute; inset: 0; border-radius: 3px; mix-blend-mode: var(--m);
+  background: linear-gradient(120deg, #ff6c2f 0 38%, #2f7dff 62%), radial-gradient(circle at 70% 40%, #fff, transparent 60%); }
+.keys { display: grid; gap: 0; }
+.keys div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.keys div:last-child { border-bottom: 0; }
+kbd { font: 400 11px var(--mono); color: var(--text); padding: 3px 7px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--raised); white-space: nowrap; }
+.keys span:last-child { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
 /* autopilot */
 .pilot { display: grid; grid-template-columns: 5fr 6fr; gap: 12px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: grid; gap: 16px; align-content: start; }
@@ -315,6 +339,7 @@ footer .mono { margin-right: auto; }
       <a href="#demo">Demo</a>
       <a href="#features">Features</a>
       <a href="#prompt">Prompt kit</a>
+      <a href="#editor">Editor</a>
       <a href="#autopilot">Autopilot</a>
       <a href="#archive">Archive</a>
       <a href="#local">Local-first</a>
@@ -548,13 +573,101 @@ footer .mono { margin-right: auto; }
           </tbody>
         </table>
       </div>
+      <div class="specs">
+        <div class="reveal"><span class="mono">Results</span><ul>
+          <li>Single-shot runs stream partial previews while the image renders, on models that support it.</li>
+          <li>Batch runs fill a result grid. Save, download or use each slot as a reference on its own.</li>
+          <li>A failed slot shows its own error. Nano Banana Pro sends each image as a separate parallel request, so the others still finish.</li>
+          <li>Save all and Clear results, with a warning before unsaved images are thrown away.</li>
+          <li>The actual parameters panel shows only values the provider reported, plus the measured elapsed time.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">References</span><ul>
+          <li>Add as many as the model takes, by file picker, drag and drop, or paste.</li>
+          <li>Preview them full size and step through with next and previous.</li>
+          <li>Use as reference feeds a result back in and keeps its lineage.</li>
+          <li>Saved images record the exact references sent to the model, even if you change the set later.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Models</span><ul>
+          <li>Flare is the default. Flare and Sunburst share quality, size, background, batch, streaming and mask controls.</li>
+          <li>Drafts and replays from GPT Image 2 and 2.5 open on the current Flare or Sunburst with compatible settings.</li>
+          <li>Qwen's Transparent background adds RGBA wording to the request only. The saved prompt stays as you wrote it, and PNG results keep their alpha.</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="editor">
+    <div class="wrap">
+      <div class="head reveal">
+        <span class="mono">03 — Editor</span>
+        <h2>A layered canvas<br>with AI on every layer</h2>
+        <p class="lede">Open any archive image on a locked base layer. Stack your own images on top, blend them, adjust the whole composition, and send a layer or the full canvas to an image model.</p>
+      </div>
+      <div class="two">
+        <div class="panel reveal">
+          <h3>8 blend modes</h3>
+          <p>Set a blend mode and opacity on each layer. These tiles are blended live by your browser.</p>
+          <div class="blends" aria-hidden="true">
+            <figure><div class="crop c-robot blend" style="--m:normal"></div><figcaption>Normal</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:multiply"></div><figcaption>Multiply</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:screen"></div><figcaption>Screen</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:overlay"></div><figcaption>Overlay</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:darken"></div><figcaption>Darken</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:lighten"></div><figcaption>Lighten</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:soft-light"></div><figcaption>Soft light</figcaption></figure>
+            <figure><div class="crop c-robot blend" style="--m:difference"></div><figcaption>Difference</figcaption></figure>
+          </div>
+        </div>
+        <div class="panel reveal">
+          <h3>Keyboard shortcuts</h3>
+          <p>Shortcuts pause while you type in a text field. Use <kbd>Ctrl</kbd> instead of <kbd>⌘</kbd> on Windows and Linux.</p>
+          <div class="keys">
+            <div><span>Save</span><span><kbd>⌘</kbd><kbd>S</kbd></span></div>
+            <div><span>Undo</span><span><kbd>⌘</kbd><kbd>Z</kbd></span></div>
+            <div><span>Redo</span><span><kbd>⌘</kbd><kbd>⇧</kbd><kbd>Z</kbd> or <kbd>⌘</kbd><kbd>Y</kbd></span></div>
+            <div><span>Duplicate selected layers</span><span><kbd>⌘</kbd><kbd>D</kbd></span></div>
+            <div><span>Delete selected layers</span><span><kbd>Delete</kbd><kbd>⌫</kbd></span></div>
+            <div><span>Clear the selection</span><span><kbd>Esc</kbd></span></div>
+            <div><span>Nudge 1 px</span><span><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd></span></div>
+            <div><span>Nudge 10 px</span><span><kbd>⇧</kbd> + arrows</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="specs">
+        <div class="reveal"><span class="mono">Layers</span><ul>
+          <li>Upload images as new layers in the composition.</li>
+          <li>Select one or many. Rename, hide, set opacity, lock or delete them.</li>
+          <li>Drag to reorder, or move up and down. Duplicate in one step.</li>
+          <li>Move, scale and rotate the selected layer with handles. Locked layers can't be transformed.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Look</span><ul>
+          <li>Brightness, contrast and saturation, applied live to the whole composition.</li>
+          <li>Quick filters Normal, B&amp;W, Sepia and Soft.</li>
+          <li>Adjustments and Filters panels collapse out of the way.</li>
+          <li>Reset adjustments, or revert to the saved image with an undo.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">AI transforms</span><ul>
+          <li>Describe the change and pick an image model. It starts on the image's own model, and you can switch.</li>
+          <li>Edits apply to the selected visible layers, or to the whole canvas when nothing is selected.</li>
+          <li>Paint a transform mask with brush, eraser and brush size, on models that support masked edits.</li>
+          <li>Add reference images for visual context by picker, drop or paste. Qwen takes up to ten images in total.</li>
+          <li>Results arrive as a new layer above the target, so nothing is overwritten.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Saving</span><ul>
+          <li>Undo and redo across layer, adjustment, reference and AI changes.</li>
+          <li>Save in place or save as a copy. Each save becomes a lineage step: overwrite, copy, manual edit or AI edit.</li>
+          <li>Masks are stored with AI edit steps and come back when you reopen the branch.</li>
+          <li>Layered images keep every layer. A single-layer save bakes the adjustments into the image.</li>
+          <li>Unsaved drafts are kept per image, and the editor reopens your last image after a reload.</li>
+        </ul></div>
+      </div>
     </div>
   </section>
 
   <section id="autopilot">
     <div class="wrap">
       <div class="head reveal">
-        <span class="mono">03 — Autopilot</span>
+        <span class="mono">04 — Autopilot</span>
         <h2>Describe the goal.<br>Autopilot writes the prompts.</h2>
         <p class="lede">A reasoning model turns your goal into a prompt, looks at each result, scores it, and rewrites the prompt until the image is good enough.</p>
       </div>
@@ -599,13 +712,28 @@ footer .mono { margin-right: auto; }
           </div>
         </div>
       </div>
+      <div class="specs">
+        <div class="reveal"><span class="mono">Set up</span><ul>
+          <li>Create starting prompt turns a plain-language goal into the first prompt.</li>
+          <li>Pick the reasoning model, 1 to 8 iterations, and a satisfaction threshold from 50 to 100.</li>
+          <li>Every iteration reuses the current image model settings and reference set.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Run</span><ul>
+          <li>A cost disclosure names both models and the maximum number of calls. You confirm before it starts.</li>
+          <li>Watch progress live, see the best iteration highlighted, and stop after the current iteration.</li>
+          <li>The best-scoring result becomes the main output. Every iteration keeps its lineage and actual parameters.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Cost</span><ul>
+          <li>With a local image model, image calls cost nothing. The OpenAI or Google reasoning calls may still be charged.</li>
+        </ul></div>
+      </div>
     </div>
   </section>
 
   <section id="archive">
     <div class="wrap">
       <div class="head reveal">
-        <span class="mono">04 — Archive</span>
+        <span class="mono">05 — Archive</span>
         <h2>Every image remembers<br>how it was made</h2>
       </div>
       <div class="two">
@@ -640,13 +768,37 @@ footer .mono { margin-right: auto; }
           </ol>
         </div>
       </div>
+      <div class="specs">
+        <div class="reveal"><span class="mono">Browse</span><ul>
+          <li>Prompt search and a favorites-only filter, both remembered between visits.</li>
+          <li>Select many images. Select all and deselect all apply to the current filtered results.</li>
+          <li>Delete in bulk after a confirmation.</li>
+          <li>Export the selection as a ZIP with manifests, references, flattened images and layer files.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Detail view</span><ul>
+          <li>Copy the prompt and see saved model settings, actual parameters and reference previews.</li>
+          <li>Step through the lineage timeline, including ancestors and stored Autopilot iteration previews.</li>
+          <li>Autopilot steps show the goal, iteration, score and evaluator feedback.</li>
+          <li>Move to the previous or next image with the arrow keys.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Reuse</span><ul>
+          <li>Replay generation, reference and Autopilot steps in Generate, and edit branches in the Editor.</li>
+          <li>Fork from any step so the next save branches from there.</li>
+          <li>Create similar sends the prompt, model, model settings, style choices and references back to Generate.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Import and recovery</span><ul>
+          <li>ZIP imports are checked, and missing files or broken parent links are reported.</li>
+          <li>Older and partial bundles still import whatever images, layers, lineage, favorites and references they contain.</li>
+          <li>Metadata can be rebuilt from the manifests through URL parameters.</li>
+        </ul></div>
+      </div>
     </div>
   </section>
 
   <section id="local">
     <div class="wrap">
       <div class="head reveal">
-        <span class="mono">05 — Local-first</span>
+        <span class="mono">06 — Local-first</span>
         <h2>Nothing sits between<br>you and the model</h2>
         <p class="lede">AURA has no server of its own. Your keys and images stay on your device, and requests go straight to the provider you pick.</p>
       </div>
@@ -671,13 +823,62 @@ footer .mono { margin-right: auto; }
           </ul>
         </div>
       </div>
+
+      <div class="sub reveal">
+        <h3>Where your data lives</h3>
+        <p>There is no backend service. Everything is stored in your browser until you export a ZIP.</p>
+      </div>
+      <div class="panel matrix reveal">
+        <table>
+          <thead><tr><th>Store</th><th>What it holds</th></tr></thead>
+          <tbody>
+            <tr><td><code>localStorage</code></td><td>Provider API keys and the local server URL. View state, generation drafts, settings per image model, Autopilot settings, archive search, the favorites filter, the notification preference and the last image opened in the Editor.</td></tr>
+            <tr><td><code>IndexedDB</code><span>idb-keyval</span></td><td>Flattened images, reference images and per-layer image files. The current batch results, references passed between views, and Editor drafts. Older drafts move over from <code>localStorage</code> when opened.</td></tr>
+            <tr><td><code>SQLite</code><span>SQLocal</span></td><td>Archive metadata with favorites and layer stacks, including Qwen's model, aspect ratio, resolution, background and requested size. Lineage for Generate, Editor, Autopilot and transform-mask steps, with actual parameters.</td></tr>
+            <tr><td>ZIP bundle</td><td>Images, references and layer files, plus <code>archive-manifest.json</code> and <code>lineage-manifest.json</code>. Import, export, delete, copy and recovery all use the same manifest format.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sub reveal">
+        <h3>How it talks to providers</h3>
+        <p>The browser calls each provider directly. Image responses arrive as base64 and become data URLs for preview and storage.</p>
+      </div>
+      <div class="panel matrix reveal">
+        <table>
+          <thead><tr><th>Provider</th><th>Generate</th><th>References and AI edits</th><th>Autopilot reasoning</th></tr></thead>
+          <tbody>
+            <tr><td>OpenAI</td><td><code>POST /v1/images/generations</code>, streaming partial previews for single images</td><td><code>POST /v1/images/edits</code>, with the painted mask where supported</td><td><code>POST /v1/responses</code></td></tr>
+            <tr><td>Google</td><td>Gemini <code>generateContent</code>, one parallel request per batch image</td><td>Gemini <code>generateContent</code> with inline image parts</td><td>Gemini <code>generateContent</code></td></tr>
+            <tr><td>Local server<span>sd-server</span></td><td><code>POST /v1/images/generations</code>, the whole batch in one call</td><td><code>POST /v1/images/edits</code></td><td>Uses your OpenAI or Google key</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="specs">
+        <div class="reveal"><span class="mono">Requests</span><ul>
+          <li>Each run asks for one to four images.</li>
+          <li>Local requests send the model ID with no Authorization header and no hosted key. The Settings test calls <code>GET /v1/models</code>.</li>
+          <li>One shared table of model facts drives the controls, defaults, validation, request mapping, reference limits, mask and streaming support, and saved metadata.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Honest numbers</span><ul>
+          <li>Local image inference is costed at $0.00. Autopilot totals still include hosted reasoning calls.</li>
+          <li>Actual parameters hold only what the provider reported or AURA measured. Qwen runs record elapsed time only.</li>
+        </ul></div>
+        <div class="reveal"><span class="mono">Settings</span><ul>
+          <li>Save OpenAI and Google keys with masked entry and a saved status. Clear the field and save to remove one.</li>
+          <li>Test the local server URL. It lists the reported model IDs, or explains the HTTP or connection error.</li>
+          <li>Models become available as soon as their key or server URL is saved.</li>
+          <li>Desktop notifications when a background run finishes, with a status that flags unsupported browsers and insecure pages.</li>
+          <li>A collapsible navigation rail and a light or dark theme that survives reloads.</li>
+        </ul></div>
+      </div>
     </div>
   </section>
 
   <section id="start">
     <div class="wrap start reveal">
       <div>
-        <span class="mono">06 — Start</span>
+        <span class="mono">07 — Start</span>
         <h2>Run it locally</h2>
         <p class="lede">Needs Node.js 26 or newer. Open the app, add an API key or a local server URL in Settings, and generate.</p>
         <a class="btn" href="https://github.com/rupertgermann/ai-image-aura#readme">Read the docs</a>
