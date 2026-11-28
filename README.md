@@ -140,7 +140,7 @@ The Generate view supports:
 - `Nano Banana Pro` aspect ratio options: `1:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`, `16:9`, `21:9`
 - `Nano Banana Pro` resolution options: `1K`, `2K`, `4K`
 - `Qwen Image 2.1` aspect ratios: `1:1`, `4:3`, `3:4`, `3:2`, `2:3`, `16:9`, `9:16`
-- `Qwen Image 2.1` resolution options: `1K`, `2K`; background options: `Auto`, `Transparent`
+- `Qwen Image 2.1` resolution options: `768`, `1K`, `2K` (default: `768`); background options: `Auto`, `Transparent`
 - GPT Image batch size options: `1`, `2`, `3`, `4`
 - `Nano Banana Pro` batch size options: `1`, `2`, `3`, `4`
 - `Qwen Image 2.1` batch size options: `1`, `2`, `3`, `4`
